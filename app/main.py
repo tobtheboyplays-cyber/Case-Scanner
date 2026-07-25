@@ -5,10 +5,11 @@ Kjor:  uv run uvicorn app.main:app --reload
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from calendar import monthrange
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -20,6 +21,10 @@ from app.config import ENABLE_AI
 from app.planner import build_plan
 from app.scoring import build_cases, finalize_scores
 from app.storage import (
+    STAGE_LABELS,
+    STAGES,
+    calendar_month,
+    set_plan,
     approve_lead,
     decisions_map,
     list_approved,
@@ -27,6 +32,11 @@ from app.storage import (
     reject_lead,
     save_scan,
 )
+
+MONTHS_NO = [
+    "januar", "februar", "mars", "april", "mai", "juni",
+    "juli", "august", "september", "oktober", "november", "desember",
+]
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 app = FastAPI(title="Case-radar", version=__version__)
@@ -141,11 +151,34 @@ def _find_lead(key: str) -> dict | None:
 
 
 @app.post("/leads/{key:path}/approve")
-def approve(key: str):
+def approve(key: str, vinkel: int = Form(0), planned_for: str = Form("")):
+    """Godkjenn EN av journalistens tre vinkler og arkiver den.
+
+    Vinkelen som velges blir sakens "draft" - det er den varianten redaksjonen har
+    sagt ja til. De to andre beholdes i "angles" slik at valget kan spores."""
     lead = _find_lead(key)
     if lead:
+        angles = lead.get("angles") or []
+        if 0 <= vinkel < len(angles):
+            lead = {**lead, "draft": angles[vinkel], "valgt_vinkel": vinkel}
         approve_lead(key, lead)
+        if planned_for:
+            set_plan(key, planned_for=planned_for)
     return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/leads/{key:path}/plan")
+def plan_lead(key: str, planned_for: str = Form(""), stage: str = Form("")):
+    """Sett publiseringsdato og/eller stadium fra kalenderen."""
+    set_plan(key, planned_for=planned_for, stage=stage or None)
+    return RedirectResponse(url=request_back(planned_for), status_code=303)
+
+
+def request_back(planned_for: str) -> str:
+    """Send brukeren tilbake til maaneden han jobbet i."""
+    if len(planned_for) >= 7:
+        return f"/kalender?ym={planned_for[:7]}"
+    return "/kalender"
 
 
 @app.post("/leads/{key:path}/reject")
@@ -160,6 +193,65 @@ def godkjente(request: Request):
         request=request,
         name="godkjente.html",
         context={"leads": list_approved(), "version": __version__},
+    )
+
+
+@app.get("/kalender", response_class=HTMLResponse)
+def kalender(request: Request, ym: str = ""):
+    """Redaksjonell kalender: maanedsrutenett med planlagte saker.
+
+    Ingen Google-innlogging, ingen oppsett - den bygger paa saker Mathias selv har
+    godkjent. Saker uten dato vises som "uplanlagt" slik at de ikke forsvinner."""
+    today = date.today()
+    try:
+        year, month = (int(x) for x in ym.split("-", 1)) if ym else (today.year, today.month)
+        date(year, month, 1)  # kaster paa tull som 2026-13
+    except (ValueError, TypeError):
+        year, month = today.year, today.month
+
+    by_day = calendar_month(year, month)
+    approved = list_approved()
+    uplanlagt = [lead for lead in approved if not lead.get("_planned_for")]
+
+    # Bygg rutenettet: hele uker, mandag foerst, med tomme celler rundt maaneden.
+    first = date(year, month, 1)
+    days_in_month = monthrange(year, month)[1]
+    lead_blanks = first.weekday()  # 0 = mandag
+    cells: list[dict | None] = [None] * lead_blanks
+    for d in range(1, days_in_month + 1):
+        iso = f"{year:04d}-{month:02d}-{d:02d}"
+        cells.append(
+            {
+                "day": d,
+                "iso": iso,
+                "today": date(year, month, d) == today,
+                "leads": by_day.get(iso, []),
+            }
+        )
+    while len(cells) % 7:
+        cells.append(None)
+    weeks = [cells[i : i + 7] for i in range(0, len(cells), 7)]
+
+    prev_m = date(year, month, 1) - timedelta(days=1)
+    next_m = date(year, month, days_in_month) + timedelta(days=1)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="kalender.html",
+        context={
+            "weeks": weeks,
+            "year": year,
+            "month": month,
+            "month_name": MONTHS_NO[month - 1],
+            "prev_ym": f"{prev_m.year:04d}-{prev_m.month:02d}",
+            "next_ym": f"{next_m.year:04d}-{next_m.month:02d}",
+            "today_ym": f"{today.year:04d}-{today.month:02d}",
+            "uplanlagt": uplanlagt,
+            "planned_count": sum(len(v) for v in by_day.values()),
+            "stages": STAGES,
+            "stage_labels": STAGE_LABELS,
+            "version": __version__,
+        },
     )
 
 

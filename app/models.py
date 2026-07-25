@@ -60,7 +60,8 @@ class Case:
     ai_mode: str = "none"          # "llm" | "mal" | "none"
     analyst_reason: str = ""       # analytikerens begrunnelse for at funnet er interessant
     editor: dict = field(default_factory=dict)   # {is_story, confidence, headline, angle, verdict, novelty}
-    draft: dict = field(default_factory=dict)     # {title, ingress, body, checks}
+    draft: dict = field(default_factory=dict)     # foerste vinkel (bakoverkompatibelt)
+    angles: list[dict] = field(default_factory=list)  # TRE komplette pakker fra journalisten
 
     def to_dict(self) -> dict:
         return {
@@ -84,6 +85,7 @@ class Case:
             "analyst_reason": self.analyst_reason,
             "editor": self.editor,
             "draft": self.draft,
+            "angles": self.angles,
             "sources": [
                 {
                     "source": s.source,

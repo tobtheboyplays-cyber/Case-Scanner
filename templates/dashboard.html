@@ -2,7 +2,8 @@
 <html lang="nb">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
   <title>Case-radar</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
@@ -19,6 +20,7 @@
     </div>
   </div>
   <div class="top-actions">
+    <a class="btn-ghost" href="/kalender">🗓 Kalender</a>
     <a class="btn-approved-link" href="/godkjente">📁 Godkjente saker{% if approved_count %} ({{ approved_count }}){% endif %}</a>
     <form method="post" action="/scan"><button type="submit" class="btn-scan">🛰 Skann nå</button></form>
     <p class="last-scan">{% if scanned_at %}Sist skannet: {{ scanned_at }}
@@ -146,20 +148,66 @@
             <p><strong>{{ case.editor.headline }}</strong></p>
             <p class="ai-angle">{{ case.editor.angle }}</p>
             <p class="ai-verdict">💬 {{ case.editor.verdict }}</p>
+            {% if case.editor.forbehold %}<p class="angle-risk">⚠ {{ case.editor.forbehold }}</p>{% endif %}
           </details>
-          {% if case.draft and case.draft.body %}
-          <details class="ai-draft">
-            <summary>📝 Prøveartikkel (utkast)</summary>
-            <h4>{{ case.draft.title }}</h4>
-            <p class="draft-ingress">{{ case.draft.ingress }}</p>
-            <div class="draft-body">{{ case.draft.body }}</div>
-            {% if case.draft.checks %}
-            <p class="draft-checks-h">Sjekk / kilder å ringe:</p>
-            <ul class="draft-checks">
-              {% for chk in case.draft.checks %}<li>{{ chk }}</li>{% endfor %}
-            </ul>
-            {% endif %}
-          </details>
+          {% if case.angles %}
+          <div class="angles">
+            <p class="angles-h">Journalisten leverte {{ case.angles|length }} vinkler — velg én</p>
+            {% for a in case.angles %}
+            <details class="angle">
+              <summary>
+                <span class="angle-nr">{{ loop.index }}</span>
+                <span class="angle-title">{{ a.title }}</span>
+                <span class="angle-meta">
+                  {% if a.inngang %}<span class="tag">{{ a.inngang }}</span>{% endif %}
+                  {% if a.styrke %}<span class="angle-strength">{{ a.styrke }}</span>{% endif %}
+                  {% if a.mode == 'mal' %}<span class="ai-tag">demo</span>{% endif %}
+                </span>
+              </summary>
+
+              <p class="draft-ingress">{{ a.ingress }}</p>
+              <div class="draft-body">{{ a.body }}</div>
+
+              {% if a.risiko %}<p class="angle-risk">⚠ {{ a.risiko }}</p>{% endif %}
+
+              {% if a.checks %}
+              <p class="draft-checks-h">Må sjekkes før publisering</p>
+              <ul class="draft-checks">{% for chk in a.checks %}<li>{{ chk }}</li>{% endfor %}</ul>
+              {% endif %}
+
+              {% if a.kilder %}
+              <p class="draft-checks-h">Kilder</p>
+              <ul class="src-list">
+                {% for k in a.kilder %}
+                <li>
+                  {% if k.url %}<a class="kilde" href="{{ k.url }}" target="_blank" rel="noopener">{{ k.navn }}</a>
+                  {% else %}<span>{{ k.navn }}</span>{% endif %}
+                  {% if k.hva %}<span class="muted"> — {{ k.hva }}</span>{% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+
+              {% if a.image_ideas %}
+              <p class="draft-checks-h">Bildeforslag</p>
+              <ul class="src-list">
+                {% for img in a.image_ideas %}
+                <li><strong>{{ img.motiv }}</strong>{% if img.bildetekst %}<span class="muted"> — {{ img.bildetekst }}</span>{% endif %}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+
+              <form class="angle-approve" method="post" action="/leads/{{ case.key }}/approve">
+                <input type="hidden" name="vinkel" value="{{ loop.index0 }}" />
+                <label class="fld">
+                  <span>Publiseringsdato (valgfritt)</span>
+                  <input type="date" name="planned_for" />
+                </label>
+                <button class="btn-approve" type="submit">Godkjenn denne vinkelen</button>
+              </form>
+            </details>
+            {% endfor %}
+          </div>
           {% endif %}
           <div class="ai-actions">
             {% set dec = decisions.get(case.key) %}
@@ -168,9 +216,11 @@
             {% elif dec == 'rejected' %}
               <span class="pill pill-grey">Forkastet</span>
             {% endif %}
+            {% if not case.angles %}
             <form method="post" action="/leads/{{ case.key }}/approve">
               <button class="btn-approve" type="submit">Godkjenn sak</button>
             </form>
+            {% endif %}
             <form method="post" action="/leads/{{ case.key }}/reject">
               <button class="btn-reject" type="submit">Forkast</button>
             </form>

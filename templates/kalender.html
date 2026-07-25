@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Kalender · Case-radar</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">🗓</span>
+    <div>
+      <h1>Kalender</h1>
+      <p class="tagline">{{ planned_count }} sak{{ '' if planned_count == 1 else 'er' }} planlagt i {{ month_name }}</p>
+    </div>
+  </div>
+  <nav class="top-actions">
+    <a class="btn-ghost" href="/">← Radar</a>
+    <a class="btn-ghost" href="/godkjente">📁 Godkjente</a>
+  </nav>
+</header>
+
+<main class="page">
+
+  <!-- Månedsnavigasjon -->
+  <section class="cal-nav">
+    <a class="cal-arrow" href="/kalender?ym={{ prev_ym }}" aria-label="Forrige måned">‹</a>
+    <div class="cal-title">
+      <strong>{{ month_name }}</strong> <span class="muted">{{ year }}</span>
+    </div>
+    <a class="cal-arrow" href="/kalender?ym={{ next_ym }}" aria-label="Neste måned">›</a>
+  </section>
+  {% if today_ym != '%04d-%02d'|format(year, month) %}
+  <p class="cal-back"><a href="/kalender?ym={{ today_ym }}">Tilbake til denne måneden</a></p>
+  {% endif %}
+
+  <!-- Månedsrutenett -->
+  <section class="panel cal-panel">
+    <div class="cal-weekdays" aria-hidden="true">
+      <span>man</span><span>tir</span><span>ons</span><span>tor</span>
+      <span>fre</span><span class="we">lør</span><span class="we">søn</span>
+    </div>
+
+    <div class="cal-grid">
+      {% for week in weeks %}
+        {% for cell in week %}
+          {% if cell is none %}
+            <div class="cal-cell cal-empty" aria-hidden="true"></div>
+          {% else %}
+            <a class="cal-cell{{ ' is-today' if cell.today }}{{ ' has-leads' if cell.leads }}"
+               href="#dag-{{ cell.iso }}"
+               aria-label="{{ cell.day }}. {{ month_name }}{% if cell.leads %}, {{ cell.leads|length }} sak{{ '' if cell.leads|length == 1 else 'er' }}{% endif %}">
+              <span class="cal-daynum">{{ cell.day }}</span>
+              {% if cell.leads %}
+                <span class="cal-count">{{ cell.leads|length }}</span>
+                <span class="cal-dots">
+                  {% for lead in cell.leads[:4] %}
+                    <i class="cal-dot stage-{{ lead._stage or 'ide' }}"></i>
+                  {% endfor %}
+                </span>
+              {% endif %}
+            </a>
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+    </div>
+
+    <div class="legend">
+      {% for st in stages %}
+        <span><i class="cal-dot stage-{{ st }}"></i> {{ stage_labels[st] }}</span>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- Dagene med saker, utbrettet under -->
+  {% set any_day = false %}
+  {% for week in weeks %}
+    {% for cell in week %}
+      {% if cell and cell.leads %}
+        {% set any_day = true %}
+        <section class="panel day-panel" id="dag-{{ cell.iso }}">
+          <div class="panel-head">
+            <h2>{{ cell.day }}. {{ month_name }}</h2>
+            <span class="panel-sub">{{ cell.leads|length }} sak{{ '' if cell.leads|length == 1 else 'er' }}</span>
+          </div>
+
+          {% for lead in cell.leads %}
+            {% set draft = lead.draft or {} %}
+            <article class="day-lead">
+              <div class="day-lead-top">
+                <span class="pill pill-stage stage-bg-{{ lead._stage or 'ide' }}">{{ stage_labels[lead._stage or 'ide'] }}</span>
+                {% if lead.geo == 'lokal' %}<span class="tag tag-loc">Stavanger</span>{% endif %}
+              </div>
+              <h3>{{ draft.title or lead.title }}</h3>
+              {% if draft.ingress %}<p class="day-lead-ingress">{{ draft.ingress }}</p>{% endif %}
+
+              <form class="day-form" method="post" action="/leads/{{ lead.key }}/plan">
+                <label class="fld">
+                  <span>Dato</span>
+                  <input type="date" name="planned_for" value="{{ lead._planned_for }}" />
+                </label>
+                <label class="fld">
+                  <span>Stadium</span>
+                  <select name="stage">
+                    {% for st in stages %}
+                      <option value="{{ st }}"{{ ' selected' if (lead._stage or 'ide') == st }}>{{ stage_labels[st] }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <button type="submit" class="btn-small">Lagre</button>
+              </form>
+            </article>
+          {% endfor %}
+        </section>
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+
+  {% if not any_day %}
+    <section class="panel empty-inline">
+      <p>Ingen saker planlagt i {{ month_name }} ennå.</p>
+      <p class="muted">Godkjenn en sak på radaren, så kan du gi den en dato her.</p>
+    </section>
+  {% endif %}
+
+  <!-- Uplanlagte saker: godkjent, men uten dato -->
+  {% if uplanlagt %}
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Uten dato</h2>
+      <span class="panel-sub">{{ uplanlagt|length }} godkjent{{ '' if uplanlagt|length == 1 else 'e' }} sak{{ '' if uplanlagt|length == 1 else 'er' }} venter på plass i kalenderen</span>
+    </div>
+    {% for lead in uplanlagt %}
+      {% set draft = lead.draft or {} %}
+      <article class="day-lead">
+        <h3>{{ draft.title or lead.title }}</h3>
+        {% if draft.ingress %}<p class="day-lead-ingress">{{ draft.ingress }}</p>{% endif %}
+        <form class="day-form" method="post" action="/leads/{{ lead.key }}/plan">
+          <label class="fld">
+            <span>Sett dato</span>
+            <input type="date" name="planned_for" value="" />
+          </label>
+          <label class="fld">
+            <span>Stadium</span>
+            <select name="stage">
+              {% for st in stages %}
+                <option value="{{ st }}"{{ ' selected' if (lead._stage or 'ide') == st }}>{{ stage_labels[st] }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="submit" class="btn-small">Legg i kalender</button>
+        </form>
+      </article>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+</main>
+
+<footer class="foot">
+  <span>Case-radar v{{ version }}</span>
+  <span>Redaksjonell kalender · ingen ekstern innlogging</span>
+</footer>
+
+</body>
+</html>

@@ -171,3 +171,182 @@ h1, h2, h3 { margin: 0; }
   color: var(--faint); font-size: 12px; padding: 18px 32px; border-top: 1px solid var(--border); }
 .empty { margin: 40px 32px; padding: 34px; text-align: center; background: var(--panel);
   border: 1px dashed var(--border); border-radius: 14px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Mobil-først pynt (v4). Lagt til nederst slik at den overstyrer bevisst.
+   Prinsipp: telefonen er hovedflaten - Mathias bruker dette i felt, ikke ved
+   skrivebordet. Alt som kan trykkes er minst 44 px. Ingenting horisontalt scroll.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --pad: 16px;            /* sidemarg paa mobil */
+  --radius: 14px;
+  --tap: 44px;            /* minste trykkflate */
+  --ring: 0 0 0 3px rgba(59,130,246,.35);
+}
+
+/* iPhone: hold innholdet klar av hakket og hjemindikatoren. */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+}
+
+/* Topbar: klistret, saa «Skann na» alltid er innen rekkevidde. */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  padding: calc(env(safe-area-inset-top) + 12px) var(--pad) 12px;
+  background: rgba(13,19,32,.82);
+  backdrop-filter: saturate(150%) blur(12px);
+  -webkit-backdrop-filter: saturate(150%) blur(12px);
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.logo { width: 44px; height: 44px; font-size: 22px; border-radius: 12px; }
+.brand h1 { font-size: 20px; }
+.tagline { font-size: 12.5px; }
+.top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.btn-scan, .btn-ghost, .btn-approved-link {
+  min-height: var(--tap); display: inline-flex; align-items: center; justify-content: center;
+}
+.btn-scan { padding: 0 18px; border-radius: 12px; font-size: 14px; }
+.btn-scan:active { transform: scale(.97); }
+.btn-ghost {
+  color: var(--text); background: var(--panel); border: 1px solid var(--border);
+  padding: 0 14px; border-radius: 12px; font-size: 13.5px; text-decoration: none;
+}
+.btn-ghost:active { transform: scale(.97); }
+.last-scan { width: 100%; text-align: right; margin: 4px 0 0; }
+
+/* Felles sidebredde */
+.page { padding: 14px var(--pad) 40px; max-width: 720px; margin: 0 auto; }
+.kpis, .layout { padding-left: var(--pad); padding-right: var(--pad); }
+.foot { padding: 16px var(--pad) calc(env(safe-area-inset-bottom) + 20px); }
+
+/* KPI: to i bredden paa mobil, luftigere */
+@media (max-width: 620px) {
+  .kpis { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .kpi { padding: 13px 14px; }
+  .kpi-num { font-size: 25px; }
+  .empty { margin: 24px var(--pad); padding: 26px 20px; }
+}
+
+/* Prioriteringsrader klemte seg paa smal skjerm - stables naa */
+@media (max-width: 620px) {
+  .prio-row { grid-template-columns: 16px 1fr 40px; grid-template-areas: "r l s" "r t t"; row-gap: 6px; }
+  .prio-rank { grid-area: r; } .prio-label { grid-area: l; white-space: normal; }
+  .prio-score { grid-area: s; } .prio-track { grid-area: t; }
+}
+
+/* Fokus synlig for tastatur/skjermleser */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible,
+summary:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 10px; }
+
+/* ── Kalender ───────────────────────────────────────────────────────────── */
+.cal-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.cal-title { font-size: 17px; }
+.cal-arrow {
+  width: var(--tap); height: var(--tap); display: grid; place-items: center;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  color: var(--text); text-decoration: none; font-size: 22px; line-height: 1;
+}
+.cal-arrow:active { transform: scale(.94); }
+.cal-back { margin: -4px 0 12px; font-size: 13px; }
+.cal-back a { color: var(--accent); text-decoration: none; }
+.cal-panel { padding: 14px; }
+
+.cal-weekdays, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal-weekdays { margin-bottom: 6px; }
+.cal-weekdays span {
+  text-align: center; font-size: 11px; color: var(--faint);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.cal-weekdays .we { color: var(--amber); opacity: .75; }
+
+.cal-cell {
+  position: relative; aspect-ratio: 1 / 1; min-height: 42px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  background: var(--panel2); border: 1px solid transparent; border-radius: 11px;
+  color: var(--muted); text-decoration: none; font-variant-numeric: tabular-nums;
+  transition: transform .12s ease, border-color .12s ease, background .12s ease;
+}
+.cal-cell.cal-empty { background: transparent; }
+.cal-cell.has-leads { background: var(--panel); border-color: var(--border); color: var(--text); }
+.cal-cell.has-leads:active { transform: scale(.95); }
+.cal-cell.is-today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.cal-daynum { font-size: 14px; font-weight: 600; }
+.cal-count {
+  position: absolute; top: 4px; right: 5px; font-size: 10px; font-weight: 700;
+  color: var(--accent);
+}
+.cal-dots { display: flex; gap: 3px; }
+.cal-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; background: var(--faint); }
+.cal-dot.stage-ide { background: var(--faint); }
+.cal-dot.stage-research { background: var(--accent); }
+.cal-dot.stage-skriving { background: var(--amber); }
+.cal-dot.stage-publisert { background: var(--green); }
+.pill-stage { color: #08131f; }
+.stage-bg-ide { background: #4a5876; color: #e7ecf4; }
+.stage-bg-research { background: var(--accent); color: #fff; }
+.stage-bg-skriving { background: var(--amber); }
+.stage-bg-publisert { background: var(--green); }
+
+/* Dag-utbrett */
+.day-panel:target { border-color: var(--accent); }
+.day-lead { padding: 12px 0; border-top: 1px solid var(--border); }
+.day-lead:first-of-type { border-top: 0; }
+.day-lead-top { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.day-lead h3 { font-size: 15.5px; margin: 0 0 4px; }
+.day-lead-ingress { color: var(--muted); font-size: 13.5px; margin: 0 0 10px; }
+.day-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.fld { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--faint); }
+.fld input, .fld select {
+  min-height: var(--tap); background: var(--panel2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; font-size: 14px;
+}
+.btn-small {
+  min-height: var(--tap); padding: 0 16px; border: 0; border-radius: 10px;
+  background: var(--accent2); color: #fff; font-size: 13.5px; font-weight: 600; cursor: pointer;
+}
+.btn-small:active { transform: scale(.97); }
+.empty-inline { text-align: center; color: var(--muted); }
+.empty-inline p { margin: 4px 0; }
+
+/* Rolig innfade - ingen bevegelse for de som har skrudd det av */
+@media (prefers-reduced-motion: no-preference) {
+  .panel, .lead, .kpi { animation: rise .32s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+}
+
+/* Desktop: gi luft tilbake naar det er plass */
+@media (min-width: 900px) {
+  :root { --pad: 32px; }
+  .page { max-width: 960px; }
+  .brand h1 { font-size: 26px; }
+  .cal-cell { min-height: 64px; }
+}
+
+/* ── Tre vinkler ────────────────────────────────────────────────────────── */
+.angles { margin-top: 10px; }
+.angles-h { font-size: 12px; color: var(--faint); text-transform: uppercase;
+  letter-spacing: .04em; margin: 0 0 8px; }
+.angle { background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+.angle[open] { border-color: var(--accent); }
+.angle > summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  cursor: pointer; min-height: var(--tap); list-style: none; }
+.angle > summary::-webkit-details-marker { display: none; }
+.angle-nr { width: 26px; height: 26px; flex: none; display: grid; place-items: center;
+  border-radius: 50%; background: var(--panel); border: 1px solid var(--border);
+  font-size: 12px; font-weight: 700; color: var(--muted); }
+.angle-title { flex: 1 1 60%; font-size: 14.5px; font-weight: 600; }
+.angle-meta { display: flex; align-items: center; gap: 6px; }
+.angle-strength { font-size: 11px; font-weight: 700; color: var(--accent);
+  background: rgba(59,130,246,.14); padding: 2px 7px; border-radius: 20px; }
+.angle-risk { color: var(--amber); font-size: 12.5px; margin: 8px 0 0; }
+.src-list { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--text); }
+.src-list li { margin-bottom: 4px; }
+.angle-approve { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.angle-approve .btn-approve { min-height: var(--tap); padding: 0 18px; }

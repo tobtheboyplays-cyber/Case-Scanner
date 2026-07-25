@@ -13,6 +13,56 @@ from app.config import EDITOR_CAP, JOURNALIST_CAP
 from app.models import Case
 
 
+# --- Ankeret: kildegrunnlaget agentene faar -----------------------------------
+def kildegrunnlag(case: Case) -> str:
+    """Alt agenten har lov til aa bygge paa, som én lesbar blokk.
+
+    Dette er hele verdensbildet til modellen. Alt som ikke staar her, skal den
+    behandle som ukjent - ikke fylle inn selv. Ekte lenker tas med slik at bade
+    modellen og journalisten kan spore tallet tilbake til kilden."""
+    lines = ["KILDEGRUNNLAG", ""]
+
+    lines.append("TALLET:")
+    lines.append(f"  {case.finding or case.title}")
+    if case.metric_value:
+        lines.append(f"  Verdi: {case.metric_value}" + (f" ({case.metric_period})" if case.metric_period else ""))
+    if case.data_source:
+        lines.append(f"  Datakilde: {case.data_source}")
+    if case.data_url:
+        lines.append(f"  SSB-LENKE: {case.data_url}")
+
+    lines.append("")
+    lines.append("KONTEKST:")
+    lines.append(f"  Geografi: {'Stavanger/Rogaland' if case.geo == 'lokal' else 'nasjonal'}")
+    lines.append(f"  Tema: {', '.join(case.topics) or 'ikke tagget'}")
+
+    lines.append("")
+    lines.append("DEKNING (hva andre allerede har skrevet om temaet):")
+    if case.coverage_examples:
+        for e in case.coverage_examples:
+            src = e.get("source") or "ukjent kilde"
+            date = e.get("date") or ""
+            title = e.get("title") or ""
+            url = e.get("url") or ""
+            lines.append(f"  - «{title}» - {src} {date}".rstrip())
+            if url:
+                lines.append(f"    {url}")
+        lines.append(f"  Dekningsstatus: {case.coverage_status} (gronn=uskrevet, gul=delvis, rod=godt dekket)")
+    else:
+        lines.append("  Ingen ferske treff funnet - temaet ser uskrevet ut.")
+
+    # Grasrot-saker har egne signaler med ekte lenker.
+    if case.signals:
+        lines.append("")
+        lines.append("SIGNALER (hva folk snakker om):")
+        for s in case.signals[:5]:
+            lines.append(f"  - «{s.title}» - {s.source}")
+            if getattr(s, "url", ""):
+                lines.append(f"    {s.url}")
+
+    return "\n".join(lines)
+
+
 # --- Agent 1: Analytiker -----------------------------------------------------
 def analyst_pick(cases: list[Case]) -> dict[str, dict]:
     """Velg de journalistisk interessante funnene. Returner {key: {score, reason}}."""
@@ -47,17 +97,12 @@ def analyst_pick(cases: list[Case]) -> dict[str, dict]:
 
 # --- Agent 2: Redaktor -------------------------------------------------------
 def editor_judge(case: Case) -> dict:
-    """Vurder ett funn som mulig sak. Returner redaktor-dict."""
-    cov = ", ".join(
-        f"{e.get('source', '?')} ({e.get('date', '')})" for e in case.coverage_examples
-    ) or "ingen ferske treff funnet"
+    """Porten: kan dette baere en sak? Kjoeres FOER journalisten bruker tid."""
     user = (
-        f"Funn: {case.finding}\n"
-        f"Tema: {', '.join(case.topics) or '-'}\n"
-        f"Eksisterende mediedekning: {cov}\n"
-        f"Dekningsstatus: {case.coverage_status}"
+        f"{kildegrunnlag(case)}\n\n"
+        "Vurder dette funnet som mulig sak. Journalisten har ikke begynt enda."
     )
-    result = llm.complete_json(prompts.EDITOR_SYSTEM, user, model=llm.MODEL_EDITOR, max_tokens=700)
+    result = llm.complete_json(prompts.EDITOR_SYSTEM, user, model=llm.MODEL_EDITOR, max_tokens=800)
     if result and "is_story" in result:
         return {"mode": "llm", **result}
 
@@ -77,49 +122,85 @@ def editor_judge(case: Case) -> dict:
             else "Delvis dekket - trenger en frisk vinkel." if case.coverage_status == "yellow"
             else "Allerede godt dekket - lav prioritet."
         ),
+        "forbehold": "Vurdert uten KI - sjekk tallet mot SSB-lenken selv.",
         "novelty": novelty,
     }
 
 
 # --- Agent 3: Journalist -----------------------------------------------------
-def journalist_draft(case: Case, editor: dict) -> dict:
-    """Skriv et proveutkast. Returner draft-dict."""
+def journalist_angles(case: Case, editor: dict) -> list[dict]:
+    """Tre ULIKE vinkler, hver som en ferdig pakke: artikkel + bilder + kilder.
+
+    Kjoeres KUN naar redaktoren har sagt ja. Returnerer alltid tre elementer -
+    faller tilbake til maler hvis KI-en ikke svarer, slik at UI-et aldri staar tomt."""
     user = (
-        f"Tittel-forslag: {editor.get('headline', case.title)}\n"
-        f"Vinkel: {editor.get('angle', case.angle)}\n"
-        f"Datafunn: {case.finding}\n"
-        f"Datakilde: {case.data_source}"
+        f"{kildegrunnlag(case)}\n\n"
+        f"REDAKTOERENS BESTILLING:\n"
+        f"  Arbeidstittel: {editor.get('headline', case.title)}\n"
+        f"  Oppdrag: {editor.get('angle', case.angle)}\n"
+        f"  Forbehold aa ta hensyn til: {editor.get('forbehold', '-')}\n\n"
+        "Lever tre ulike vinkler, hver med full artikkeltekst, bildeforslag og kilder."
     )
     result = llm.complete_json(
-        prompts.JOURNALIST_SYSTEM, user, model=llm.MODEL_JOURNALIST, max_tokens=1600
+        prompts.JOURNALIST_SYSTEM, user, model=llm.MODEL_JOURNALIST, max_tokens=4000
     )
-    if result and result.get("body"):
-        return {"mode": "llm", **result}
+    angles = result.get("angles") if isinstance(result, dict) else None
+    if isinstance(angles, list):
+        clean = [a for a in angles if isinstance(a, dict) and a.get("body")]
+        if clean:
+            for a in clean:
+                a["mode"] = "llm"
+            return clean[:3]
 
-    # Fallback-mal: enkelt, tydelig merket utkast.
+    return _fallback_angles(case, editor)
+
+
+def _fallback_angles(case: Case, editor: dict) -> list[dict]:
+    """Malbaserte vinkler naar KI-en ikke er tilgjengelig. Tydelig merket."""
     sted = "Stavanger" if case.geo == "lokal" else "Norge"
-    return {
-        "mode": "mal",
-        "title": editor.get("headline", case.title),
-        "ingress": f"Nye SSB-tall viser en tydelig endring blant unge i {sted}. {case.finding}",
-        "body": (
-            f"{case.finding}\n\n"
-            f"{editor.get('angle', case.angle)}\n\n"
-            f"[Utkast laget uten KI - fyll ut med sitater og kontekst. "
-            f"Tallene er hentet fra {case.data_source}.]"
-        ),
-        "checks": [
-            "Ring SSB eller kommunen for aarsak bak tallene",
-            "Finn en ung case-person som merker endringen",
-            "Sjekk om en lokal ekspert kan kommentere",
-        ],
-        "image_ideas": [
-            {"motiv": f"Ung person i typisk {sted}-miljø knyttet til temaet",
-             "bildetekst": "Illustrasjonsfoto – finn en reell case-person."},
-            {"motiv": "Enkel grafikk som viser tallutviklingen (kurve)",
-             "bildetekst": case.finding[:80]},
-        ],
-    }
+    kilder = [{"navn": case.data_source or "SSB", "hva": "tallet i saken", "url": case.data_url}]
+    for e in case.coverage_examples[:2]:
+        kilder.append(
+            {"navn": e.get("source", ""), "hva": e.get("title", ""), "url": e.get("url", "")}
+        )
+    maler = [
+        ("menneske", f"Hvem merker dette i {sted}?",
+         "Finn én person som kjenner endringen paa kroppen, og la tallet forklare hvorfor."),
+        ("konsekvens", f"Hva betyr tallet i praksis for {sted}?",
+         "Regn om endringen til kroner, koe eller tid - noe leseren kjenner igjen."),
+        ("aarsak", f"Hvorfor skjer dette akkurat i {sted}?",
+         "Ring kommunen og en fagperson: hva forklarer avviket fra landet?"),
+    ]
+    out = []
+    for inngang, tittel, vinkel in maler:
+        out.append(
+            {
+                "mode": "mal",
+                "inngang": inngang,
+                "styrke": 50,
+                "risiko": "Laget uten KI - vurder selv om vinkelen baerer.",
+                "title": tittel,
+                "ingress": f"Nye tall fra {case.data_source or 'SSB'} viser: {case.finding}",
+                "body": (
+                    f"{case.finding}\n\n{vinkel}\n\n"
+                    f"[Utkast laget uten KI. Fyll ut med sitater og kontekst. "
+                    f"Tallet er hentet fra {case.data_source or 'SSB'} - se kildelista.]"
+                ),
+                "checks": [
+                    "Ring SSB eller kommunen for aarsaken bak tallet",
+                    f"Finn en case-person i {sted} som merker endringen",
+                    "Sjekk om en lokal fagperson kan kommentere",
+                ],
+                "kilder": kilder,
+                "image_ideas": [
+                    {"motiv": f"Case-person i {sted} knyttet til temaet",
+                     "bildetekst": "Illustrasjonsfoto - finn en reell case-person."},
+                    {"motiv": "Enkel grafikk som viser tallutviklingen",
+                     "bildetekst": case.finding[:80]},
+                ],
+            }
+        )
+    return out
 
 
 # --- Orkestrering ------------------------------------------------------------
@@ -155,12 +236,14 @@ def run_workflow(cases: list[Case]) -> str:
         if c.editor.get("is_story"):
             approved.append(c)
 
-    # Journalist paa redaktor-godkjente.
+    # Journalisten jobber KUN paa det redaktoren har godkjent.
     for c in approved[:JOURNALIST_CAP]:
-        c.draft = journalist_draft(c, c.editor)
-        c.ai_mode = c.draft.get("mode", c.ai_mode)
-        if c.draft.get("mode") == "llm":
-            llm_ok = True
+        c.angles = journalist_angles(c, c.editor)
+        if c.angles:
+            c.draft = c.angles[0]  # bakoverkompatibelt for eldre visninger
+            c.ai_mode = c.angles[0].get("mode", c.ai_mode)
+            if any(a.get("mode") == "llm" for a in c.angles):
+                llm_ok = True
 
     if not has_key:
         return "mal"

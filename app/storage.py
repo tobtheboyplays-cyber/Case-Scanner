@@ -44,6 +44,14 @@ def _connect() -> sqlite3.Connection:
         )
         """
     )
+    # Redaksjonell kalender: planlagt publiseringsdato + status per godkjent sak.
+    # Lagt til med ALTER slik at eksisterende databaser oppgraderes uten tap.
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(approved)")}
+    if "planned_for" not in cols:
+        conn.execute("ALTER TABLE approved ADD COLUMN planned_for TEXT")
+    if "stage" not in cols:
+        conn.execute("ALTER TABLE approved ADD COLUMN stage TEXT NOT NULL DEFAULT 'ide'")
+    conn.commit()
     return conn
 
 
@@ -110,16 +118,69 @@ def list_approved() -> list[dict]:
     conn = _connect()
     try:
         rows = conn.execute(
-            "SELECT payload, created_at FROM approved ORDER BY created_at DESC"
+            "SELECT payload, created_at, planned_for, stage FROM approved "
+            "ORDER BY created_at DESC"
         ).fetchall()
         out = []
-        for payload, created in rows:
+        for payload, created, planned, stage in rows:
             lead = json.loads(payload)
             lead["_approved_at"] = created
+            lead["_planned_for"] = planned or ""
+            lead["_stage"] = stage or "ide"
             out.append(lead)
         return out
     finally:
         conn.close()
+
+
+# ── Redaksjonell kalender ────────────────────────────────────────────────────
+# Stadier en sak gaar gjennom. Rekkefolgen er bevisst: den speiler arbeidsflyten
+# i en redaksjon, og UI-et bruker samme rekkefolge.
+STAGES: tuple[str, ...] = ("ide", "research", "skriving", "publisert")
+STAGE_LABELS: dict[str, str] = {
+    "ide": "Idé",
+    "research": "Research",
+    "skriving": "Skriving",
+    "publisert": "Publisert",
+}
+
+
+def set_plan(key: str, *, planned_for: str | None = None, stage: str | None = None) -> None:
+    """Sett planlagt dato (YYYY-MM-DD) og/eller stadium for en godkjent sak.
+
+    Tom streng for planned_for fjerner datoen (saken blir uplanlagt igjen).
+    Ugyldig stadium ignoreres i stedet for aa kaste - UI skal aldri kunne
+    laase seg paa en skrivefeil."""
+    conn = _connect()
+    try:
+        if planned_for is not None:
+            value = planned_for.strip() or None
+            if value is not None:
+                # Fail-safe: bare ekte ISO-datoer lagres.
+                try:
+                    date.fromisoformat(value)
+                except ValueError:
+                    value = None
+            conn.execute("UPDATE approved SET planned_for = ? WHERE key = ?", (value, key))
+        if stage is not None and stage in STAGES:
+            conn.execute("UPDATE approved SET stage = ? WHERE key = ?", (stage, key))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def calendar_month(year: int, month: int) -> dict[str, list[dict]]:
+    """Godkjente saker gruppert paa planlagt dato for én maaned.
+
+    Returnerer {"YYYY-MM-DD": [sak, ...]}. Saker uten planlagt dato er ikke med
+    her - de vises som "uplanlagt" i UI slik at de ikke blir borte."""
+    prefix = f"{year:04d}-{month:02d}-"
+    out: dict[str, list[dict]] = {}
+    for lead in list_approved():
+        day = lead.get("_planned_for") or ""
+        if day.startswith(prefix):
+            out.setdefault(day, []).append(lead)
+    return out
 
 
 def decisions_map() -> dict[str, str]:
