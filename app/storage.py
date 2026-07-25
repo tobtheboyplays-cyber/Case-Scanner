@@ -61,6 +61,11 @@ def _connect() -> sqlite3.Connection:
     )
     if "stage" not in cols:
         conn.execute("ALTER TABLE approved ADD COLUMN stage TEXT NOT NULL DEFAULT 'ide'")
+    # Arkiv: sveiper man bort et utkast skal det kunne hentes tilbake. Vi setter
+    # et tidsstempel i stedet for aa slette - et utkast som er borte for godt er
+    # en time med arbeid som er borte for godt.
+    if "arkivert_at" not in cols:
+        conn.execute("ALTER TABLE approved ADD COLUMN arkivert_at TEXT")
     conn.commit()
     return conn
 
@@ -122,24 +127,59 @@ def reject_lead(key: str) -> None:
         conn.close()
 
 
-def list_approved() -> list[dict]:
+def list_approved(*, arkiverte: bool = False) -> list[dict]:
+    """Godkjente saker. Arkiverte er som standard ute av veien, men ikke borte."""
     if not os.path.exists(DB_PATH):
         return []
     conn = _connect()
     try:
+        hvor = "arkivert_at IS NOT NULL" if arkiverte else "arkivert_at IS NULL"
         rows = conn.execute(
-            "SELECT payload, created_at, start_date, deadline, stage FROM approved "
+            "SELECT payload, created_at, start_date, deadline, stage, arkivert_at "
+            f"FROM approved WHERE {hvor} "
             "ORDER BY COALESCE(deadline, start_date, created_at) ASC"
         ).fetchall()
         out = []
-        for payload, created, start, deadline, stage in rows:
+        for payload, created, start, deadline, stage, arkivert in rows:
             lead = json.loads(payload)
             lead["_approved_at"] = created
             lead["_start"] = start or ""
             lead["_deadline"] = deadline or ""
             lead["_stage"] = stage or "ide"
+            lead["_arkivert"] = arkivert or ""
             out.append(lead)
         return out
+    finally:
+        conn.close()
+
+
+def arkiver(key: str) -> bool:
+    """Sveip venstre: legg saken bort. Returnerer False hvis den ikke fantes.
+
+    Vi sletter ikke. Et utkast representerer bade KI-kvote og journalistens
+    vurdering; en feilsveip paa mobil skal koste ett trykk aa angre, ikke en ny
+    runde med skriving."""
+    conn = _connect()
+    try:
+        cur = conn.execute(
+            "UPDATE approved SET arkivert_at = ? WHERE key = ? AND arkivert_at IS NULL",
+            (_now(), key),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def gjenopprett(key: str) -> bool:
+    """Angre en sveip - saken tilbake i lista, med datoer og stadium i behold."""
+    conn = _connect()
+    try:
+        cur = conn.execute(
+            "UPDATE approved SET arkivert_at = NULL WHERE key = ?", (key,)
+        )
+        conn.commit()
+        return cur.rowcount > 0
     finally:
         conn.close()
 

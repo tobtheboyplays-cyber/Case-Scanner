@@ -525,3 +525,199 @@ summary:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 1
   background: #191308; padding: 1px 5px; border-radius: 4px;
   font-size: .95em; color: #ffe4ad;
 }
+
+/* ── Sveipekort på lagrede utkast ────────────────────────────────────────────
+   Venstre = legg bort, høyre = behold. Kortet slettes ALDRI - «legg bort»
+   setter et tidsstempel, og angre-knappen tar det rett tilbake. */
+.swipe-kort {
+  position: relative;
+  overflow: hidden;
+  touch-action: pan-y;
+  transition: transform .25s ease, opacity .25s ease;
+}
+.swipe-kort.drar { transition: none; }
+.swipe-merke {
+  position: absolute;
+  top: 12px;
+  z-index: 3;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s ease;
+}
+.swipe-venstre { left: 12px; background: #4a2020; color: #ffb3ad; border: 1px solid #7a2f2f; }
+.swipe-hoyre   { right: 12px; background: #16341f; color: #96e5b0; border: 1px solid #2f6b45; }
+.swipe-kort.mot-venstre .swipe-venstre { opacity: 1; }
+.swipe-kort.mot-hoyre .swipe-hoyre { opacity: 1; }
+.swipe-kort.kort-ut-venstre { transform: translateX(-120%) rotate(-12deg); opacity: 0; }
+.swipe-kort.beholdt { box-shadow: 0 0 0 2px #2f6b45 inset; }
+
+.kort-valg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 11px;
+  border-top: 1px solid #202b36;
+}
+.btn-bort, .btn-behold {
+  border-radius: 9px;
+  padding: 8px 13px;
+  font-size: .84rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-bort { background: #241a1a; color: #ffb3ad; border: 1px solid #5e2a2a; }
+.btn-behold { background: #16281d; color: #96e5b0; border: 1px solid #2f6b45; }
+.kort-hint { font-size: .74rem; color: #7d8fa3; }
+
+/* Angre-stripe nede - samme hjørne som framdriften, samme logikk: si ifra. */
+.angre {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: #10151c;
+  border: 1px solid #2a3542;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .45);
+  font-size: .84rem;
+  color: #dbe4ee;
+}
+.angre[hidden] { display: none; }
+.angre-knapp {
+  background: none;
+  border: none;
+  color: #4ea1ff;
+  font-weight: 700;
+  font-size: .84rem;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swipe-kort, .swipe-merke { transition: none; }
+}
+
+/* ── Vinkler: forslagstittelen er hovedsaken ─────────────────────────────────
+   Foer laa vinkeltypen («KONSEKVENS») over overskriften i store bokstaver, og
+   da ser det ut som det er TYPEN man velger. Det journalisten skal lese er
+   forslaget til tittel og hvilket faktum nettopp den tittelen bygger paa. */
+.angles-h { text-transform: none; letter-spacing: 0; line-height: 1.4; }
+
+.angle summary { align-items: flex-start; gap: 10px; }
+
+.angle-nr {
+  flex: 0 0 auto;
+  width: 22px; height: 22px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: #1c2733;
+  color: #8fa6bd;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+.angle-txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 4px; }
+.angle-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.32;
+  color: var(--text, #e8eef5);
+}
+.angle-fact {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #93a7bb;
+}
+/* Merkelapp, ikke overskrift. */
+.angle-kind {
+  font-size: 10px;
+  letter-spacing: .04em;
+  text-transform: none;
+  color: #7d8fa3;
+  background: #172029;
+  border-radius: 999px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+.angle-meta { flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 5px; }
+
+@media (max-width: 560px) {
+  .angle-meta { flex-direction: row; align-items: center; }
+  .angle summary { flex-wrap: wrap; }
+  .angle-txt { flex: 1 1 100%; }
+}
+
+/* ── Mobil: mindre topp, raskere til sakene ──────────────────────────────────
+   Foer tok logo + tittel + tagline + fire store KPI-kort hele forste skjerm,
+   saa du maatte scrolle forbi alt for aa se ett eneste saksforslag. Tallene er
+   fortsatt der - de tar bare den plassen de er verdt. */
+@media (max-width: 620px) {
+  .topbar { padding-top: 10px; padding-bottom: 8px; row-gap: 8px; }
+  .brand { gap: 10px; align-items: flex-start; }
+  .brand .logo { font-size: 22px; line-height: 1.1; }
+  .brand h1 { font-size: 19px; line-height: 1.15; white-space: nowrap; }
+  .tagline {
+    font-size: 11.5px;
+    line-height: 1.3;
+    color: #7d8fa3;
+    max-width: 22ch;
+  }
+  .top-actions { gap: 6px; }
+  .last-scan { font-size: 10.5px; line-height: 1.3; }
+
+  /* KPI-ene blir en kompakt stripe i stedet for fire plakater. */
+  .kpis { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .kpi { padding: 9px 11px; border-radius: 11px; }
+  .kpi-top { gap: 5px; }
+  .kpi-ic { font-size: 13px; }
+  .kpi-label { font-size: 10.5px; }
+  .kpi-num { font-size: 21px; margin-top: 2px; }
+  .kpi-num.small { font-size: 13px; margin-top: 4px; }
+  .kpi-sub { font-size: 10px; line-height: 1.3; }
+}
+
+/* «Kommer snart» er nyttig, men ikke det forste du skal maatte scrolle forbi.
+   Som <details> aapner du den naar du vil ha den. */
+.forsprang > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.forsprang > summary::-webkit-details-marker { display: none; }
+.forsprang > summary::after {
+  content: "▾";
+  margin-left: auto;
+  color: #7d8fa3;
+  font-size: 12px;
+}
+.forsprang[open] > summary::after { content: "▴"; }
+
+/* Prioriteringsradene er lenker ned til saken - de skal se klikkbare ut. */
+a.prio-row { text-decoration: none; color: inherit; border-radius: 8px; }
+a.prio-row:hover { background: #141c25; }
+a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.prio-label .ny-merke { margin-left: 6px; vertical-align: middle; }
+
+/* Sak uten vinkler: si hvorfor i stedet for aa vise tomrom. */
+.ingen-vinkler {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #7d8fa3;
+}
+
+/* Litt luft foran saken naar man hopper ned fra prioriteringslista. */
+.lead { scroll-margin-top: 14px; }

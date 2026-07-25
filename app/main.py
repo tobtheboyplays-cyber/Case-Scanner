@@ -27,8 +27,10 @@ from app.storage import (
     STAGE_LABELS,
     STAGES,
     approve_lead,
+    arkiver,
     calendar_month,
     decisions_map,
+    gjenopprett,
     list_approved,
     load_latest,
     mark_seen,
@@ -328,19 +330,39 @@ def reject(key: str):
 
 
 @app.get("/godkjente", response_class=HTMLResponse)
-def godkjente(request: Request):
+def godkjente(request: Request, arkiv: int = 0):
+    """Lagrede utkast. `arkiv=1` viser bunken man har sveipet bort."""
+    def pynt(x: dict) -> dict:
+        return {**x, "_prosessnotat": verify.prosessnotat(
+            x, leverandor=llm.provider_label(), godkjent_av="Redaksjonen")}
+
     return templates.TemplateResponse(
         request=request,
         name="godkjente.html",
         context={
-            "leads": [
-                {**x, "_prosessnotat": verify.prosessnotat(
-                    x, leverandor=llm.provider_label(), godkjent_av="Redaksjonen")}
-                for x in list_approved()
-            ],
+            "leads": [pynt(x) for x in list_approved(arkiverte=bool(arkiv))],
+            "viser_arkiv": bool(arkiv),
+            "antall_arkiverte": len(list_approved(arkiverte=True)),
             "version": __version__,
         },
     )
+
+
+@app.post("/godkjente/{key:path}/arkiver")
+def arkiver_sak(key: str, js: str = Form("")):
+    """Sveip venstre. Saken legges bort - ikke slettet, alltid mulig aa angre."""
+    ok = arkiver(key)
+    if js:
+        return JSONResponse({"ok": ok})
+    return RedirectResponse(url="/godkjente", status_code=303)
+
+
+@app.post("/godkjente/{key:path}/gjenopprett")
+def gjenopprett_sak(key: str, js: str = Form("")):
+    ok = gjenopprett(key)
+    if js:
+        return JSONResponse({"ok": ok})
+    return RedirectResponse(url="/godkjente", status_code=303)
 
 
 @app.get("/kalender", response_class=HTMLResponse)

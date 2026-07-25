@@ -58,36 +58,49 @@
 {% else %}
 
 <!-- KPI-rad -->
-<section class="kpis">
-  <div class="kpi">
-    <div class="kpi-top"><span class="kpi-ic">📄</span><span class="kpi-label">Leads totalt</span></div>
-    <div class="kpi-num">{{ s.total }}</div>
-    <div class="kpi-sub">{% if data.antall_nye %}{{ data.antall_nye }} nye siden sist{% else %}{{ s.data }} datadrevne · {{ s.grassroots }} grasrot{% endif %}</div>
-  </div>
-  <div class="kpi">
-    <div class="kpi-top"><span class="dot dot-green"></span><span class="kpi-label">Uskrevet</span></div>
-    <div class="kpi-num green">{{ s.green }}</div>
-    <div class="kpi-sub">{{ green_pct }} % av totalen</div>
-  </div>
-  <div class="kpi">
-    <div class="kpi-top"><span class="kpi-ic">📊</span><span class="kpi-label">SSB-datafunn</span></div>
-    <div class="kpi-num">{{ s.data }}</div>
-    <div class="kpi-sub">Åpne offentlige data</div>
-  </div>
-  <div class="kpi">
-    <div class="kpi-top"><span class="kpi-ic">🕐</span><span class="kpi-label">Sist skannet</span></div>
-    <div class="kpi-num small">{{ scanned_at or "—" }}</div>
-    <div class="kpi-sub">Kun offentlige kilder</div>
-  </div>
+
+<!-- Prioritering ligger foerst: det forste journalisten trenger er hvilken sak
+     han skal ta, ikke hvor mange leads som finnes. Hver rad hopper rett ned til
+     saken sin, saa lista fungerer som innholdsfortegnelse. -->
+{% if data and data.cases %}
+<section class="page" style="padding-bottom:0">
+  <section class="panel priority">
+    <div class="panel-head">
+      <h2>Ta denne først</h2>
+      <span class="panel-sub">Rangert etter originalitet, relevans og påvirkning — trykk for å hoppe ned</span>
+    </div>
+    {% set max_score = (data.cases | map(attribute='score') | max) if data.cases else 1 %}
+    {% for case in data.cases[:6] %}
+    <a class="prio-row" href="#sak-{{ case.key }}">
+      <span class="prio-rank">{{ loop.index }}</span>
+      <span class="prio-label" title="{{ case.title }}">{{ case.title }}
+        {% if case.er_ny %}<span class="ny-merke">NY</span>{% endif %}</span>
+      <span class="prio-track">
+        <span class="prio-fill cov-{{ case.coverage_status }}"
+              style="width: {{ ((case.score / max_score * 100) | round(0,'floor')) if max_score else 0 }}%"></span>
+      </span>
+      <span class="prio-score cov-text-{{ case.coverage_status }}">{{ case.score }}</span>
+    </a>
+    {% endfor %}
+    <div class="legend">
+      <span><span class="dot dot-green"></span> Uskrevet</span>
+      <span><span class="dot dot-amber"></span> Delvis dekket</span>
+      <span><span class="dot dot-red"></span> Allerede dekket</span>
+    </div>
+  </section>
 </section>
+{% endif %}
+
 
 <section class="page" style="padding-bottom:0">
 {% if data and data.kommende %}
-  <div class="panel forsprang">
-    <div class="panel-head">
-      <h2>⏳ Kommer snart — forbered saken nå</h2>
-      <span class="panel-sub">SSB slipper disse tallene kl. 08.00. Ring kilden før.</span>
-    </div>
+  {# Sammenslaatt som standard. Panelet er nyttig, men det skal ikke staa mellom
+     journalisten og saksforslagene naar han aapner appen paa mobil. #}
+  <details class="panel forsprang">
+    <summary>
+      <h2>⏳ Kommer snart ({{ data.kommende|length }})</h2>
+      <span class="panel-sub">SSB slipper disse kl. 08.00 — ring kilden før.</span>
+    </summary>
     {% for v in data.kommende[:5] %}
       <div class="komm">
         <div class="komm-when">{{ v.dager_til }}<span>dager</span></div>
@@ -103,37 +116,12 @@
         </div>
       </div>
     {% endfor %}
-  </div>
+  </details>
 {% endif %}
 </section>
 
 <div class="layout">
   <main class="maincol">
-
-    <!-- Prioritering -->
-    <section class="panel priority">
-      <div class="panel-head">
-        <h2>Prioritering</h2>
-        <span class="panel-sub">Topp leads rangert etter score (originalitet, relevans og påvirkning)</span>
-      </div>
-      {% set max_score = (data.cases | map(attribute='score') | max) if data.cases else 1 %}
-      {% for case in data.cases[:6] %}
-      <div class="prio-row">
-        <span class="prio-rank">{{ loop.index }}</span>
-        <span class="prio-label" title="{{ case.title }}">{{ case.title }}</span>
-        <span class="prio-track">
-          <span class="prio-fill cov-{{ case.coverage_status }}"
-                style="width: {{ ((case.score / max_score * 100) | round(0,'floor')) if max_score else 0 }}%"></span>
-        </span>
-        <span class="prio-score cov-text-{{ case.coverage_status }}">{{ case.score }}</span>
-      </div>
-      {% endfor %}
-      <div class="legend">
-        <span><span class="dot dot-green"></span> Uskrevet (ingen har skrevet dette)</span>
-        <span><span class="dot dot-amber"></span> Delvis dekket (skrevet noe)</span>
-        <span><span class="dot dot-red"></span> Allerede dekket (skrevet mye)</span>
-      </div>
-    </section>
 
     <!-- Lead-kort -->
     <div class="filters">
@@ -143,7 +131,8 @@
     </div>
 
     {% for case in data.cases %}
-    <article class="lead" data-cov="{{ case.coverage_status }}" data-geo="{{ case.geo }}">
+    <article class="lead" id="sak-{{ case.key }}"
+             data-cov="{{ case.coverage_status }}" data-geo="{{ case.geo }}">
       <div class="lead-num">{{ loop.index }}</div>
       <div class="lead-body">
         <div class="lead-head">
@@ -171,6 +160,7 @@
           <span class="metric-v cov-text-{{ case.coverage_status }}">{{ case.metric_value }}</span>
           <span class="metric-cmp">{{ case.metric_period }}</span>
         </div>
+
         {% endif %}
 
         <h3 class="lead-title">{{ case.title }}</h3>
@@ -200,8 +190,12 @@
           </div>
         </div>
 
-        {% if case.editor %}
+        {# Vinklene laa foer inne i «har redaktoeren vurdert saken?». Bare de 8
+           hoyest rangerte gaar til redaktoeren, saa resten viste ingen vinkler i
+           det hele tatt - det saa ut som en feil. Naa vises vinklene naar de
+           finnes, og staar det ingen, sier vi hvorfor. #}
         <div class="ai-block">
+          {% if case.editor %}
           <details class="ai-editor">
             <summary>🧭 KI-redaktør: {{ '✅ Sak' if case.editor.is_story else '⛔ Ikke sak' }}
               {% if case.editor.confidence %}({{ case.editor.confidence }}%){% endif %}
@@ -211,31 +205,44 @@
             <p class="ai-verdict">💬 {{ case.editor.verdict }}</p>
             {% if case.editor.forbehold %}<p class="angle-risk">⚠ {{ case.editor.forbehold }}</p>{% endif %}
           </details>
-          {% if case.editor.gate_mangler %}
+          {% endif %}
+          {% if case.editor and case.editor.gate_mangler %}
           <p class="gate-block">⛔ For tynt grunnlag til å skrive:
             {{ case.editor.gate_mangler|join(' · ') }}</p>
           {% endif %}
+          {% if not case.angles %}
+          <p class="ingen-vinkler">Ingen vinkler laget for denne ennå — journalisten
+            lager forslag for de høyest rangerte sakene ved hvert skann.</p>
+          {% endif %}
           {% if case.angles %}
           <div class="angles">
-            <p class="angles-h">Journalisten leverte {{ case.angles|length }} vinkler — velg én</p>
+            <p class="angles-h">{{ case.angles|length }} forslag til tittel — hver bygger på
+              sitt eget faktum. Velg én og be om utkast.</p>
             {% for a in case.angles %}
             {# Etter «Be om utkast» kommer vi tilbake hit med ?apen=<key>|<nr>.
                Uten den var utkastet skrevet, men slaatt sammen og usynlig. #}
             <details class="angle" id="vinkel-{{ case.key }}-{{ loop.index0 }}"
                      {% if apen == case.key ~ '|' ~ loop.index0 %}open{% endif %}>
+              {# Forslagstittelen er det journalisten skal LESE og velge ut fra.
+                 Vinkeltypen («Konsekvens») er bare en merkelapp paa hvordan den
+                 er vinklet - den skal ikke staa over overskriften og se ut som
+                 om det er den man velger. #}
               <summary>
-                <span class="angle-ic" aria-hidden="true">{{ INNGANG_IKON.get(a.vinkel or a.inngang, '📄') }}</span>
+                <span class="angle-nr" aria-hidden="true">{{ loop.index }}</span>
                 <span class="angle-txt">
-                  <span class="angle-kind">{{ VINKEL_NAVN.get(a.vinkel or a.inngang, 'Vinkel') }}</span>
                   <span class="angle-title">{{ a.title }}</span>
+                  {% if a.headline_fact %}
+                  <span class="angle-fact">📌 {{ a.headline_fact }}</span>
+                  {% endif %}
                 </span>
                 <span class="angle-meta">
+                  <span class="angle-kind">{{ INNGANG_IKON.get(a.vinkel or a.inngang, '📄') }}
+                    {{ VINKEL_NAVN.get(a.vinkel or a.inngang, 'Vinkel') }}</span>
                   {% if a.styrke %}<span class="angle-strength">{{ a.styrke }}</span>{% endif %}
                   {% if a.mode == 'mal' %}<span class="ai-tag">demo</span>{% endif %}
                 </span>
               </summary>
 
-              {% if a.headline_fact %}<p class="hfact">📌 {{ a.headline_fact }}</p>{% endif %}
               {% if a.kort %}<p class="draft-ingress">{{ a.kort }}</p>{% endif %}
               {% if a.mangler %}<p class="angle-risk">🔍 Mangler data: {{ a.mangler }}</p>{% endif %}
 
@@ -329,7 +336,6 @@
             </form>
           </div>
         </div>
-        {% endif %}
       </div>
     </article>
     {% endfor %}
@@ -385,6 +391,31 @@
     </section>
   </aside>
 </div>
+<!-- Tallene sist: de forteller hvordan skannet gikk, men de er ikke noe
+     journalisten HANDLER paa. Handlingen staar oeverst. -->
+<section class="kpis">
+  <div class="kpi">
+    <div class="kpi-top"><span class="kpi-ic">📄</span><span class="kpi-label">Leads totalt</span></div>
+    <div class="kpi-num">{{ s.total }}</div>
+    <div class="kpi-sub">{% if data.antall_nye %}{{ data.antall_nye }} nye siden sist{% else %}{{ s.data }} datadrevne · {{ s.grassroots }} grasrot{% endif %}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-top"><span class="dot dot-green"></span><span class="kpi-label">Uskrevet</span></div>
+    <div class="kpi-num green">{{ s.green }}</div>
+    <div class="kpi-sub">{{ green_pct }} % av totalen</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-top"><span class="kpi-ic">📊</span><span class="kpi-label">SSB-datafunn</span></div>
+    <div class="kpi-num">{{ s.data }}</div>
+    <div class="kpi-sub">Åpne offentlige data</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-top"><span class="kpi-ic">🕐</span><span class="kpi-label">Sist skannet</span></div>
+    <div class="kpi-num small">{{ scanned_at or "—" }}</div>
+    <div class="kpi-sub">Kun offentlige kilder</div>
+  </div>
+</section>
+
 {% endif %}
 
 <footer class="foot">

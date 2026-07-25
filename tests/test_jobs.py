@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import time
+from datetime import UTC
 
 import pytest
 from app import jobs, storage
@@ -198,3 +199,104 @@ def test_banner_varsler_nar_ki_er_av(klient):
     html = klient.get("/").text
     assert "KI-en er av" in html
     assert "faste maler" in html
+
+
+# ── Sveipearkiv paa lagrede utkast ───────────────────────────────────────────
+
+
+def test_sveip_venstre_arkiverer_men_sletter_ikke(klient):
+    storage.approve_lead(KEY, {"title": "Sak", "key": KEY})
+    storage.set_plan(KEY, start_date="2026-08-01", deadline="2026-08-05")
+
+    assert storage.arkiver(KEY) is True
+    assert [x["key"] for x in storage.list_approved()] == []
+    arkiv = storage.list_approved(arkiverte=True)
+    assert [x["key"] for x in arkiv] == [KEY]
+    # Datoene skal overleve - de er journalistens planlegging, ikke KI-ens.
+    assert arkiv[0]["_start"] == "2026-08-01"
+    assert arkiv[0]["_deadline"] == "2026-08-05"
+
+
+def test_angre_henter_saken_tilbake_med_datoer_i_behold(klient):
+    storage.approve_lead(KEY, {"title": "Sak", "key": KEY})
+    storage.set_plan(KEY, start_date="2026-08-01", deadline="2026-08-05")
+    storage.arkiver(KEY)
+
+    assert storage.gjenopprett(KEY) is True
+    tilbake = storage.list_approved()
+    assert [x["key"] for x in tilbake] == [KEY]
+    assert tilbake[0]["_deadline"] == "2026-08-05"
+
+
+def test_dobbel_arkivering_er_ufarlig(klient):
+    storage.approve_lead(KEY, {"title": "Sak", "key": KEY})
+    assert storage.arkiver(KEY) is True
+    assert storage.arkiver(KEY) is False      # allerede borte - ikke en ny hendelse
+
+
+def test_arkiverte_saker_forsvinner_fra_kalenderen(klient):
+    storage.approve_lead(KEY, {"title": "Sak", "key": KEY})
+    storage.set_plan(KEY, start_date="2026-08-03", deadline="2026-08-04")
+    assert len(storage.calendar_month(2026, 8)) == 2
+    storage.arkiver(KEY)
+    assert storage.calendar_month(2026, 8) == {}
+
+
+def test_arkiv_ruter_svarer(klient):
+    storage.approve_lead(KEY, {"title": "Sak", "key": KEY})
+    assert klient.post(f"/godkjente/{KEY}/arkiver", data={"js": "1"}).json()["ok"] is True
+    assert "arkiv=1" in klient.get("/godkjente").text
+    assert KEY in klient.get("/godkjente", params={"arkiv": 1}).text
+    assert klient.post(f"/godkjente/{KEY}/gjenopprett", data={"js": "1"}).json()["ok"] is True
+
+
+def test_uten_js_omdirigerer_arkivering(klient):
+    storage.approve_lead(KEY, {"title": "Sak", "key": KEY})
+    r = klient.post(f"/godkjente/{KEY}/arkiver", follow_redirects=False)
+    assert r.status_code == 303
+
+
+# ── Vinkler: tre ULIKE forslag til tittel ────────────────────────────────────
+
+
+def test_vinkler_med_samme_faktum_regnes_som_én():
+    """To titler paa samme tall er ikke to vinkler - da er valget falskt."""
+    from app.agents import _uten_gjengangere
+
+    ut = _uten_gjengangere([
+        {"title": "Boligbygging skyter i været", "headline_fact": "261 mot 30 i 2025K2"},
+        {"title": "Rekordmange boliger godkjent", "headline_fact": "261 mot 30 i 2025K2"},
+        {"title": "Sandnes henger etter", "headline_fact": "Sandnes: 13 821 kvm"},
+    ])
+    assert len(ut) == 2
+    assert ut[1]["title"] == "Sandnes henger etter"
+
+
+def test_identiske_titler_kastes_ogsaa_uten_faktum():
+    from app.agents import _uten_gjengangere
+
+    ut = _uten_gjengangere([
+        {"title": "Samme tittel", "headline_fact": ""},
+        {"title": "samme  TITTEL ", "headline_fact": ""},
+    ])
+    assert len(ut) == 1
+
+
+def test_malvinklene_peker_paa_hvert_sitt_faktum():
+    """Ogsaa uten KI skal de tre ikke vaere tre varianter av samme setning."""
+    from datetime import datetime
+
+    from app.agents import _fallback_angles
+    from app.models import Case
+
+    case = Case(
+        key="k", title="T", score=1, geo="lokal", topics=[], angle="", why="",
+        signals=[], created_at=datetime.now(tz=UTC), kind="data",
+        finding="Godkjente boliger: 261 i 2026K2, mot 30 i 2025K2.",
+        metric_value="+770 %", metric_period="2026K2 mot 2025K2",
+        data_source="SSB tabell 05889",
+    )
+    a = _fallback_angles(case, {})
+    assert len({x["title"] for x in a}) == 3
+    assert len({x["headline_fact"] for x in a}) == 3
+    assert all("Hva betyr tallet i praksis" not in x["title"] for x in a)

@@ -121,13 +121,27 @@ DIN ROLLE: journalist. Redaktoeren har sagt JA til funnet og gitt deg en bestill
 
 Foreslaa TRE vinkler. Bare vinklene - IKKE skriv artikkelen enda.
 
-VELG TRE ULIKE VINKELTYPER fra denne lista. Du MAA bruke tre forskjellige noekler:
+Hver vinkel leveres som et FORSLAG TIL TITTEL. Det er tittelen redaksjonen leser
+og velger ut fra, saa den skal kunne staa slik den er: konkret, edruelig og saa
+spesifikk at leseren skjonner hvilken sak det er. IKKE spoersmaalstitler av typen
+«Hva betyr tallet i praksis for Stavanger?» - det er en mal, ikke en tittel. Ikke
+gjenta vinkeltypen i tittelen.
+
+DE TRE TITLENE MAA VAERE HELT ULIKE - ikke bare i ordlyd, men i hva de handler om:
+1. Hver tittel skal hvile paa SITT EGET faktum fra KILDEGRUNNLAG. To vinkler som
+   bygger paa samme tall er én vinkel skrevet to ganger.
+2. Bytter man om paa to av titlene, skal saken bli en annen. Blir den ikke det,
+   er vinklene for like.
+3. Tre forskjellige vinkeltyper fra lista. Du MAA bruke tre ulike noekler:
 {_VINKEL_LISTE}
 
 For hver vinkel skal du oppgi en HEADLINE FACT: den ene konkrete opplysningen fra
-KILDEGRUNNLAG som nettopp denne vinkelen loefter fram. Det er headline fact-en som
-skiller vinklene fra hverandre - ikke tittelen. Kan du ikke peke paa en konkret
-opplysning i KILDEGRUNNLAG for en vinkel, skal du velge en annen vinkeltype.
+KILDEGRUNNLAG som nettopp denne tittelen bygger paa - tallet, perioden,
+sammenligningen eller dekningen. Kan du ikke peke paa en konkret opplysning i
+KILDEGRUNNLAG for en vinkel, skal du velge en annen vinkeltype.
+
+Har KILDEGRUNNLAG bare ETT faktum aa spille paa, lever heller TO ekte vinkler enn
+tre der den tredje er en omskrivning. Skriv hvorfor i "mangler".
 
 Si ogsaa aerlig hva som mangler: trenger vinkelen historisk tidsserie, tall fra
 nabokommunen, eller en terskelverdi du ikke har faatt - skriv det i "mangler".
@@ -135,8 +149,8 @@ nabokommunen, eller en terskelverdi du ikke har faatt - skriv det i "mangler".
 SVAR:
 {{{{"angles": [
   {{{{"vinkel": "en av noeklene over",
-    "title": "tittel - konkret og edruelig",
-    "headline_fact": "den konkrete opplysningen fra KILDEGRUNNLAG denne vinkelen bygger paa",
+    "title": "FORSLAG TIL TITTEL - konkret, edruelig, kan staa paa trykk",
+    "headline_fact": "den konkrete opplysningen fra KILDEGRUNNLAG denne tittelen bygger paa",
     "kort": "én setning om hva saken faktisk handler om",
     "kilder": [{{{{"navn": "hvem som maa ringes eller sjekkes", "hva": "hvorfor",
                 "url": "lenke fra KILDEGRUNNLAG, eller tom streng"}}}}],

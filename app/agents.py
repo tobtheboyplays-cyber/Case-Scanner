@@ -147,12 +147,43 @@ def journalist_angles(case: Case, editor: dict) -> list[dict]:
     )
     angles = result.get("angles") if isinstance(result, dict) else None
     if isinstance(angles, list):
-        clean = [a for a in angles if isinstance(a, dict) and a.get("title")]
+        clean = _uten_gjengangere(
+            [a for a in angles if isinstance(a, dict) and a.get("title")]
+        )
         if clean:
             for a in clean:
                 a["mode"] = "llm"
             return clean[:3]
     return _fallback_angles(case, editor)
+
+
+def _nokkel(tekst: str) -> str:
+    """Grov normalisering, saa to formuleringer av samme sak kjennes igjen."""
+    return " ".join(
+        "".join(ch for ch in (tekst or "").lower() if ch.isalnum() or ch.isspace()).split()
+    )
+
+
+def _uten_gjengangere(angles: list[dict]) -> list[dict]:
+    """Kast vinkler som er samme sak skrevet om igjen.
+
+    Modellen faar beskjed om at de tre skal vaere ulike, men en beskjed er ingen
+    garanti. To vinkler som hviler paa NOEYAKTIG samme faktum er én vinkel med to
+    titler - da er valget mellom dem falskt. Vi leverer heller to ekte vinkler enn
+    tre der den ene er en omskrivning."""
+    sett_faktum: set[str] = set()
+    sett_tittel: set[str] = set()
+    ut: list[dict] = []
+    for a in angles:
+        faktum = _nokkel(a.get("headline_fact", ""))
+        tittel = _nokkel(a.get("title", ""))
+        if tittel in sett_tittel or (faktum and faktum in sett_faktum):
+            continue
+        sett_tittel.add(tittel)
+        if faktum:
+            sett_faktum.add(faktum)
+        ut.append(a)
+    return ut
 
 
 def write_draft(case: Case, editor: dict, angle: dict) -> dict:
@@ -203,22 +234,35 @@ def _fallback_angles(case: Case, editor: dict) -> list[dict]:
     """Malbaserte vinkelforslag naar KI-en ikke er tilgjengelig. Tydelig merket."""
     sted = "Stavanger" if case.geo == "lokal" else "Norge"
     kilder = [{"navn": case.data_source or "SSB", "hva": "tallet i saken", "url": case.data_url}]
+    tall = case.metric_value or ""
+    periode = case.metric_period or ""
+
+    # Malene henter inn det faktiske tallet slik at de tre iallfall peker paa
+    # hver sin del av funnet. De er fortsatt maler - merket "mal" og med lav
+    # styrke - men de skal ikke vaere tre varianter av «Hva betyr tallet?».
     maler = [
-        ("menneske", f"Hvem merker dette i {sted}?",
-         "Finn én person som kjenner endringen paa kroppen."),
-        ("konsekvens", f"Hva betyr tallet i praksis for {sted}?",
-         "Regn om endringen til kroner, koe eller tid."),
-        ("naerhet", f"Hvorfor skjer dette akkurat i {sted}?",
-         "Ring kommunen og en fagperson om avviket fra landet."),
+        ("menneske",
+         f"De som merker {tall or 'endringen'} i {sted}".strip(),
+         "Finn én person som kjenner endringen paa kroppen.",
+         case.finding or case.title),
+        ("konsekvens",
+         f"{sted} maa haandtere {tall or 'endringen'}"
+         + (f" fra {periode}" if periode else ""),
+         "Regn om endringen til kroner, koe eller tid.",
+         f"{tall} {periode}".strip() or case.finding or case.title),
+        ("naerhet",
+         f"Hvorfor {sted} skiller seg ut i {case.data_source or 'SSB-tallene'}",
+         "Ring kommunen og en fagperson om avviket fra landet.",
+         case.data_source or case.title),
     ]
     return [
         {
             "mode": "mal", "vinkel": vinkel, "title": tittel, "kort": kort,
-            "headline_fact": case.finding or case.title,
+            "headline_fact": faktum,
             "styrke": 50, "risiko": "Laget uten KI - vurder selv om vinkelen baerer.",
             "mangler": "", "kilder": kilder,
         }
-        for vinkel, tittel, kort in maler
+        for vinkel, tittel, kort, faktum in maler
     ]
 
 
