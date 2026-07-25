@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import __version__, llm
+from app import __version__, llm, verify
 from app.agents import run_workflow, write_draft
 from app.collectors import collect_all, coverage
 from app.config import ENABLE_AI
@@ -36,8 +36,16 @@ from app.storage import (
 
 # Ikon per vinkel-inngang. Brukes i UI saa valget kan tas uten aa aapne noe.
 INNGANG_IKON = {
-    "menneske": "👤", "konsekvens": "📈", "aarsak": "🔍",
-    "motsetning": "⚖", "fremtid": "🔮", "sammenligning": "🗺",
+    "menneske": "👤", "konsekvens": "📈", "naerhet": "📍", "ytterpunkt": "📊",
+    "milepael": "🏁", "uventet": "❗", "motsetning": "⚖", "handling": "🧭",
+    # gamle noekler, saa eldre skann fortsatt viser riktig ikon
+    "aarsak": "🔍", "fremtid": "🔮", "sammenligning": "🗺",
+}
+VINKEL_NAVN = {
+    "menneske": "Menneske", "konsekvens": "Konsekvens", "naerhet": "Nærhet",
+    "ytterpunkt": "Ytterpunkt", "milepael": "Milepæl", "uventet": "Uventet",
+    "motsetning": "Motsetning", "handling": "Handling",
+    "aarsak": "Årsak", "fremtid": "Fremtid", "sammenligning": "Sammenligning",
 }
 
 MONTHS_NO = [
@@ -140,6 +148,7 @@ def dashboard(request: Request):
             "version": __version__,
             "decisions": decisions_map(),
             "INNGANG_IKON": INNGANG_IKON,
+            "VINKEL_NAVN": VINKEL_NAVN,
             "approved_count": len(list_approved()),
         },
     )
@@ -241,7 +250,14 @@ def godkjente(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="godkjente.html",
-        context={"leads": list_approved(), "version": __version__},
+        context={
+            "leads": [
+                {**x, "_prosessnotat": verify.prosessnotat(
+                    x, leverandor=llm.provider_label(), godkjent_av="Redaksjonen")}
+                for x in list_approved()
+            ],
+            "version": __version__,
+        },
     )
 
 

@@ -163,15 +163,19 @@
             <p class="ai-verdict">💬 {{ case.editor.verdict }}</p>
             {% if case.editor.forbehold %}<p class="angle-risk">⚠ {{ case.editor.forbehold }}</p>{% endif %}
           </details>
+          {% if case.editor.gate_mangler %}
+          <p class="gate-block">⛔ For tynt grunnlag til å skrive:
+            {{ case.editor.gate_mangler|join(' · ') }}</p>
+          {% endif %}
           {% if case.angles %}
           <div class="angles">
             <p class="angles-h">Journalisten leverte {{ case.angles|length }} vinkler — velg én</p>
             {% for a in case.angles %}
             <details class="angle">
               <summary>
-                <span class="angle-ic" aria-hidden="true">{{ INNGANG_IKON.get(a.inngang, '📄') }}</span>
+                <span class="angle-ic" aria-hidden="true">{{ INNGANG_IKON.get(a.vinkel or a.inngang, '📄') }}</span>
                 <span class="angle-txt">
-                  <span class="angle-kind">{{ (a.inngang or 'vinkel')|capitalize }}</span>
+                  <span class="angle-kind">{{ VINKEL_NAVN.get(a.vinkel or a.inngang, 'Vinkel') }}</span>
                   <span class="angle-title">{{ a.title }}</span>
                 </span>
                 <span class="angle-meta">
@@ -180,11 +184,18 @@
                 </span>
               </summary>
 
+              {% if a.headline_fact %}<p class="hfact">📌 {{ a.headline_fact }}</p>{% endif %}
               {% if a.kort %}<p class="draft-ingress">{{ a.kort }}</p>{% endif %}
+              {% if a.mangler %}<p class="angle-risk">🔍 Mangler data: {{ a.mangler }}</p>{% endif %}
 
               {% if a.body %}
                 {% if a.ingress %}<p class="draft-ingress">{{ a.ingress }}</p>{% endif %}
                 <div class="draft-body">{{ a.body }}</div>
+
+                {% if a.usporbare_tall %}
+                <p class="untraced">⚠️ Disse tallene finnes ikke i kildegrunnlaget og må
+                  sjekkes manuelt: <strong>{{ a.usporbare_tall|join(', ') }}</strong></p>
+                {% endif %}
               {% else %}
                 <form method="post" action="/leads/{{ case.key }}/utkast" class="ask-draft">
                   <input type="hidden" name="vinkel" value="{{ loop.index0 }}" />

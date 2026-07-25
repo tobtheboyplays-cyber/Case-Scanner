@@ -95,36 +95,56 @@ SVAR:
   "novelty": "fersk" | "delvis" | "dekket"}}"""
 
 
+# Vinkeltypologi fra Motta, Daga, Opdahl & Tessem, «Analysis and Design of
+# Computational News Angles», IEEE Access 8 (2020) s. 120613-120626, tabell 1-2.
+# Forfatterne kaller det selv et startsett, ikke en lukket typologi - men et navngitt
+# enum tvinger fram REELT forskjellige vinkler i stedet for tre omskrivinger.
+# Utvalget under er de av de 13 som faktisk lar seg drive av en kommunestatistikk;
+# Celebrity, Drama og Fall from grace er utelatt (krever personer og hendelser).
+VINKLER: dict[str, str] = {
+    "naerhet": "Proximity/Local Interest - hvorfor dette treffer akkurat her, lokalt",
+    "konsekvens": "Impact - hva tallet betyr i kroner, koe, tid eller tilbud",
+    "ytterpunkt": "Extremes - hoyest/lavest/sterkest endring, krever sammenligning",
+    "milepael": "Milestone - en terskel er passert for forste gang paa X aar",
+    "menneske": "Human interest - én person eller familie som merker det",
+    "uventet": "Unexpected - tallet gaar motsatt vei av det man skulle tro",
+    "motsetning": "Conflict - tallet krasjer med det kommunen eller bransjen sier",
+    "handling": "Actionability - hva leseren konkret kan gjore med informasjonen",
+}
+
+_VINKEL_LISTE = "\n".join(f"  {k} = {v}" for k, v in VINKLER.items())
+
+
 JOURNALIST_ANGLES_SYSTEM = f"""{_FELLES}
 
 DIN ROLLE: journalist. Redaktoeren har sagt JA til funnet og gitt deg en bestilling.
 
-Foreslaa TRE ULIKE vinkler. Bare vinklene - IKKE skriv artikkelen enda. Journalisten
-velger én foerst, og da skriver du den ut i sin helhet.
+Foreslaa TRE vinkler. Bare vinklene - IKKE skriv artikkelen enda.
 
-DE TRE MAA VAERE REELT FORSKJELLIGE - ikke samme sak med tre titler. Velg tre
-innganger som passer akkurat dette funnet:
-- MENNESKE: én person eller familie som merker endringen paa kroppen
-- KONSEKVENS: hva tallet betyr i kroner, koe, tid eller tilbud
-- AARSAK: hvorfor skjer dette akkurat her, akkurat naa
-- MOTSETNING: tallet krasjer med det kommunen, bransjen eller folk flest sier
-- FREMTID: hva skjer hvis kurven fortsetter
-- SAMMENLIGNING: hvorfor skiller Stavanger seg fra resten av landet
+VELG TRE ULIKE VINKELTYPER fra denne lista. Du MAA bruke tre forskjellige noekler:
+{_VINKEL_LISTE}
 
-For hver vinkel: en konkret tittel, én setning om hva saken handler om, hvem som maa
-ringes, og en aerlig vurdering av hva som kan gjoere at den ikke holder.
+For hver vinkel skal du oppgi en HEADLINE FACT: den ene konkrete opplysningen fra
+KILDEGRUNNLAG som nettopp denne vinkelen loefter fram. Det er headline fact-en som
+skiller vinklene fra hverandre - ikke tittelen. Kan du ikke peke paa en konkret
+opplysning i KILDEGRUNNLAG for en vinkel, skal du velge en annen vinkeltype.
+
+Si ogsaa aerlig hva som mangler: trenger vinkelen historisk tidsserie, tall fra
+nabokommunen, eller en terskelverdi du ikke har faatt - skriv det i "mangler".
 
 SVAR:
-{{"angles": [
-  {{"inngang": "menneske|konsekvens|aarsak|motsetning|fremtid|sammenligning",
+{{{{"angles": [
+  {{{{"vinkel": "en av noeklene over",
     "title": "tittel - konkret og edruelig",
+    "headline_fact": "den konkrete opplysningen fra KILDEGRUNNLAG denne vinkelen bygger paa",
     "kort": "én setning om hva saken faktisk handler om",
-    "kilder": [{{"navn": "hvem som maa ringes eller sjekkes", "hva": "hvorfor",
-                "url": "lenke fra KILDEGRUNNLAG, eller tom streng"}}],
+    "kilder": [{{{{"navn": "hvem som maa ringes eller sjekkes", "hva": "hvorfor",
+                "url": "lenke fra KILDEGRUNNLAG, eller tom streng"}}}}],
+    "mangler": "data du trenger men ikke har - tom streng hvis ingenting",
     "styrke": 0-100,
-    "risiko": "hva som kan gjoere at nettopp denne vinkelen ikke holder"}}
- ]}}
-Noeyaktig tre vinkler."""
+    "risiko": "hva som kan gjoere at nettopp denne vinkelen ikke holder"}}}}
+ ]}}}}
+Noeyaktig tre vinkler, med tre FORSKJELLIGE vinkeltyper."""
 
 
 JOURNALIST_SYSTEM = f"""{_FELLES}

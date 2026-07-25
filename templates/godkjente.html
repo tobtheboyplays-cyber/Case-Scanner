@@ -43,6 +43,9 @@
         {% endif %}
       </div>
       <h3 class="lead-title">{{ lead.draft.title if lead.draft and lead.draft.title else lead.title }}</h3>
+      {% if lead._prosessnotat %}
+      <p class="prosessnotat">🤖 <strong>Slik ble KI brukt:</strong> {{ lead._prosessnotat }}</p>
+      {% endif %}
       {% if lead.finding %}<p class="lead-desc">{{ lead.finding }}</p>{% endif %}
 
       {% if lead.draft and lead.draft.body %}

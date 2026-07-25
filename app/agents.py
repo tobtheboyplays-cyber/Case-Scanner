@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from app import llm, prompts
+from app import llm, prompts, verify
 from app.config import EDITOR_CAP, JOURNALIST_CAP
 from app.models import Case
 
@@ -170,7 +170,14 @@ def write_draft(case: Case, editor: dict, angle: dict) -> dict:
         prompts.JOURNALIST_SYSTEM, user, model=llm.MODEL_JOURNALIST, max_tokens=2200
     )
     if isinstance(result, dict) and result.get("body"):
-        return {**angle, **result, "mode": "llm"}
+        draft = {**angle, **result, "mode": "llm"}
+        # Sourcing er den dominerende feilmodusen (EBU 2025). Hvert tall i teksten
+        # spores mekanisk tilbake til kildegrunnlaget; det som ikke lar seg spore
+        # flagges for journalisten i stedet for aa gaa stille igjennom.
+        draft["usporbare_tall"] = verify.usporbare_tall(
+            draft.get("body", ""), kildegrunnlag(case)
+        )
+        return draft
 
     # Uten KI: behold vinkelen, men vaer aapen om at teksten er en mal.
     return {
@@ -201,16 +208,17 @@ def _fallback_angles(case: Case, editor: dict) -> list[dict]:
          "Finn én person som kjenner endringen paa kroppen."),
         ("konsekvens", f"Hva betyr tallet i praksis for {sted}?",
          "Regn om endringen til kroner, koe eller tid."),
-        ("aarsak", f"Hvorfor skjer dette akkurat i {sted}?",
+        ("naerhet", f"Hvorfor skjer dette akkurat i {sted}?",
          "Ring kommunen og en fagperson om avviket fra landet."),
     ]
     return [
         {
-            "mode": "mal", "inngang": inngang, "title": tittel, "kort": kort,
+            "mode": "mal", "vinkel": vinkel, "title": tittel, "kort": kort,
+            "headline_fact": case.finding or case.title,
             "styrke": 50, "risiko": "Laget uten KI - vurder selv om vinkelen baerer.",
-            "kilder": kilder,
+            "mangler": "", "kilder": kilder,
         }
-        for inngang, tittel, kort in maler
+        for vinkel, tittel, kort in maler
     ]
 
 
@@ -250,6 +258,12 @@ def run_workflow(cases: list[Case]) -> str:
     # Journalisten foreslaar KUN vinkler her. Artikkelen skrives naar Mathias ber om
     # den (write_draft), slik at vi ikke bruker kvote paa saker som aldri aapnes.
     for c in approved[:JOURNALIST_CAP]:
+        # Sufficient-context-gate: modeller avstaar ikke selv naar grunnlaget er
+        # tynt, saa avgjorelsen tas mekanisk her - foer det brukes tid paa vinkler.
+        nok, mangler = verify.nok_grunnlag(c.to_dict())
+        if not nok:
+            c.editor = {**c.editor, "gate_mangler": mangler}
+            continue
         c.angles = journalist_angles(c, c.editor)
         if c.angles:
             c.ai_mode = c.angles[0].get("mode", c.ai_mode)
