@@ -151,34 +151,39 @@ def _find_lead(key: str) -> dict | None:
 
 
 @app.post("/leads/{key:path}/approve")
-def approve(key: str, vinkel: int = Form(0), planned_for: str = Form("")):
-    """Godkjenn EN av journalistens tre vinkler og arkiver den.
+def approve(
+    key: str,
+    vinkel: int = Form(0),
+    start_date: str = Form(""),
+    deadline: str = Form(""),
+):
+    """Godkjenn EN av journalistens tre vinkler og legg den i Godkjente saker.
 
-    Vinkelen som velges blir sakens "draft" - det er den varianten redaksjonen har
-    sagt ja til. De to andre beholdes i "angles" slik at valget kan spores."""
+    Start og deadline settes i samme handling - de styrer hvor saken dukker opp i
+    kalenderen. Saken lagres samme sted som alle andre godkjente saker; kalenderen
+    er bare en visning av dem."""
     lead = _find_lead(key)
     if lead:
         angles = lead.get("angles") or []
         if 0 <= vinkel < len(angles):
             lead = {**lead, "draft": angles[vinkel], "valgt_vinkel": vinkel}
         approve_lead(key, lead)
-        if planned_for:
-            set_plan(key, planned_for=planned_for)
-    return RedirectResponse(url="/", status_code=303)
+        if start_date or deadline:
+            set_plan(key, start_date=start_date, deadline=deadline)
+    return RedirectResponse(url="/godkjente", status_code=303)
 
 
 @app.post("/leads/{key:path}/plan")
-def plan_lead(key: str, planned_for: str = Form(""), stage: str = Form("")):
-    """Sett publiseringsdato og/eller stadium fra kalenderen."""
-    set_plan(key, planned_for=planned_for, stage=stage or None)
-    return RedirectResponse(url=request_back(planned_for), status_code=303)
-
-
-def request_back(planned_for: str) -> str:
-    """Send brukeren tilbake til maaneden han jobbet i."""
-    if len(planned_for) >= 7:
-        return f"/kalender?ym={planned_for[:7]}"
-    return "/kalender"
+def plan_lead(
+    key: str,
+    start_date: str = Form(""),
+    deadline: str = Form(""),
+    stage: str = Form(""),
+    tilbake: str = Form("/godkjente"),
+):
+    """Endre start, deadline og/eller stadium paa en sak som alt er godkjent."""
+    set_plan(key, start_date=start_date, deadline=deadline, stage=stage or None)
+    return RedirectResponse(url=tilbake or "/godkjente", status_code=303)
 
 
 @app.post("/leads/{key:path}/reject")
@@ -211,7 +216,7 @@ def kalender(request: Request, ym: str = ""):
 
     by_day = calendar_month(year, month)
     approved = list_approved()
-    uplanlagt = [lead for lead in approved if not lead.get("_planned_for")]
+    uplanlagt = [x for x in approved if not (x.get("_start") or x.get("_deadline"))]
 
     # Bygg rutenettet: hele uker, mandag foerst, med tomme celler rundt maaneden.
     first = date(year, month, 1)

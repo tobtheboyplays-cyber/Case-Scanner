@@ -17,7 +17,8 @@
     </div>
   </div>
   <div class="top-actions">
-    <a class="btn-approved-link" href="/">← Tilbake til radaren</a>
+    <a class="btn-ghost" href="/">← Radar</a>
+    <a class="btn-ghost" href="/kalender">🗓 Kalender</a>
   </div>
 </header>
 
@@ -36,6 +37,10 @@
         <span class="pill pill-green">✓ Godkjent</span>
         {% if lead.data_source %}<span class="tag">{{ lead.data_source }}</span>{% endif %}
         {% if lead.ai_mode == 'mal' %}<span class="tag">demo-utkast</span>{% endif %}
+        {% if lead._stage %}<span class="pill pill-stage stage-bg-{{ lead._stage }}">{{ lead._stage|capitalize }}</span>{% endif %}
+        {% if lead._start or lead._deadline %}
+          <span class="span-badge">{% if lead._start %}▶ {{ lead._start }}{% endif %}{% if lead._deadline %} → ⚑ {{ lead._deadline }}{% endif %}</span>
+        {% endif %}
       </div>
       <h3 class="lead-title">{{ lead.draft.title if lead.draft and lead.draft.title else lead.title }}</h3>
       {% if lead.finding %}<p class="lead-desc">{{ lead.finding }}</p>{% endif %}

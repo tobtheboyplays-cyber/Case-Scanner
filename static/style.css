@@ -350,3 +350,26 @@ summary:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 1
 .angle-approve { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
   margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .angle-approve .btn-approve { min-height: var(--tap); padding: 0 18px; }
+
+/* ── Godkjenn: datovelger som spretter opp ─────────────────────────────── */
+.approve-pop { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.approve-pop > summary { list-style: none; }
+.approve-pop > summary::-webkit-details-marker { display: none; }
+.btn-approve.as-summary {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: var(--tap); padding: 0 18px; cursor: pointer; user-select: none;
+}
+.btn-approve.as-summary:active { transform: scale(.97); }
+.approve-pop[open] > summary { opacity: .55; }
+.angle-approve { flex-direction: column; align-items: stretch; border-top: 0; padding-top: 10px; }
+.approve-h { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+.date-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.date-row .fld { flex: 1 1 130px; }
+.date-row .fld input { width: 100%; }
+.date-arrow { color: var(--faint); padding-bottom: 12px; font-size: 16px; }
+.approve-note { margin: 8px 0 0; font-size: 11.5px; color: var(--faint); }
+
+/* Kalender: start- og deadline-markering */
+.cal-dot.is-start { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--accent); }
+.cal-dot.is-deadline { border-radius: 2px; }
+.span-badge { font-size: 11px; color: var(--faint); }

@@ -58,7 +58,7 @@
                 <span class="cal-count">{{ cell.leads|length }}</span>
                 <span class="cal-dots">
                   {% for lead in cell.leads[:4] %}
-                    <i class="cal-dot stage-{{ lead._stage or 'ide' }}"></i>
+                    <i class="cal-dot stage-{{ lead._stage or 'ide' }}{{ ' is-start' if lead._is_start }}{{ ' is-deadline' if lead._is_deadline }}"></i>
                   {% endfor %}
                 </span>
               {% endif %}
@@ -92,15 +92,70 @@
             <article class="day-lead">
               <div class="day-lead-top">
                 <span class="pill pill-stage stage-bg-{{ lead._stage or 'ide' }}">{{ stage_labels[lead._stage or 'ide'] }}</span>
+                {% if lead._is_start %}<span class="tag">▶ start</span>{% endif %}
+                {% if lead._is_deadline %}<span class="tag tag-loc">⚑ deadline</span>{% endif %}
                 {% if lead.geo == 'lokal' %}<span class="tag tag-loc">Stavanger</span>{% endif %}
               </div>
               <h3>{{ draft.title or lead.title }}</h3>
               {% if draft.ingress %}<p class="day-lead-ingress">{{ draft.ingress }}</p>{% endif %}
 
+              <p class="span-badge">
+                {% if lead._start %}▶ {{ lead._start }}{% endif %}
+                {% if lead._deadline %} → ⚑ {{ lead._deadline }}{% endif %}
+              </p>
+
+              {% if draft.body %}
+              <details class="angle">
+                <summary>
+                  <span class="angle-title">📄 Åpne artikkelen</span>
+                  {% if draft.inngang %}<span class="tag">{{ draft.inngang }}</span>{% endif %}
+                </summary>
+
+                <div class="draft-body">{{ draft.body }}</div>
+
+                {% if draft.checks %}
+                <p class="draft-checks-h">Må sjekkes før publisering</p>
+                <ul class="draft-checks">{% for chk in draft.checks %}<li>{{ chk }}</li>{% endfor %}</ul>
+                {% endif %}
+
+                {% if draft.kilder %}
+                <p class="draft-checks-h">Kilder</p>
+                <ul class="src-list">
+                  {% for k in draft.kilder %}
+                  <li>
+                    {% if k.url %}<a class="kilde" href="{{ k.url }}" target="_blank" rel="noopener">{{ k.navn }}</a>
+                    {% else %}<span>{{ k.navn }}</span>{% endif %}
+                    {% if k.hva %}<span class="muted"> — {{ k.hva }}</span>{% endif %}
+                  </li>
+                  {% endfor %}
+                </ul>
+                {% elif lead.data_url %}
+                <p class="draft-checks-h">Kilde</p>
+                <ul class="src-list">
+                  <li><a class="kilde" href="{{ lead.data_url }}" target="_blank" rel="noopener">{{ lead.data_source or 'Datakilde' }}</a></li>
+                </ul>
+                {% endif %}
+
+                {% if draft.image_ideas %}
+                <p class="draft-checks-h">Bildeforslag</p>
+                <ul class="src-list">
+                  {% for img in draft.image_ideas %}
+                  <li><strong>{{ img.motiv }}</strong>{% if img.bildetekst %}<span class="muted"> — {{ img.bildetekst }}</span>{% endif %}</li>
+                  {% endfor %}
+                </ul>
+                {% endif %}
+              </details>
+              {% endif %}
+
               <form class="day-form" method="post" action="/leads/{{ lead.key }}/plan">
+                <input type="hidden" name="tilbake" value="/kalender?ym={{ '%04d-%02d'|format(year, month) }}" />
                 <label class="fld">
-                  <span>Dato</span>
-                  <input type="date" name="planned_for" value="{{ lead._planned_for }}" />
+                  <span>Start</span>
+                  <input type="date" name="start_date" value="{{ lead._start }}" />
+                </label>
+                <label class="fld">
+                  <span>Deadline</span>
+                  <input type="date" name="deadline" value="{{ lead._deadline }}" />
                 </label>
                 <label class="fld">
                   <span>Stadium</span>
@@ -139,9 +194,14 @@
         <h3>{{ draft.title or lead.title }}</h3>
         {% if draft.ingress %}<p class="day-lead-ingress">{{ draft.ingress }}</p>{% endif %}
         <form class="day-form" method="post" action="/leads/{{ lead.key }}/plan">
+          <input type="hidden" name="tilbake" value="/kalender?ym={{ '%04d-%02d'|format(year, month) }}" />
           <label class="fld">
-            <span>Sett dato</span>
-            <input type="date" name="planned_for" value="" />
+            <span>Start</span>
+            <input type="date" name="start_date" value="{{ lead._start }}" />
+          </label>
+          <label class="fld">
+            <span>Deadline</span>
+            <input type="date" name="deadline" value="{{ lead._deadline }}" />
           </label>
           <label class="fld">
             <span>Stadium</span>

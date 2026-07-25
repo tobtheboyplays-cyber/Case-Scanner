@@ -9,7 +9,8 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from calendar import monthrange
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from app.config import DB_PATH
@@ -49,6 +50,15 @@ def _connect() -> sqlite3.Connection:
     cols = {row[1] for row in conn.execute("PRAGMA table_info(approved)")}
     if "planned_for" not in cols:
         conn.execute("ALTER TABLE approved ADD COLUMN planned_for TEXT")
+    if "start_date" not in cols:
+        conn.execute("ALTER TABLE approved ADD COLUMN start_date TEXT")
+    if "deadline" not in cols:
+        conn.execute("ALTER TABLE approved ADD COLUMN deadline TEXT")
+    # Eldre rader hadde bare planned_for - la den bli startdato.
+    conn.execute(
+        "UPDATE approved SET start_date = planned_for "
+        "WHERE start_date IS NULL AND planned_for IS NOT NULL"
+    )
     if "stage" not in cols:
         conn.execute("ALTER TABLE approved ADD COLUMN stage TEXT NOT NULL DEFAULT 'ide'")
     conn.commit()
@@ -118,14 +128,15 @@ def list_approved() -> list[dict]:
     conn = _connect()
     try:
         rows = conn.execute(
-            "SELECT payload, created_at, planned_for, stage FROM approved "
-            "ORDER BY created_at DESC"
+            "SELECT payload, created_at, start_date, deadline, stage FROM approved "
+            "ORDER BY COALESCE(deadline, start_date, created_at) ASC"
         ).fetchall()
         out = []
-        for payload, created, planned, stage in rows:
+        for payload, created, start, deadline, stage in rows:
             lead = json.loads(payload)
             lead["_approved_at"] = created
-            lead["_planned_for"] = planned or ""
+            lead["_start"] = start or ""
+            lead["_deadline"] = deadline or ""
             lead["_stage"] = stage or "ide"
             out.append(lead)
         return out
@@ -145,23 +156,43 @@ STAGE_LABELS: dict[str, str] = {
 }
 
 
-def set_plan(key: str, *, planned_for: str | None = None, stage: str | None = None) -> None:
-    """Sett planlagt dato (YYYY-MM-DD) og/eller stadium for en godkjent sak.
+def set_plan(
+    key: str,
+    *,
+    start_date: str | None = None,
+    deadline: str | None = None,
+    stage: str | None = None,
+) -> None:
+    """Sett startdato, deadline og/eller stadium for en godkjent sak.
 
-    Tom streng for planned_for fjerner datoen (saken blir uplanlagt igjen).
-    Ugyldig stadium ignoreres i stedet for aa kaste - UI skal aldri kunne
-    laase seg paa en skrivefeil."""
+    Tom streng fjerner datoen. Ugyldige datoer ignoreres i stedet for aa kaste -
+    UI skal aldri kunne laase seg paa en skrivefeil. Er deadline foer start,
+    byttes de om: det er aapenbart hva brukeren mente."""
+    def _clean(v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return ""
+        try:
+            date.fromisoformat(v)
+        except ValueError:
+            return None
+        return v
+
+    s, d = _clean(start_date), _clean(deadline)
+    if s and d and d < s:
+        s, d = d, s
+
     conn = _connect()
     try:
-        if planned_for is not None:
-            value = planned_for.strip() or None
-            if value is not None:
-                # Fail-safe: bare ekte ISO-datoer lagres.
-                try:
-                    date.fromisoformat(value)
-                except ValueError:
-                    value = None
-            conn.execute("UPDATE approved SET planned_for = ? WHERE key = ?", (value, key))
+        if s is not None:
+            conn.execute(
+                "UPDATE approved SET start_date = ?, planned_for = ? WHERE key = ?",
+                (s or None, s or None, key),
+            )
+        if d is not None:
+            conn.execute("UPDATE approved SET deadline = ? WHERE key = ?", (d or None, key))
         if stage is not None and stage in STAGES:
             conn.execute("UPDATE approved SET stage = ? WHERE key = ?", (stage, key))
         conn.commit()
@@ -170,20 +201,48 @@ def set_plan(key: str, *, planned_for: str | None = None, stage: str | None = No
 
 
 def calendar_month(year: int, month: int) -> dict[str, list[dict]]:
-    """Godkjente saker gruppert paa planlagt dato for én maaned.
+    """Godkjente saker plassert paa hver dag de er i arbeid.
 
-    Returnerer {"YYYY-MM-DD": [sak, ...]}. Saker uten planlagt dato er ikke med
-    her - de vises som "uplanlagt" i UI slik at de ikke blir borte."""
-    prefix = f"{year:04d}-{month:02d}-"
+    En sak med start 3. og deadline 6. vises paa 3, 4, 5 OG 6 - slik at kalenderen
+    faktisk viser arbeidsbelastning, ikke bare to prikker. Hver oppfoering merkes
+    med om dagen er start, deadline, begge, eller midt i loepet."""
     out: dict[str, list[dict]] = {}
+    last_day = monthrange(year, month)[1]
+    month_start = date(year, month, 1)
+    month_end = date(year, month, last_day)
+
     for lead in list_approved():
-        day = lead.get("_planned_for") or ""
-        if day.startswith(prefix):
-            out.setdefault(day, []).append(lead)
+        s_raw, d_raw = lead.get("_start") or "", lead.get("_deadline") or ""
+        if not s_raw and not d_raw:
+            continue
+        try:
+            start = date.fromisoformat(s_raw) if s_raw else date.fromisoformat(d_raw)
+            end = date.fromisoformat(d_raw) if d_raw else start
+        except ValueError:
+            continue
+        if end < start:
+            start, end = end, start
+        # Klipp til maaneden vi viser.
+        span_start = max(start, month_start)
+        span_end = min(end, month_end)
+        if span_start > span_end:
+            continue
+        day = span_start
+        while day <= span_end:
+            iso = day.isoformat()
+            out.setdefault(iso, []).append(
+                {
+                    **lead,
+                    "_is_start": day == start,
+                    "_is_deadline": day == end,
+                }
+            )
+            day += timedelta(days=1)
     return out
 
 
 def decisions_map() -> dict[str, str]:
+    """{key: "approved"|"rejected"} for aa vise status paa radaren."""
     if not os.path.exists(DB_PATH):
         return {}
     conn = _connect()

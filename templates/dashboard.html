@@ -197,14 +197,26 @@
               </ul>
               {% endif %}
 
-              <form class="angle-approve" method="post" action="/leads/{{ case.key }}/approve">
-                <input type="hidden" name="vinkel" value="{{ loop.index0 }}" />
-                <label class="fld">
-                  <span>Publiseringsdato (valgfritt)</span>
-                  <input type="date" name="planned_for" />
-                </label>
-                <button class="btn-approve" type="submit">Godkjenn denne vinkelen</button>
-              </form>
+              <details class="approve-pop">
+                <summary class="btn-approve as-summary">Godkjenn denne vinkelen →</summary>
+                <form class="angle-approve" method="post" action="/leads/{{ case.key }}/approve">
+                  <input type="hidden" name="vinkel" value="{{ loop.index0 }}" />
+                  <p class="approve-h">Når skal du jobbe med den?</p>
+                  <div class="date-row">
+                    <label class="fld">
+                      <span>Startdag</span>
+                      <input type="date" name="start_date" required />
+                    </label>
+                    <span class="date-arrow" aria-hidden="true">→</span>
+                    <label class="fld">
+                      <span>Deadline</span>
+                      <input type="date" name="deadline" required />
+                    </label>
+                  </div>
+                  <button class="btn-approve" type="submit">Lagre saken</button>
+                  <p class="approve-note">Saken havner i Godkjente saker og vises i kalenderen fra start til deadline.</p>
+                </form>
+              </details>
             </details>
             {% endfor %}
           </div>
