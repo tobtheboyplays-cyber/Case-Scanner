@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="dark light" />
   <title>Godkjente saker · Case-radar</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%A1%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -52,7 +53,7 @@
     <div class="lead-body">
       <div class="lead-tags">
         <span class="pill pill-green">✓ Godkjent</span>
-        {% if lead.data_source %}<span class="tag">{{ lead.data_source }}</span>{% endif %}
+        {% if lead.data_source %}<span class="tag">{{ lead.data_source|kortkilde }}</span>{% endif %}
         {% if lead.ai_mode == 'mal' %}<span class="tag">demo-utkast</span>{% endif %}
         {% if lead._stage %}<span class="pill pill-stage stage-bg-{{ lead._stage }}">{{ lead._stage|capitalize }}</span>{% endif %}
         {% if lead._start or lead._deadline %}
@@ -60,9 +61,6 @@
         {% endif %}
       </div>
       <h3 class="lead-title">{{ lead.draft.title if lead.draft and lead.draft.title else lead.title }}</h3>
-      {% if lead._prosessnotat %}
-      <p class="prosessnotat">🤖 <strong>Slik ble KI brukt:</strong> {{ lead._prosessnotat }}</p>
-      {% endif %}
       {% if lead.finding %}<p class="lead-desc">{{ lead.finding }}</p>{% endif %}
 
       {% if lead.draft and lead.draft.body %}
@@ -77,7 +75,17 @@
       {% endif %}
 
       {% if lead.data_url %}
-      <p style="margin-top:10px;"><a class="kilde" href="{{ lead.data_url }}" target="_blank" rel="noopener">Datakilde: {{ lead.data_source }} ↗</a></p>
+      <p style="margin-top:10px;"><a class="kilde" href="{{ lead.data_url }}" target="_blank" rel="noopener">Datakilde: {{ lead.data_source|kortkilde }} ↗</a></p>
+      {% endif %}
+
+      {# Prosessnotatet er dokumentasjon, ikke lesestoff. Det laa foer som en
+         graa vegg foran selve saken. Naa ligger det bak ett trykk - fortsatt
+         der naar noen spor «hvordan ble denne til?». #}
+      {% if lead._prosessnotat %}
+      <details class="prosess">
+        <summary>🤖 Slik ble KI brukt</summary>
+        <p class="prosessnotat">{{ lead._prosessnotat }}</p>
+      </details>
       {% endif %}
 
       <div class="kort-valg">

@@ -5,6 +5,7 @@ Kjor:  uv run uvicorn app.main:app --reload
 
 from __future__ import annotations
 
+import re
 import threading
 from calendar import monthrange
 from datetime import UTC, date, datetime, timedelta
@@ -63,6 +64,29 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 app = FastAPI(title="Case-radar", version=__version__)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+def kortkilde(navn: str) -> str:
+    """«SSB tabell 05887 (Byggeareal. Bruksareal til annet enn bolig ...)» -> «SSB tabell 05887».
+
+    Det fulle tabellnavnet er nyttig i en fotnote, men paa mobil tok det to linjer
+    og sto tre steder i samme kort. Lenken peker uansett rett til tabellen."""
+    # Kutt ved FORSTE parentes, ikke den siste: tabellnavnene har parenteser
+    # inni parenteser («... bygningstype (m²) (K)»), saa et regex som bare tar
+    # den ytterste gruppa lar halve beskrivelsen staa igjen.
+    helt = (navn or "").strip()
+    kort = helt.split(" (", 1)[0].strip(" ,;-")
+    if not kort:
+        return helt
+    # Eldre kilder skriver «SSB (befolkning, 07459)» - da ligger tabellnummeret
+    # inne i parentesen, og aa kutte den bort fjerner det eneste som er presist.
+    tabell = re.search(r"\b(\d{5})\b", helt)
+    if tabell and tabell.group(1) not in kort:
+        kort = f"{kort} tabell {tabell.group(1)}"
+    return kort
+
+
+templates.env.filters["kortkilde"] = kortkilde
 
 
 def run_scan() -> dict:

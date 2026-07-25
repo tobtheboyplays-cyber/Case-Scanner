@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="dark light" />
   <title>Case-radar</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%A1%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -21,7 +22,7 @@
   </div>
   <div class="top-actions">
     <a class="btn-ghost" href="/kalender">🗓 Kalender</a>
-    <a class="btn-approved-link" href="/godkjente">📁 Godkjente saker{% if approved_count %} ({{ approved_count }}){% endif %}</a>
+    <a class="btn-approved-link" href="/godkjente">📁 Lagret{% if approved_count %} ({{ approved_count }}){% endif %}</a>
     <form method="post" action="/scan"><button type="submit" class="btn-scan">🛰 Skann nå</button></form>
     <p class="last-scan">{% if scanned_at %}Sist skannet: {{ scanned_at }}
       {% if data and data.ai_mode %}· KI: {{ 'på' if data.ai_mode == 'llm' else 'AV' }}{% endif %}
@@ -79,7 +80,7 @@
         <span class="prio-fill cov-{{ case.coverage_status }}"
               style="width: {{ ((case.score / max_score * 100) | round(0,'floor')) if max_score else 0 }}%"></span>
       </span>
-      <span class="prio-score cov-text-{{ case.coverage_status }}">{{ case.score }}</span>
+      <span class="prio-score cov-text-{{ case.coverage_status }}">{{ case.score|round|int }}</span>
     </a>
     {% endfor %}
     <div class="legend">
@@ -148,9 +149,9 @@
           {% endif %}
           {% if case.data_source %}
             {% if case.data_url %}
-              <a class="src-ref" href="{{ case.data_url }}" target="_blank" rel="noopener">{{ case.data_source }} ↗</a>
+              <a class="src-ref" href="{{ case.data_url }}" target="_blank" rel="noopener">{{ case.data_source|kortkilde }} ↗</a>
             {% else %}
-              <span class="src-ref">{{ case.data_source }}</span>
+              <span class="src-ref">{{ case.data_source|kortkilde }}</span>
             {% endif %}
           {% endif %}
         </div>
@@ -169,22 +170,20 @@
         <div class="lead-tags">
           {% if case.geo == 'lokal' %}<span class="tag tag-loc">📍 Stavanger/Rogaland</span>{% endif %}
           {% for tp in case.topics[:2] %}<span class="tag">{{ tp }}</span>{% endfor %}
-          {% if case.coverage_examples %}
-            <span class="tag">Skrevet av {{ case.coverage_examples[0].source }}</span>
-          {% endif %}
         </div>
 
         <div class="lead-grid">
+          {# Kilden staar allerede oeverst i kortet, og dekningen som merkelapp.
+             Foer sto begge tre ganger i samme kort - det var det som gjorde
+             kortene lange og rotete uten aa gi ny informasjon. #}
           <div class="vinkel">
-            <p class="vinkel-h">Vinkling:</p>
+            <p class="vinkel-h">Hva du bør sjekke</p>
             <p class="vinkel-t">{{ case.angle }}</p>
-            {% if case.data_url %}
-              <a class="kilde" href="{{ case.data_url }}" target="_blank" rel="noopener">Datakilde: {{ case.data_source }} ↗</a>
-            {% elif case.sources %}
+            {% if not case.data_url and case.sources %}
               <a class="kilde" href="{{ case.sources[0].url }}" target="_blank" rel="noopener">Kilde: {{ case.sources[0].source }} ↗</a>
             {% endif %}
             {% if case.coverage_examples %}
-              <p class="alt-dekning">Allerede skrevet: {{ case.coverage_examples[0].source }}
+              <p class="alt-dekning">Skrevet av {{ case.coverage_examples[0].source }}
                 ({{ case.coverage_examples[0].date }})</p>
             {% endif %}
           </div>

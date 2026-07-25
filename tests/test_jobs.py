@@ -300,3 +300,18 @@ def test_malvinklene_peker_paa_hvert_sitt_faktum():
     assert len({x["title"] for x in a}) == 3
     assert len({x["headline_fact"] for x in a}) == 3
     assert all("Hva betyr tallet i praksis" not in x["title"] for x in a)
+
+
+def test_kortkilde_beholder_tabellnummeret():
+    """Det lange tabellnavnet sto tre steder i samme kort og tok to linjer hver
+    gang. Vi korter det ned - men nummeret er det eneste presise, så det blir."""
+    from app.main import kortkilde
+
+    assert kortkilde(
+        "SSB tabell 05887 (Byggeareal. Bruksareal til annet enn bolig, "
+        "etter bygningstype (m²) (K))"
+    ) == "SSB tabell 05887"
+    # Eldre format har nummeret INNE i parentesen - da må det hentes ut.
+    assert kortkilde("SSB (befolkning, 07459)") == "SSB tabell 07459"
+    assert kortkilde("Stavanger Aftenblad") == "Stavanger Aftenblad"
+    assert kortkilde("") == ""

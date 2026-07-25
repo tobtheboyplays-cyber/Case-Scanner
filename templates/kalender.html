@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="dark light" />
   <title>Kalender · Case-radar</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%A1%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -101,6 +102,18 @@
 
           {% for lead in cell.leads %}
             {% set draft = lead.draft or {} %}
+            {# En sak som gaar fra 27. til 31. dukker opp paa fem dager. Full
+               artikkel + skjema fem ganger er samme sak fem ganger - ikke fem
+               oppgaver. Midt i loepet holder det med én linje som sier at den
+               er i arbeid; start- og deadline-dagen faar hele kortet. #}
+            {% set midt = not lead._is_start and not lead._is_deadline %}
+            {% if midt %}
+            <a class="dag-midt" href="#dag-{{ lead._start }}">
+              <span class="dot-stage stage-bg-{{ lead._stage or 'ide' }}" aria-hidden="true"></span>
+              <span class="dag-midt-t">{{ draft.title or lead.title }}</span>
+              <span class="dag-midt-m">i arbeid · frist {{ lead._deadline or '—' }}</span>
+            </a>
+            {% else %}
             <article class="day-lead">
               <div class="day-lead-top">
                 <span class="pill pill-stage stage-bg-{{ lead._stage or 'ide' }}">{{ stage_labels[lead._stage or 'ide'] }}</span>
@@ -180,6 +193,7 @@
                 <button type="submit" class="btn-small">Lagre</button>
               </form>
             </article>
+            {% endif %}
           {% endfor %}
         </section>
       {% endif %}
