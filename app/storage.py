@@ -10,7 +10,7 @@ import json
 import os
 import sqlite3
 from calendar import monthrange
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from app.config import DB_PATH
@@ -66,7 +66,7 @@ def _connect() -> sqlite3.Connection:
 
 
 def save_scan(payload: dict) -> None:
-    payload = {**payload, "created_at": datetime.now(tz=timezone.utc).isoformat()}
+    payload = {**payload, "created_at": datetime.now(tz=UTC).isoformat()}
     conn = _connect()
     try:
         conn.execute(
@@ -92,7 +92,7 @@ def load_latest() -> dict | None:
 
 
 def _now() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
 def approve_lead(key: str, lead: dict) -> None:
@@ -279,6 +279,136 @@ def seen_map() -> dict[str, str]:
         return {k: v for k, v in rows}
     finally:
         conn.close()
+
+
+# ── SSB-utforskning ──────────────────────────────────────────────────────────
+# Soekesystemet leter etter STATISTIKK vi ikke har sett paa foer. For at et nytt
+# soek skal gi noe nytt maa vi huske hvilke tabeller som allerede er provd - og
+# hvorfor de ble forkastet. Noen avslag er permanente (tabellen har ikke
+# kommunetall), andre er ferskvare (tallet laa under terskel DENNE gangen, men
+# SSB oppdaterer tabellen fire ganger i aaret).
+
+# Avslag som aldri endrer seg: strukturen i tabellen blir ikke en annen av at
+# den oppdateres. Disse probes aldri paa nytt.
+PERMANENTE_AVSLAG: frozenset[str] = frozenset(
+    {"ingen-kommune", "ikke-eliminerbar", "for-kort", "ingen-tid", "delvis-periode"}
+)
+
+
+def _ssb_tabell(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ssb_tabeller (
+            id TEXT PRIMARY KEY,
+            utforsket_at TEXT NOT NULL,
+            verdikt TEXT NOT NULL,
+            oppdatert TEXT NOT NULL DEFAULT '',
+            notat TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+
+
+def ssb_utforsket() -> dict[str, dict[str, str]]:
+    """{tabell-id: {verdikt, oppdatert, notat, utforsket_at}}."""
+    if not os.path.exists(DB_PATH):
+        return {}
+    conn = _connect()
+    try:
+        _ssb_tabell(conn)
+        rows = conn.execute(
+            "SELECT id, verdikt, oppdatert, notat, utforsket_at FROM ssb_tabeller"
+        ).fetchall()
+        return {
+            r[0]: {
+                "verdikt": r[1],
+                "oppdatert": r[2],
+                "notat": r[3],
+                "utforsket_at": r[4],
+            }
+            for r in rows
+        }
+    finally:
+        conn.close()
+
+
+def marker_ssb_tabell(
+    tabell_id: str, verdikt: str, *, oppdatert: str = "", notat: str = ""
+) -> None:
+    """Skriv ned hva som skjedde da vi provde denne tabellen."""
+    conn = _connect()
+    try:
+        _ssb_tabell(conn)
+        conn.execute(
+            "INSERT OR REPLACE INTO ssb_tabeller "
+            "(id, utforsket_at, verdikt, oppdatert, notat) VALUES (?, ?, ?, ?, ?)",
+            (tabell_id, _now(), verdikt, oppdatert, notat),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def bor_probes(tabell_id: str, oppdatert: str, utforsket: dict[str, dict[str, str]]) -> bool:
+    """Er det verdt aa bruke et API-kall paa denne tabellen naa?
+
+    Ja hvis vi aldri har sett den. Ja hvis avslaget var midlertidig OG SSB har
+    publisert nye tall siden sist. Nei ellers - da bruker vi kallet paa noe annet.
+    """
+    kjent = utforsket.get(tabell_id)
+    if kjent is None:
+        return True
+    if kjent["verdikt"] in PERMANENTE_AVSLAG:
+        return False
+    # Midlertidig avslag eller tidligere treff: bare interessant med nye tall.
+    return bool(oppdatert) and oppdatert != kjent.get("oppdatert", "")
+
+
+def _meta_tabell(conn: sqlite3.Connection) -> None:
+    """Enkel noekkel/verdi-tabell for markorer (hvor langt vi har lett i katalogen)."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS meta (nokkel TEXT PRIMARY KEY, verdi TEXT NOT NULL)"
+    )
+
+
+def meta_get(nokkel: str, standard: str = "") -> str:
+    if not os.path.exists(DB_PATH):
+        return standard
+    conn = _connect()
+    try:
+        _meta_tabell(conn)
+        row = conn.execute("SELECT verdi FROM meta WHERE nokkel = ?", (nokkel,)).fetchone()
+        return row[0] if row else standard
+    finally:
+        conn.close()
+
+
+def meta_set(nokkel: str, verdi: str) -> None:
+    conn = _connect()
+    try:
+        _meta_tabell(conn)
+        conn.execute("INSERT OR REPLACE INTO meta (nokkel, verdi) VALUES (?, ?)", (nokkel, verdi))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def neste_i_rotasjon(nokkel: str, elementer: list[str], antall: int) -> list[str]:
+    """Plukk `antall` elementer og flytt markoeren - saa neste skann tar de neste.
+
+    Dette er kjernen i «trykker jeg soek igjen, skal jeg faa noe nytt»: vi leter
+    ikke i den samme delen av SSBs katalog to ganger paa rad.
+    """
+    if not elementer or antall <= 0:
+        return []
+    try:
+        start = int(meta_get(nokkel, "0"))
+    except ValueError:
+        start = 0
+    start %= len(elementer)
+    valgt = [elementer[(start + i) % len(elementer)] for i in range(min(antall, len(elementer)))]
+    meta_set(nokkel, str((start + len(valgt)) % len(elementer)))
+    return valgt
 
 
 def decisions_map() -> dict[str, str]:

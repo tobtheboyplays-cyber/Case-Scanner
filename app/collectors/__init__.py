@@ -20,6 +20,7 @@ from app.collectors import (
     ssb,
     ssb_flytting,
     ssb_kalender,
+    ssb_sok,
 )
 from app.models import Case, SignalItem
 
@@ -47,7 +48,16 @@ def collect_all() -> tuple[list[SignalItem], list[Case], list[str]]:
     except Exception as exc:  # noqa: BLE001
         status.append(f"[FEIL] SSB flytting: {exc}")
 
-    # 1b) Schibsted-soesteraviser - gjenbruks-leads (Case-objekter)
+    # 1b) Soekesystemet - leter i hele SSB-katalogen etter tabeller vi ikke har
+    # provd for. Dette er kilden som gjor at et NYTT soek gir NY statistikk.
+    try:
+        cases, notes = ssb_sok.collect()
+        ssb_cases.extend(cases)
+        status.extend(notes)
+    except Exception as exc:  # noqa: BLE001
+        status.append(f"[FEIL] SSB-soek: {exc}")
+
+    # 1c) Schibsted-soesteraviser - gjenbruks-leads (Case-objekter)
     try:
         cases, notes = schibsted.collect()
         ssb_cases.extend(cases)
