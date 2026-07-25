@@ -12,9 +12,11 @@ set -u
 
 KEY=""
 FORCE_TUNNEL=0
+ASK_KEY=0
 for arg in "$@"; do
   case "$arg" in
     --tunnel) FORCE_TUNNEL=1 ;;
+    --ask) ASK_KEY=1 ;;
     -*) echo "Ukjent flagg: $arg"; exit 2 ;;
     *) KEY="$arg" ;;
   esac
@@ -44,7 +46,19 @@ ok "Docker kjører"
 
 # ── 2. Nøkkelsjekk (før vi bygger, så du slipper å vente på en feil) ─────────
 say "2/6  KI-nøkkel"
+if [ "$ASK_KEY" = "1" ]; then
+  printf '  Lim inn nøkkelen (den vises ikke) og trykk enter: '
+  IFS= read -r KEY
+  printf '\n'
+fi
 KEY_ARGS=""
+# En nøkkel som blir kuttet i kopieringen er den vanligste feilen. Vi kjenner ikke
+# eksakt lengde, men viser start/slutt + lengde så du kan sammenligne med AI Studio.
+if [ -n "$KEY" ]; then
+  KLEN=${#KEY}
+  echo "  Mottatt nøkkel: ${KEY%"${KEY#?????}"}…${KEY#"${KEY%????}"}  (${KLEN} tegn)"
+  echo "  Sjekk at de fire siste tegnene stemmer med det AI Studio viser."
+fi
 if [ -z "$KEY" ]; then
   warn "Ingen nøkkel oppgitt → appen kjører i DEMO-modus (maler, ikke ekte KI)."
   warn "Vil du ha ekte KI gratis: hent nøkkel på https://aistudio.google.com/app/apikey"
