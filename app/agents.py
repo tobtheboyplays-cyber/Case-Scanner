@@ -7,6 +7,7 @@ tilbake til malbasert tekst (tydelig merket) slik at appen + demoen virker uten 
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 
 from app import llm, prompts, verify
 from app.config import EDITOR_CAP, JOURNALIST_CAP
@@ -80,10 +81,14 @@ def analyst_pick(cases: list[Case]) -> dict[str, dict]:
         model=llm.MODEL_ANALYST,
         max_tokens=1200,
     )
-    if result and isinstance(result.get("picks"), list):
+    # `isinstance`-vakten er ikke pynt: _extract_json kan returnere en LISTE hvis
+    # modellen svarer med `[...]`, og da ville `result.get` kastet AttributeError
+    # rett gjennom run_workflow og run_scan - som ikke fanger noe - og drept hele
+    # skannet. Ingen nye leads, dashbordet staaende paa gammel data.
+    if isinstance(result, dict) and isinstance(result.get("picks"), list):
         picks = {}
         for p in result["picks"]:
-            if p.get("id") and p.get("interesting", True):
+            if isinstance(p, dict) and p.get("id") and p.get("interesting", True):
                 picks[p["id"]] = {"score": p.get("score", 50), "reason": p.get("reason", "")}
         if picks:
             return picks
@@ -103,8 +108,11 @@ def editor_judge(case: Case) -> dict:
         "Vurder dette funnet som mulig sak. Journalisten har ikke begynt enda."
     )
     result = llm.complete_json(prompts.EDITOR_SYSTEM, user, model=llm.MODEL_EDITOR, max_tokens=800)
-    if result and "is_story" in result:
-        return {"mode": "llm", **result}
+    if isinstance(result, dict) and "is_story" in result:
+        # `mode` maa staa SIST. Med `{"mode": "llm", **result}` kunne et modellsvar
+        # som inneholdt feltet «mode» overskrive det - og dermed styre baade
+        # sakens merking i UI og tellingen av hvor mange kall som lyktes.
+        return {**result, "mode": "llm"}
 
     # Fallback-mal: bruk dekningsstatus + eksisterende vinkel.
     novelty = {"green": "fersk", "yellow": "delvis", "red": "dekket"}.get(
@@ -305,19 +313,39 @@ def _fallback_angles(case: Case, editor: dict) -> list[dict]:
 
 
 # --- Orkestrering ------------------------------------------------------------
-def run_workflow(cases: list[Case]) -> str:
-    """Kjor analytiker -> redaktor -> journalist paa leadene (in-place). Returner modus.
+def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> dict:
+    """Kjor analytiker -> redaktor -> journalist paa leadene (in-place).
 
-    Modus reflekterer HVA SOM FAKTISK SKJEDDE, ikke bare om en nokkel finnes:
-      "mal"        -> ingen nokkel, alt fra maler (demo)
-      "llm"        -> nokkel finnes OG minst ett ekte Claude-svar kom igjennom
-      "llm-feilet" -> nokkel finnes, men alle kall feilet (kvote/nokkel/modell)
+    Returnerer et REGNSKAP, ikke ett ord:
+        {"mode": ..., "forsokt": n, "lyktes": n, "feilet": n, "feil": "..."}
+
+    Modus:
+      "mal"        -> ingen noekkel, alt fra maler (demo)
+      "llm"        -> noekkel finnes og ALLE kall lyktes
+      "llm-delvis" -> noen lyktes, noen feilet - de som feilet har maler
+      "llm-feilet" -> noekkel finnes, men ingen kall lyktes
+
+    Hvorfor regnskap: tidligere holdt det at ETT kall lyktes for aa returnere
+    "llm". Slo kvotetaket inn etter de foerste kallene - som er nettopp det som
+    skjer paa et gratis-nivaa - kunne alle seks vinkel-kall feile mens appen
+    fortsatt sa «KI: paa», skjulte advarselen og viste en side full av maler som
+    om de var journalistens. Det er den farligste feilen verktoyet kan gjore:
+    den lyver stille. Naa telles hvert kall.
     """
     has_key = llm.has_llm()
-    mode = "llm" if has_key else "mal"
-    llm_ok = False  # ble minst ett ekte Claude-svar produsert?
+    regnskap = {"forsokt": 0, "lyktes": 0, "feilet": 0}
+
+    def tell(fikk_llm: bool) -> None:
+        regnskap["forsokt"] += 1
+        regnskap["lyktes" if fikk_llm else "feilet"] += 1
+
+    def melde(tekst: str) -> None:
+        if si is not None:
+            si(tekst)
 
     picks = analyst_pick(cases)
+    # Analytikeren telles ogsaa - foer var utfallet av den helt usynlig.
+    tell(bool(picks) and llm.last_error() is None)
     for c in cases:
         if c.key in picks:
             c.analyst_reason = picks[c.key].get("reason", "")
@@ -328,30 +356,40 @@ def run_workflow(cases: list[Case]) -> str:
     editor_cases = (
         [c for c in candidates if c.key in picks] + [c for c in candidates if c.key not in picks]
     )[:EDITOR_CAP] or ranked[:EDITOR_CAP]
+
     approved = []
-    for c in editor_cases:
+    for nr, c in enumerate(editor_cases, 1):
+        melde(f"Redaktøren vurderer {nr} av {len(editor_cases)}: {c.title[:50]}")
         c.editor = editor_judge(c)
-        c.ai_mode = c.editor.get("mode", mode)
-        if c.editor.get("mode") == "llm":
-            llm_ok = True
+        c.ai_mode = c.editor.get("mode", "mal")
+        tell(c.editor.get("mode") == "llm")
         if c.editor.get("is_story"):
             approved.append(c)
 
     # Journalisten foreslaar KUN vinkler her. Artikkelen skrives naar Mathias ber om
     # den (write_draft), slik at vi ikke bruker kvote paa saker som aldri aapnes.
-    for c in approved[:JOURNALIST_CAP]:
+    for nr, c in enumerate(approved[:JOURNALIST_CAP], 1):
         # Sufficient-context-gate: modeller avstaar ikke selv naar grunnlaget er
         # tynt, saa avgjorelsen tas mekanisk her - foer det brukes tid paa vinkler.
         nok, mangler = verify.nok_grunnlag(c.to_dict())
         if not nok:
             c.editor = {**c.editor, "gate_mangler": mangler}
             continue
+        melde(f"Journalisten lager vinkler {nr} av {min(len(approved), JOURNALIST_CAP)}")
         c.angles = journalist_angles(c, c.editor)
         if c.angles:
-            c.ai_mode = c.angles[0].get("mode", c.ai_mode)
-            if any(a.get("mode") == "llm" for a in c.angles):
-                llm_ok = True
+            ekte = any(a.get("mode") == "llm" for a in c.angles)
+            # Saken merkes etter det SVAKESTE leddet: har den maler, skal den se
+            # ut som mal - ikke som KI fordi redaktoren tilfeldigvis kom gjennom.
+            c.ai_mode = "llm" if ekte else "mal"
+            tell(ekte)
 
     if not has_key:
-        return "mal"
-    return "llm" if llm_ok else "llm-feilet"
+        return {**regnskap, "mode": "mal", "feil": ""}
+    if regnskap["feilet"] == 0:
+        modus = "llm"
+    elif regnskap["lyktes"] == 0:
+        modus = "llm-feilet"
+    else:
+        modus = "llm-delvis"
+    return {**regnskap, "mode": modus, "feil": llm.last_error() or ""}

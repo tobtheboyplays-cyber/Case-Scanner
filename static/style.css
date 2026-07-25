@@ -1144,3 +1144,70 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
   cursor: pointer;
   padding: 4px 6px;
 }
+
+/* ── Temameny ved «Skann nå» ─────────────────────────────────────────────────
+   Journalisten velger selv hvilke SSB-tabeller søket skal lete i. Valget lagres
+   for seg (ikke i skann-skjemaet), så det gjelder også når skannet startes fra
+   cron. Tomt valg = alle temaer — en tom meny skal aldri gi et tomt skann. */
+.tema-meny { position: relative; }
+.tema-meny > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.tema-meny > summary::-webkit-details-marker { display: none; }
+.tema-tall {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-align: center;
+}
+.tema-boks {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(300px, calc(100vw - 24px));
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: #10151c;
+  border: 1px solid #2a3542;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .5);
+  text-align: left;
+}
+.tema-h { margin: 0 0 9px; font-size: 12.5px; font-weight: 700; color: var(--text); }
+.tema-liste { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+.tema-valg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 2px;
+  font-size: 12.5px;
+  cursor: pointer;
+  min-height: 34px;
+}
+.tema-valg input { width: 16px; height: 16px; accent-color: var(--accent); flex: 0 0 auto; }
+.tema-ikon { font-size: 13px; }
+.tema-navn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tema-note { margin: 10px 0 0; font-size: 10.5px; line-height: 1.4; color: var(--faint); }
+.tema-knapper {
+  display: flex;
+  gap: 8px;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid #202b36;
+}
+.tema-knapper .btn-small { flex: 1 1 0; }
+
+/* «Delvis» er ikke det samme som «av» - bruk gult, ikke rødt-aktig alvor. */
+.ki-av.ki-delvis { background: #1e2416; border-color: #4c6b20; }
+.ki-delvis .ki-av-h { color: #cbe58a; }
+.ki-delvis .ki-av-b { color: #c3d0a8; }
+.ki-delvis .ai-tag { vertical-align: baseline; }

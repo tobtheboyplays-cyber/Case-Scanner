@@ -34,7 +34,7 @@ import time
 from datetime import UTC, datetime
 
 from app.collectors.base import http_get
-from app.config import DEMOGRAPHIC_TOPICS
+from app.config import DEMOGRAPHIC_TOPICS, sokeord_for
 from app.models import Case
 from app.storage import (
     bor_probes,
@@ -252,7 +252,7 @@ def _side(nokkel: str) -> int:
         return 1
 
 
-def _kandidater(status: list[str]) -> list[dict]:
+def _kandidater(status: list[str], temaer: list[str] | None = None) -> list[dict]:
     """Katalogtreff fra begge sporene, uten duplikater, ferskeste foerst."""
     funnet: dict[str, dict] = {}
 
@@ -280,7 +280,11 @@ def _kandidater(status: list[str]) -> list[dict]:
     # Spor 2: tema-rotasjon. Hvert soekeord har sin egen sidemarkoer - andre gang
     # vi leter etter «konkurs» henter vi side 2. Uten dette ville vi tygget paa de
     # samme 30 tabellene hver runde og aldri kommet dypere i katalogen.
-    for ord_ in neste_i_rotasjon("ssb_tema_markor", TEMA, TEMA_PER_SKANN):
+    # Soekeordene kommer fra journalistens valgte temaer. Tomt valg = alle.
+    # Dette er stedet der et avkryssingsvalg i menyen faktisk endrer HVILKE
+    # SSB-tabeller som blir funnet - ikke bare hva som vises etterpaa.
+    ordbank = sokeord_for(temaer) or TEMA
+    for ord_ in neste_i_rotasjon("ssb_tema_markor", ordbank, TEMA_PER_SKANN):
         side = _side(f"ssb_side:{ord_}")
         try:
             rader, _ = _hent_katalog({"query": ord_, "pageNumber": side})
@@ -288,7 +292,9 @@ def _kandidater(status: list[str]) -> list[dict]:
                 side = 1
                 rader, _ = _hent_katalog({"query": ord_, "pageNumber": 1})
             for rad in rader:
-                funnet.setdefault(rad["id"], {**rad, "_spor": f"soekeord «{ord_}»"})
+                funnet.setdefault(
+                    rad["id"], {**rad, "_spor": f"soekeord «{ord_}»", "_fra_tema": True}
+                )
         except Exception as exc:  # noqa: BLE001
             status.append(f"[FEIL] SSB-soek «{ord_}»: {exc}")
         else:
@@ -322,9 +328,22 @@ def _kandidater(status: list[str]) -> list[dict]:
             continue
         ut.append({**rad, "_kommunenivaa": kommunenivaa})
 
-    # Merkede kommunetabeller foerst, deretter ferskeste. Da treffer de dyreste
-    # kallene (metadata + data) de kandidatene som faktisk kan gi en lokal sak.
-    ut.sort(key=lambda r: (not r["_kommunenivaa"], _synkende(str(r.get("updated") or ""))))
+    # Rekkefolgen avgjor hvem som faar de dyre kallene (metadata + data), for vi
+    # prober bare MAKS_KANDIDATER stykker.
+    #
+    # HAR journalisten valgt temaer, maa treffene fra temasporet ligge FOERST.
+    # Uten dette ble valget nesten virkningslost: soekeordene endret seg riktignok,
+    # men ferskhets- og katalogsporet fylte kvoten med de samme tabellene uansett -
+    # maalt 26.07.2026 ga «helse+kriminalitet» og «naeringsliv» nøyaktig samme
+    # aatte tabeller. Da hadde menyen vaert pynt.
+    har_valgt = bool(temaer)
+    ut.sort(
+        key=lambda r: (
+            not (har_valgt and r.get("_fra_tema")),
+            not r["_kommunenivaa"],
+            _synkende(str(r.get("updated") or "")),
+        )
+    )
     return ut
 
 
@@ -419,11 +438,12 @@ def _case(rad: dict, roller: tuple[str, str, str], data: dict, steg: int) -> Cas
     )
 
 
-def collect() -> tuple[list[Case], list[str]]:
-    """Let etter ny statistikk. Fail-soft som alle kollektorer."""
+def collect(temaer: list[str] | None = None) -> tuple[list[Case], list[str]]:
+    """Let etter ny statistikk innenfor de valgte temaene. Fail-soft som alle
+    kollektorer. Tomt/utelatt tema-valg = alle temaer, som foer."""
     status: list[str] = []
     try:
-        kandidater = _kandidater(status)
+        kandidater = _kandidater(status, temaer)
     except Exception as exc:  # noqa: BLE001
         return [], [f"[FEIL] SSB-soek: {exc}"]
 

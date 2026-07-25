@@ -21,7 +21,7 @@ from fastapi.templating import Jinja2Templates
 from app import __version__, jobs, llm, verify
 from app.agents import run_workflow, write_draft
 from app.collectors import collect_all, coverage, ssb_kalender
-from app.config import ENABLE_AI
+from app.config import ENABLE_AI, TEMAER
 from app.models import Case
 from app.planner import build_plan
 from app.scoring import build_cases, finalize_scores
@@ -45,7 +45,9 @@ from app.storage import (
     seen_map,
     set_plan,
     sett_dagskapasitet,
+    sett_temaer,
     timer_per_dag,
+    valgte_temaer,
 )
 
 # Ikon per vinkel-inngang. Brukes i UI saa valget kan tas uten aa aapne noe.
@@ -110,7 +112,15 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
         if jobb is not None:
             jobb.notat(tekst)
 
-    signals, ssb_cases, status = collect_all(si)
+    # Valget leses her, ikke sendes inn: da gjelder menyen ogsaa naar skannet
+    # startes fra cron eller autodeploy, ikke bare fra knappen.
+    temaer = valgte_temaer()
+    signals, ssb_cases, status = collect_all(si, temaer)
+    status.insert(
+        0,
+        f"Temaer: {', '.join(temaer)}" if temaer
+        else "Temaer: alle (ingen valgt - verktoyet leter bredt)",
+    )
 
     # Grasrot-leads (Trends/Reddit) klynges; SSB-leads er ferdige.
     grassroots = build_cases(signals)  # tagger signals med geo/tema in-place
@@ -138,15 +148,24 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
 
     # Redaksjonell KI-arbeidsflyt: analytiker -> redaktor -> journalist.
     ai_mode = "av"
+    ai_regnskap: dict = {}
     if ENABLE_AI:
         steg(2, "Analytiker plukker ut de sterkeste funnene")
-        ai_mode = run_workflow(cases)
+        ai_regnskap = run_workflow(cases, si)
+        ai_mode = ai_regnskap["mode"]
+        n = f"{ai_regnskap['lyktes']}/{ai_regnskap['forsokt']}"
         if ai_mode == "llm":
-            status.append(f"KI-arbeidsflyt: ekte KI ({llm.provider_label()}) ✓")
+            status.append(f"KI-arbeidsflyt: ekte KI ({llm.provider_label()}) ✓ {n} kall")
+        elif ai_mode == "llm-delvis":
+            # Det viktigste av alle statuslinjene: noen saker har ekte vinkler,
+            # andre har maler. Foer sa appen bare «✓» her, og journalisten kunne
+            # ikke se forskjell paa dem.
+            status.append(
+                f"KI-arbeidsflyt: DELVIS - {n} kall lyktes, "
+                f"{ai_regnskap['feilet']} feilet ({ai_regnskap['feil']})"
+            )
         elif ai_mode == "llm-feilet":
-            # Nokkel finnes, men kallet feilet - vis HVORFOR (feil nokkel, tom kvote,
-            # ukjent modell ...) i stedet for a se ut som demo uten grunn.
-            status.append(f"KI-arbeidsflyt: nokkel finnes, men live feilet - {llm.last_error()}")
+            status.append(f"KI-arbeidsflyt: nokkel finnes, men live feilet - {ai_regnskap['feil']}")
         else:
             status.append("KI-arbeidsflyt: demo-modus (maler, ingen nokkel)")
 
@@ -154,7 +173,7 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
     # velte et skann.
     steg(3, "Henter SSBs publiseringskalender")
     try:
-        kommende, kal_status = ssb_kalender.collect()
+        kommende, kal_status = ssb_kalender.collect(temaer=temaer)
         status.extend(kal_status)
     except Exception as exc:  # noqa: BLE001
         kommende, _ = [], status.append(f"[FEIL] SSB-kalender: {exc}")
@@ -197,8 +216,11 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
         "kommende": kommende,
         "ai_mode": ai_mode,
         # Grunnen hoerer hjemme ved siden av varselet, ikke nederst under
-        # «Kildestatus» der ingen leter naar noe ser rart ut.
-        "ai_feil": llm.last_error() if ai_mode == "llm-feilet" else "",
+        # «Kildestatus» der ingen leter naar noe ser rart ut. Merk at den nå
+        # settes OGSAA ved «llm-delvis» - foer kastet vi feilinfoen bort i det
+        # oyeblikket ett kall lyktes, selv om ti feilet.
+        "ai_feil": ai_regnskap.get("feil", ""),
+        "ai_regnskap": ai_regnskap,
     }
     save_scan(payload)
     return payload
@@ -238,6 +260,8 @@ def dashboard(request: Request, apen: str = ""):
             "INNGANG_IKON": INNGANG_IKON,
             "VINKEL_NAVN": VINKEL_NAVN,
             "approved_count": len(list_approved()),
+            "TEMAER": TEMAER,
+            "valgte_temaer": valgte_temaer(),
         },
     )
 
@@ -402,6 +426,17 @@ def oppgave_ferdig(key: str, tilbake: str = Form("/kalender?fane=oppgaver")):
 def oppgave_angre(key: str, tilbake: str = Form("/kalender?fane=oppgaver")):
     gjenapne(key)
     return RedirectResponse(url=tilbake or "/kalender?fane=oppgaver", status_code=303)
+
+
+@app.post("/temaer")
+async def velg_temaer(request: Request):
+    """Hvilke temaer skannet skal lete etter.
+
+    Leser skjemaet raatt fordi avkryssingsbokser sender samme feltnavn flere
+    ganger - `Form()` ville bare gitt oss den siste."""
+    skjema = await request.form()
+    sett_temaer([str(v) for v in skjema.getlist("tema")])
+    return RedirectResponse(url=str(skjema.get("tilbake") or "/"), status_code=303)
 
 
 @app.post("/kalender/kapasitet")

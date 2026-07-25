@@ -15,7 +15,7 @@ raskt, ett er målrettet, ett er uttømmende.
 | Spor | Kall | Hva det gir | Markør i databasen |
 |---|---|---|---|
 | **Ferskhet** | `?pastDays=10` | Tabeller SSB *faktisk har oppdatert* de siste 10 dagene — bokstavelig talt ny statistikk | `ssb_fersk_side` |
-| **Tema-rotasjon** | `?query=<ord>` | 18 lokalt relevante søkeord, to per skann, hver med egen sidemarkør | `ssb_tema_markor`, `ssb_side:<ord>` |
+| **Tema-rotasjon** | `?query=<ord>` | Søkeordene til temaene journalisten har huket av, to per skann, hver med egen sidemarkør | `ssb_tema_markor`, `ssb_side:<ord>`, `temaer` |
 | **Katalogen** | `?pageNumber=N` | Systematisk gjennomgang, én side per skann | `ssb_katalog_side` |
 
 Katalogsporet er **garantien mot at køen går tom**. 127 sider betyr at det alltid finnes
@@ -89,7 +89,22 @@ statuslinje, ikke et krasj.
 ikke 15 % på et år. Søkesystemet er additivt: et fullt skann gir fortsatt 14–17 leads
 fra de andre kildene, og dette sporet legger på det som er genuint nytt.
 
+## Temavalget styrer sporet
+
+Journalisten huker av temaer i menyen ved «Skann nå» (helse, lønn, fattigdom,
+barn og unge, alderdom, idrett, kriminalitet, næringsliv). Valget oversettes i
+`app/config.py` (`TEMAER`) til søkeord mot katalogen, og lagres i `meta`-tabellen.
+**Tomt valg = alle temaer** — en tom meny skal aldri gi et tomt skann.
+
+**Treffene fra temasporet legges FØRST i køen når han har valgt noe.** Det er
+ikke kosmetikk: målt 26.07.2026 ga «helse+kriminalitet» og «næringsliv» nøyaktig
+samme åtte tabeller uten den prioriteringen — søkeordene endret seg, men
+ferskhets- og katalogsporet fylte kvoten uansett. Etter fiksen er 5 av 8 tabeller
+forskjellige mellom de to valgene. De tre felles kommer fra ferskhetssporet, som
+skal slippe gjennom uansett tema.
+
 ## Justering
 
-Alt står øverst i `app/collectors/ssb_sok.py`: `TEMA` (søkeordene), `KOMMUNER`,
-`FERSK_DAGER`, `MAKS_KANDIDATER`, `MIN_ENDRING_PST`, `MIN_NIVAA`.
+Alt står øverst i `app/collectors/ssb_sok.py`: `KOMMUNER`, `FERSK_DAGER`,
+`MAKS_KANDIDATER`, `MIN_ENDRING_PST`, `MIN_NIVAA`. Søkeordene per tema står i
+`app/config.py` under `TEMAER`.

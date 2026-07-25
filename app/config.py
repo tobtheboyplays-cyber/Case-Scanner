@@ -87,6 +87,89 @@ DEMOGRAPHIC_TOPICS: dict[str, list[str]] = {
     ],
 }
 
+# --- Temaer journalisten kan velge mellom -----------------------------------
+# Dette er BRUKERENS vokabular, og det er noe annet enn DEMOGRAPHIC_TOPICS over.
+# I koden betydde «tema» tidligere fire urelaterte ting: innholdstagging
+# (DEMOGRAPHIC_TOPICS), SSB-soekeord (ssb_sok.TEMA), SSB-emneslugger
+# (ssb_kalender.VIKTIGE_EMNER) og probe-etiketter. Ingen av dem var koblet.
+# TEMAER er brua: ETT valg i menyen oversettes til alle tre vokabularene.
+#
+#   sok        -> soekeord mot SSBs tabellkatalog. Dette er det som faktisk
+#                 styrer HVILKE tabeller skannet finner - hovedeffekten.
+#   ssb_emner  -> SSBs egne emneslugger, brukt til aa vekte publiseringskalenderen.
+#   demografi  -> hvilke DEMOGRAPHIC_TOPICS temaet dekker (til tagging/visning).
+TEMAER: dict[str, dict] = {
+    "helse": {
+        "ikon": "🩺",
+        "sok": ["sykefravaer", "fastlege", "pasienter", "helsetjenester", "psykisk helse"],
+        "ssb_emner": ["helse"],
+        "demografi": ["psykisk helse", "trening og livsstil"],
+    },
+    "lønn": {
+        "ikon": "💰",
+        "sok": ["inntekt", "lonn", "sysselsetting", "arbeidsledige", "uforetrygd"],
+        "ssb_emner": ["arbeid-og-lonn", "inntekt-og-forbruk"],
+        "demografi": ["jobb og okonomi"],
+    },
+    "fattigdom": {
+        "ikon": "🏚",
+        "sok": ["lavinntekt", "sosialhjelp", "gjeld", "husholdninger", "bostotte"],
+        "ssb_emner": ["inntekt-og-forbruk", "sosiale-forhold-og-kriminalitet"],
+        "demografi": ["jobb og okonomi", "bolig og leie"],
+    },
+    "barn og unge": {
+        "ikon": "🧒",
+        "sok": ["barnehage", "grunnskole", "elever", "fodte", "barnevern"],
+        "ssb_emner": ["utdanning", "befolkning"],
+        "demografi": ["studentliv"],
+    },
+    "alderdom": {
+        "ikon": "🧓",
+        "sok": ["eldre", "pleie og omsorg", "sykehjem", "pensjon", "aleneboende"],
+        "ssb_emner": ["helse", "befolkning"],
+        "demografi": ["psykisk helse"],
+    },
+    "idrett": {
+        "ikon": "⚽",
+        "sok": ["idrett", "kultur", "fritidsaktivitet", "idrettsanlegg"],
+        "ssb_emner": ["kultur-og-fritid"],
+        "demografi": ["trening og livsstil", "uteliv og kultur"],
+    },
+    "kriminalitet": {
+        "ikon": "🚓",
+        "sok": ["lovbrudd", "anmeldte", "straffereaksjoner", "ofre"],
+        "ssb_emner": ["sosiale-forhold-og-kriminalitet"],
+        "demografi": ["trygghet og kriminalitet"],
+    },
+    "næringsliv": {
+        "ikon": "🏢",
+        "sok": ["konkurs", "foretak", "naering", "omsetning", "etablerere"],
+        "ssb_emner": ["virksomheter-foretak-og-regnskap", "energi-og-industri"],
+        "demografi": ["jobb og okonomi"],
+    },
+}
+
+
+def sokeord_for(temaer: list[str] | None) -> list[str]:
+    """Soekeordene for de valgte temaene. Tomt valg = ALLE temaer.
+
+    Tomt valg betyr bevisst «alt», ikke «ingenting»: verktoyet skal virke som for
+    helt til journalisten faktisk velger noe."""
+    valgte = [t for t in (temaer or []) if t in TEMAER] or list(TEMAER)
+    ut: list[str] = []
+    for navn in valgte:
+        for ord_ in TEMAER[navn]["sok"]:
+            if ord_ not in ut:
+                ut.append(ord_)
+    return ut
+
+
+def ssb_emner_for(temaer: list[str] | None) -> set[str]:
+    """SSB-emneslugger for de valgte temaene - til vekting av publiseringskalenderen."""
+    valgte = [t for t in (temaer or []) if t in TEMAER] or list(TEMAER)
+    return {e for navn in valgte for e in TEMAER[navn]["ssb_emner"]}
+
+
 # Ord som ALDRI skal bli en "entitet" a klynge saker rundt (for generelle).
 ENTITY_STOPWORDS: set[str] = {
     "norge", "noreg", "norway", "nordmann", "dette", "slik", "dermed",
@@ -101,15 +184,15 @@ ENTITY_STOPWORDS: set[str] = {
 STOPWORDS: set[str] = {
     "og", "i", "jeg", "det", "at", "en", "et", "den", "til", "er", "som",
     "pa", "de", "med", "han", "av", "ikke", "der", "sa", "var", "meg",
-    "seg", "men", "et", "har", "om", "vi", "min", "mitt", "ha", "hadde",
+    "seg", "men", "har", "om", "vi", "min", "mitt", "ha", "hadde",
     "for", "du", "na", "far", "kan", "vil", "skal", "ma", "blir", "ble",
     "etter", "over", "under", "mot", "fra", "ved", "eller", "nar", "hvor",
     "hva", "hvem", "hvordan", "her", "dette", "disse", "denne", "noen",
     "ingen", "alle", "flere", "mange", "mer", "mest", "andre", "samme",
     "svært", "helt", "bare", "ogsa", "enn", "opp", "ut", "inn", "ned",
-    "far", "gar", "kommer", "sier", "fikk", "gjor", "vart", "vare",
+    "gar", "kommer", "sier", "fikk", "gjor", "vart", "vare",
     "the", "a", "of", "to", "and", "is", "in", "it", "you", "that",
-    "nye", "ny", "nytt", "far", "million", "millioner", "prosent",
+    "nye", "ny", "nytt", "million", "millioner", "prosent",
 }
 
 # --- Innstillinger (kan overstyres via miljovariabler) ----------------------

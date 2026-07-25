@@ -28,10 +28,13 @@ from app.config import ENABLE_REDDIT
 from app.models import Case, SignalItem
 
 
-def collect_all(si: Callable[[str], None] | None = None) -> tuple[
-    list[SignalItem], list[Case], list[str]
-]:
+def collect_all(
+    si: Callable[[str], None] | None = None, temaer: list[str] | None = None
+) -> tuple[list[SignalItem], list[Case], list[str]]:
     """Returnerer (grasrot-signaler, ssb-leads, statuslinjer).
+
+    `temaer` er journalistens valg; det styrer hvilke SSB-tabeller soekesystemet
+    leter etter. Tomt valg = alle temaer.
 
     `si` er en valgfri tilbakekalling som faar én linje per kilde mens den
     jobber. Uten den oppfoerer alt seg som foer; med den kan UI-et vise hvilken
@@ -67,7 +70,7 @@ def collect_all(si: Callable[[str], None] | None = None) -> tuple[
     # provd for. Dette er kilden som gjor at et NYTT soek gir NY statistikk.
     meld("SSB-søk: leter i katalogen etter ny statistikk")
     try:
-        cases, notes = ssb_sok.collect()
+        cases, notes = ssb_sok.collect(temaer)
         ssb_cases.extend(cases)
         status.extend(notes)
     except Exception as exc:  # noqa: BLE001

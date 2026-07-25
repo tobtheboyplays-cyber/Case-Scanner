@@ -20,6 +20,7 @@ from datetime import date, datetime
 from xml.etree import ElementTree
 
 from app.collectors.base import http_get
+from app.config import ssb_emner_for
 
 FEED = "https://www.ssb.no/rss/statkal"
 NS = {"ssbrss": "http://www.ssb.no/ns/ssbrss"}
@@ -70,13 +71,21 @@ def _ryddig_tittel(raa: str) -> str:
     return re.sub(r"^\d{2}\.\d{2}\.\d{4}:\s*", "", raa).strip()
 
 
-def collect(*, i_dag: date | None = None, maks: int = 12) -> tuple[list[dict], list[str]]:
+def collect(
+    *, i_dag: date | None = None, maks: int = 12, temaer: list[str] | None = None
+) -> tuple[list[dict], list[str]]:
     """Kommende SSB-publiseringer, viktigste foerst.
+
+    `temaer` er journalistens valg. Publiseringer innenfor valgte emner loeftes -
+    men ingenting filtreres bort. Det er et bevisst valg: kalenderen er det eneste
+    forspranget verktoyet har, og en publisering han ikke visste han ville ha, er
+    fortsatt verdt aa se nederst paa lista.
 
     Returnerer (varsler, statuslinjer). Feiler aldri oppover: en dod feed skal
     aldri velte et skann - da faar journalisten bare ikke varslene denne gangen.
     """
     status: list[str] = []
+    valgte_emner = ssb_emner_for(temaer)
     try:
         resp = http_get(FEED, timeout=20, headers={"Accept": "application/rss+xml"})
         root = ElementTree.fromstring(resp.content)
@@ -99,6 +108,8 @@ def collect(*, i_dag: date | None = None, maks: int = 12) -> tuple[list[dict], l
         emne = _tekst(item, "ssbrss:subject")
         tittel = _ryddig_tittel(_tekst(item, "title"))
         vekt = VIKTIGE_EMNER.get(emne, 2)
+        if emne in valgte_emner:
+            vekt += 6      # journalisten har sagt at dette er hans felt
         if any(o in tittel.lower() for o in LOKALE_ORD):
             vekt += 3
         # Det som kommer snart er mest verdt aa forberede.

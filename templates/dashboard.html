@@ -23,9 +23,40 @@
   <div class="top-actions">
     <a class="btn-ghost" href="/kalender">🗓 Kalender</a>
     <a class="btn-approved-link" href="/godkjente">📁 Lagret{% if approved_count %} ({{ approved_count }}){% endif %}</a>
+    {# Temamenyen staar ved siden av knappen, ikke inni skjemaet: valget lagres
+       for seg og gjelder ogsaa naar skannet startes fra cron. #}
+    <details class="tema-meny">
+      <summary class="btn-ghost tema-knapp">
+        🎯 Temaer
+        <span class="tema-tall">{{ valgte_temaer|length if valgte_temaer else 'alle' }}</span>
+      </summary>
+      <form class="tema-boks" method="post" action="/temaer">
+        <input type="hidden" name="tilbake" value="/" />
+        <p class="tema-h">Hva skal skannet lete etter?</p>
+        <div class="tema-liste">
+          {% for navn, t in TEMAER.items() %}
+          <label class="tema-valg">
+            <input type="checkbox" name="tema" value="{{ navn }}"
+                   {{ 'checked' if (not valgte_temaer) or navn in valgte_temaer }} />
+            <span class="tema-ikon" aria-hidden="true">{{ t.ikon }}</span>
+            <span class="tema-navn">{{ navn }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        <p class="tema-note">Temaene styrer hvilke SSB-tabeller søket leter i.
+          Befolknings- og flyttetallene hentes uansett.</p>
+        <div class="tema-knapper">
+          <button type="button" class="btn-small tema-alle">Velg alle</button>
+          <button type="submit" class="btn-small">Lagre</button>
+        </div>
+      </form>
+    </details>
     <form method="post" action="/scan" data-skann><button type="submit" class="btn-scan">🛰 Skann nå</button></form>
     <p class="last-scan">{% if scanned_at %}Sist skannet: {{ scanned_at }}
-      {% if data and data.ai_mode %}· KI: {{ 'på' if data.ai_mode == 'llm' else 'AV' }}{% endif %}
+      {% if data and data.ai_mode %}· KI:
+        {%- if data.ai_mode == 'llm' %} på
+        {%- elif data.ai_mode == 'llm-delvis' %} delvis
+        {%- else %} AV{% endif %}{% endif %}
       {% else %}Ikke skannet ennå{% endif %}</p>
   </div>
 </header>
@@ -35,24 +66,38 @@
    Stavanger?» er en mal, ikke en journalists vinkel. Det skal staa tydelig,
    ikke gjemmes bak en liten «demo»-brikke. #}
 {% if data and data.ai_mode and data.ai_mode != 'llm' %}
-<section class="ki-av">
-  <p class="ki-av-h">⚠️ KI-en er AV — vinklene under er maler, ikke journalistens</p>
-  <p class="ki-av-b">
-    {% if data.ai_mode == 'llm-feilet' %}
-      Nøkkelen finnes, men kallet feilet:
-      <span class="ki-av-feil">{{ data.ai_feil or 'ukjent grunn — se «Kildestatus» nederst' }}</span>
-    {% elif data.ai_mode == 'av' %}
-      KI-arbeidsflyten er slått av (<code>CASE_RADAR_ENABLE_AI=false</code>).
-    {% else %}
-      Ingen KI-nøkkel er satt på serveren.
-    {% endif %}
-  </p>
-  <p class="ki-av-b">
-    Derfor ligner de tre forslagene på hverandre — malene kan bare peke på hva
-    som må undersøkes. Ekte, ulike vinkler kommer først når journalist-agenten
-    kjører. Sett nøkkelen på serveren:
-    <code>cd ~/case-radar &amp;&amp; bash deploy.sh --ask</code>
-  </p>
+<section class="ki-av{{ ' ki-delvis' if data.ai_mode == 'llm-delvis' }}">
+  {% if data.ai_mode == 'llm-delvis' %}
+    {% set r = data.ai_regnskap or {} %}
+    <p class="ki-av-h">⚠️ KI-en rakk ikke alt — {{ r.feilet }} av {{ r.forsokt }} kall feilet</p>
+    <p class="ki-av-b">
+      Sakene merket <span class="ai-tag">demo</span> har <strong>maler</strong>, ikke
+      journalistens vinkler. Resten er ekte.
+      {% if data.ai_feil %}<br /><span class="ki-av-feil">{{ data.ai_feil }}</span>{% endif %}
+    </p>
+    <p class="ki-av-b">
+      Skjer dette ofte, er gratis-kvoten for liten til antall saker. Skann færre
+      temaer om gangen, eller vent et minutt og trykk «Skann nå» igjen.
+    </p>
+  {% else %}
+    <p class="ki-av-h">⚠️ KI-en er AV — vinklene under er maler, ikke journalistens</p>
+    <p class="ki-av-b">
+      {% if data.ai_mode == 'llm-feilet' %}
+        Nøkkelen finnes, men alle kall feilet:
+        <span class="ki-av-feil">{{ data.ai_feil or 'ukjent grunn — se «Kildestatus» nederst' }}</span>
+      {% elif data.ai_mode == 'av' %}
+        KI-arbeidsflyten er slått av (<code>CASE_RADAR_ENABLE_AI=false</code>).
+      {% else %}
+        Ingen KI-nøkkel er satt på serveren.
+      {% endif %}
+    </p>
+    <p class="ki-av-b">
+      Derfor ligner de tre forslagene på hverandre — malene kan bare peke på hva
+      som må undersøkes. Ekte, ulike vinkler kommer først når journalist-agenten
+      kjører. Sett nøkkelen på serveren:
+      <code>cd ~/case-radar &amp;&amp; bash deploy.sh --ask</code>
+    </p>
+  {% endif %}
 </section>
 {% endif %}
 
@@ -593,6 +638,17 @@
         .catch(function () { stopp('Mistet kontakten med serveren.'); });
     }
   })();
+
+  /* «Velg alle» — én knapp i stedet for åtte trykk. Skjemaet virker uten
+     JavaScript også; dette er bare en snarvei. */
+  document.querySelectorAll('.tema-alle').forEach(function (knapp) {
+    knapp.addEventListener('click', function () {
+      var bokser = knapp.closest('form').querySelectorAll('input[name="tema"]');
+      var alleAv = Array.prototype.every.call(bokser, function (b) { return b.checked; });
+      bokser.forEach(function (b) { b.checked = !alleAv; });
+      knapp.textContent = alleAv ? 'Velg alle' : 'Nullstill';
+    });
+  });
 
   document.querySelectorAll('.chip').forEach(function (chip) {
     chip.addEventListener('click', function () {

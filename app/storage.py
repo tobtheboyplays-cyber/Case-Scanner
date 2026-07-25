@@ -558,6 +558,28 @@ def meta_set(nokkel: str, verdi: str) -> None:
         conn.close()
 
 
+# ── Hvilke temaer skannet skal lete etter ────────────────────────────────────
+# Tomt valg = ALLE temaer. Det er bevisst: verktoyet skal virke som foer helt til
+# journalisten faktisk velger noe, og en tom meny skal aldri gi et tomt skann.
+
+
+def valgte_temaer() -> list[str]:
+    from app.config import TEMAER
+
+    raa = meta_get("temaer", "")
+    return [t.strip() for t in raa.split("|") if t.strip() in TEMAER]
+
+
+def sett_temaer(temaer: list[str]) -> list[str]:
+    """Lagre valget. Ukjente navn ignoreres i stedet for aa kaste."""
+    from app.config import TEMAER
+
+    rene = [t for t in dict.fromkeys(temaer) if t in TEMAER]
+    # Alle valgt er det samme som ingen valgt - lagre det enkleste.
+    meta_set("temaer", "" if len(rene) == len(TEMAER) else "|".join(rene))
+    return rene
+
+
 def neste_i_rotasjon(nokkel: str, elementer: list[str], antall: int) -> list[str]:
     """Plukk `antall` elementer og flytt markoeren - saa neste skann tar de neste.
 
