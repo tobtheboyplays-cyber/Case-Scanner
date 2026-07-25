@@ -56,29 +56,27 @@ else
   # Ingen prefiks-gjetting: Google har flere nøkkelformater (AIza…, AQ.…, ya29.…).
   # Vi TESTER nøkkelen mot ekte API og lar svaret avgjøre.
   echo "  Tester nøkkelen mot Gemini…"
-  GM=${CASE_RADAR_GEMINI_MODEL:-gemini-2.0-flash}
-  GURL="https://generativelanguage.googleapis.com/v1beta/models/$GM:generateContent"
-  BODY='{"contents":[{"role":"user","parts":[{"text":"ping"}]}],"generationConfig":{"maxOutputTokens":4}}'
-  # Googles dokumenterte maate er x-goog-api-key; ?key= er eldre; Bearer for
-  # OAuth-/ephemeral-tokens. Prøv alle tre — formatet skal ikke avgjøre.
-  R1=$(curl -s -o /tmp/cr_key.json -w '%{http_code}' -m 20 -X POST \
+  GM=${CASE_RADAR_GEMINI_MODEL:-gemini-3.6-flash}
+  # Googles naavaerende endepunkt: /v1beta/interactions med modellen i body.
+  GURL="https://generativelanguage.googleapis.com/v1beta/interactions"
+  BODY="{\"model\":\"$GM\",\"input\":\"ping\"}"
+  R1=$(curl -s -o /tmp/cr_key.json -w '%{http_code}' -m 25 -X POST \
         -H 'Content-Type: application/json' -H "x-goog-api-key: $KEY" \
         -d "$BODY" "$GURL" 2>/dev/null || echo 000)
   R2=000; R3=000
+  # Reserve: det gamle generateContent-endepunktet.
   if [ "$R1" != "200" ]; then
-    R2=$(curl -s -o /tmp/cr_key.json -w '%{http_code}' -m 20 -X POST \
-          -H 'Content-Type: application/json' -d "$BODY" "$GURL?key=$KEY" 2>/dev/null || echo 000)
-  fi
-  if [ "$R1" != "200" ] && [ "$R2" != "200" ]; then
-    R3=$(curl -s -o /tmp/cr_key.json -w '%{http_code}' -m 20 -X POST \
-          -H 'Content-Type: application/json' -H "Authorization: Bearer $KEY" \
-          -d "$BODY" "$GURL" 2>/dev/null || echo 000)
+    OURL="https://generativelanguage.googleapis.com/v1beta/models/$GM:generateContent"
+    OBODY='{"contents":[{"parts":[{"text":"ping"}]}]}'
+    R2=$(curl -s -o /tmp/cr_key.json -w '%{http_code}' -m 25 -X POST \
+          -H 'Content-Type: application/json' -H "x-goog-api-key: $KEY" \
+          -d "$OBODY" "$OURL" 2>/dev/null || echo 000)
   fi
   if [ "$R1" = "200" ] || [ "$R2" = "200" ] || [ "$R3" = "200" ]; then
     ok "Nøkkelen VIRKER mot Gemini (gratis-nivå)"
     KEY_ARGS="-e GEMINI_API_KEY=$KEY"
   else
-    bad "Nøkkelen ble avvist (header $R1 / key= $R2 / Bearer $R3). Googles egen melding:"
+    bad "Nøkkelen ble avvist (nytt API $R1 / gammelt API $R2). Googles egen melding:"
     head -c 400 /tmp/cr_key.json 2>/dev/null; echo
     echo
     echo "     Vanligste årsaker:"

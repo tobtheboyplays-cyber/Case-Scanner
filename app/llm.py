@@ -23,7 +23,7 @@ MODEL_JOURNALIST = os.getenv("CASE_RADAR_MODEL_WRITER", "claude-sonnet-5")
 
 # --- Gemini-modell (gratis-nivaa) -------------------------------------------
 # gemini-2.0-flash ligger paa gratis-nivaaet (rimelige daglige grenser).
-GEMINI_MODEL = os.getenv("CASE_RADAR_GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.getenv("CASE_RADAR_GEMINI_MODEL", "gemini-3.6-flash")
 
 # Siste grunn til at et kall ikke ga brukbart svar (for diagnose i UI).
 # Ikke en hemmelighet: feilene er ting som "authentication_error" eller
@@ -88,16 +88,39 @@ def _anthropic_text(system: str, user: str, *, model: str, max_tokens: int) -> s
 def _gemini_text(system: str, user: str, *, max_tokens: int) -> str:
     """Gemini via REST (httpx er allerede en avhengighet - ingen ny pakke).
 
-    responseMimeType=application/json ber Gemini svare med ren JSON, som passer
-    agentene. Gratis-nivaaet krever bare en AI-Studio-nokkel (ingen kort)."""
+    Google flyttet Gemini til /v1beta/interactions, der modellen ligger i body og
+    noekkelen sendes som headeren x-goog-api-key. Det gamle
+    /v1beta/models/<model>:generateContent svarer 403 for nyere noekler. Vi proever
+    det nye foerst og faller tilbake til det gamle, saa koden taaler at Google
+    endrer seg igjen.
+    """
     import httpx
 
     key = os.getenv("GEMINI_API_KEY", "")
-    url = (
+    headers = {"x-goog-api-key": key, "Content-Type": "application/json"}
+
+    # --- Nytt API: /v1beta/interactions --------------------------------------
+    new_url = "https://generativelanguage.googleapis.com/v1beta/interactions"
+    new_body = {
+        "model": GEMINI_MODEL,
+        "system_instruction": system,
+        "input": user,
+        "generation_config": {"max_output_tokens": max_tokens},
+    }
+    resp = httpx.post(new_url, json=new_body, headers=headers, timeout=60)
+
+    if resp.status_code == 200:
+        data = resp.json()
+        text = _interaction_text(data)
+        if text:
+            return text
+
+    # --- Gammelt API som reserve ---------------------------------------------
+    old_url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
         f"{GEMINI_MODEL}:generateContent"
     )
-    body = {
+    old_body = {
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": user}]}],
         "generationConfig": {
@@ -105,31 +128,45 @@ def _gemini_text(system: str, user: str, *, max_tokens: int) -> str:
             "responseMimeType": "application/json",
         },
     }
-    # Google dokumenterer x-goog-api-key som DEN maaten aa sende noekkelen paa
-    # (ai.google.dev/gemini-api/docs/api-key). Alle nye AI-Studio-noekler er
-    # "auth keys" og fungerer med den headeren; ?key= er den eldre varianten og
-    # Bearer daekker OAuth-/ephemeral-tokens. Vi proever alle tre i den
-    # rekkefoelgen og stopper paa foerste svar som ikke er en autentiseringsfeil,
-    # slik at noekkelformatet aldri avgjoer om den faar proeve seg.
-    attempts: list[tuple[dict[str, str], dict[str, str] | None]] = [
-        ({"x-goog-api-key": key}, None),
-        ({}, {"key": key}),
-        ({"Authorization": f"Bearer {key}"}, None),
-    ]
+    old = httpx.post(old_url, json=old_body, headers=headers, timeout=60)
+    if old.status_code == 200:
+        text = _interaction_text(old.json())
+        if text:
+            return text
 
-    resp = None
-    for headers, params in attempts:
-        resp = httpx.post(url, json=body, params=params, headers=headers, timeout=60)
-        if resp.status_code not in (401, 403):
-            break  # ikke en autentiseringsfeil - dette svaret er det ekte svaret
-    assert resp is not None
+    # Ingen av dem ga brukbart svar - la den mest informative feilen tale.
     resp.raise_for_status()
-    data = resp.json()
-    candidates = data.get("candidates") or []
-    if not candidates:
-        raise ValueError("Gemini ga ingen kandidater (mulig blokkert/tom kvote)")
-    parts = candidates[0].get("content", {}).get("parts", [])
-    return "".join(p.get("text", "") for p in parts)
+    old.raise_for_status()
+    raise ValueError("Gemini ga tomt svar (mulig blokkert innhold eller tom kvote)")
+
+
+def _interaction_text(data: object) -> str:
+    """Trekk ut teksten uansett hvilken svarform Google bruker.
+
+    Doekker output_text (ny convenience), steps/content-blokker (ny raa form) og
+    candidates/parts (gammel form)."""
+    if not isinstance(data, dict):
+        return ""
+    direct = data.get("output_text") or data.get("outputText")
+    if isinstance(direct, str) and direct.strip():
+        return direct
+    chunks: list[str] = []
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            txt = node.get("text")
+            if isinstance(txt, str):
+                chunks.append(txt)
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    for field in ("steps", "output", "candidates"):
+        if field in data:
+            walk(data[field])
+    return "".join(chunks)
 
 
 def complete_json(system: str, user: str, *, model: str, max_tokens: int = 1500):
