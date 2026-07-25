@@ -1,0 +1,31 @@
+# Render Blueprint for Case-radar.
+# Deploy: render.com -> New + -> Blueprint -> koble dette repoet -> Apply.
+# Render bygger case-radar/Dockerfile automatisk og gir deg en offentlig
+# https://case-radar-XXXX.onrender.com som funker på hvilken som helst mobil.
+# Ingen brannmur, ingen ufw, ingen IP, ingen SSH.
+services:
+  - type: web
+    name: case-radar
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: frankfurt            # nærmest Norge
+    branch: main
+    plan: free                   # $0 for å se det funke i dag; se merknad under
+    healthCheckPath: /health     # Render venter på {"status":"ok"} før den går live
+    autoDeploy: true             # git push -> ny deploy automatisk
+    envVars:
+      # Legg inn ÉN av disse i Render-dashbordet (Render spør deg), ALDRI i repoet.
+      # GEMINI_API_KEY  = GRATIS live-KI (aistudio.google.com, ingen kort).
+      # ANTHROPIC_API_KEY = Claude (betalt API-kreditt, ikke abonnement).
+      # Ingen av dem = demo-modus (maler). Har du begge, brukes Claude.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+# Merknad om drift:
+#  - plan: free  -> tjenesten sovner etter ~15 min uten trafikk og bruker ~30 s
+#    på å våkne ved neste besøk. Gratis, men ikke ekte "døgnet rundt".
+#  - For 24/7 uten sovning: bytt "plan: free" til "plan: starter" (~7 USD/mnd)
+#    i Render-dashbordet eller her, og deploy på nytt.
+#  - Godkjente saker (SQLite på /tmp) nullstilles ved ny deploy. Vil du ha varig
+#    lagring: legg til en Render Disk montert på /tmp i dashbordet.

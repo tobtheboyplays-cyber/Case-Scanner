@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Godkjente saker · Case-radar</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">📁</span>
+    <div>
+      <h1>Godkjente saker</h1>
+      <p class="tagline">Saker du har godkjent · klare til å skrives ut</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <a class="btn-approved-link" href="/">← Tilbake til radaren</a>
+  </div>
+</header>
+
+<main class="maincol" style="padding: 12px 32px 40px;">
+  {% if not leads %}
+    <section class="empty">
+      <h2>Ingen godkjente saker ennå</h2>
+      <p>Gå til radaren, vurder KI-redaktørens forslag og trykk «Godkjenn sak».</p>
+    </section>
+  {% endif %}
+
+  {% for lead in leads %}
+  <article class="lead" style="grid-template-columns: 1fr;">
+    <div class="lead-body">
+      <div class="lead-tags">
+        <span class="pill pill-green">✓ Godkjent</span>
+        {% if lead.data_source %}<span class="tag">{{ lead.data_source }}</span>{% endif %}
+        {% if lead.ai_mode == 'mal' %}<span class="tag">demo-utkast</span>{% endif %}
+      </div>
+      <h3 class="lead-title">{{ lead.draft.title if lead.draft and lead.draft.title else lead.title }}</h3>
+      {% if lead.finding %}<p class="lead-desc">{{ lead.finding }}</p>{% endif %}
+
+      {% if lead.draft and lead.draft.body %}
+        <p class="draft-ingress">{{ lead.draft.ingress }}</p>
+        <div class="draft-body">{{ lead.draft.body }}</div>
+        {% if lead.draft.checks %}
+          <p class="draft-checks-h">Sjekk / kilder å ringe:</p>
+          <ul class="draft-checks">{% for chk in lead.draft.checks %}<li>{{ chk }}</li>{% endfor %}</ul>
+        {% endif %}
+      {% else %}
+        <p class="lead-desc">Vinkling: {{ lead.angle }}</p>
+      {% endif %}
+
+      {% if lead.data_url %}
+      <p style="margin-top:10px;"><a class="kilde" href="{{ lead.data_url }}" target="_blank" rel="noopener">Datakilde: {{ lead.data_source }} ↗</a></p>
+      {% endif %}
+    </div>
+  </article>
+  {% endfor %}
+</main>
+
+<footer class="foot">
+  <span>ⓘ Utkast er KI-genererte forslag – sjekk alltid fakta før publisering.</span>
+  <span class="foot-right">Case-radar v{{ version }}</span>
+</footer>
+</body>
+</html>

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Case-radar</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+{% set s = data.summary if data else None %}
+{% set green_pct = ((s.green / s.total * 100) | round | int) if (s and s.total) else 0 %}
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">📡</span>
+    <div>
+      <h1>Case-radar</h1>
+      <p class="tagline">Saksforslag for Stavanger &amp; Norge · 20–39 år</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <a class="btn-approved-link" href="/godkjente">📁 Godkjente saker{% if approved_count %} ({{ approved_count }}){% endif %}</a>
+    <form method="post" action="/scan"><button type="submit" class="btn-scan">🛰 Skann nå</button></form>
+    <p class="last-scan">{% if scanned_at %}Sist skannet: {{ scanned_at }}
+      {% if data and data.ai_mode %}· KI: {{ 'Claude' if data.ai_mode == 'llm' else 'demo-modus' }}{% endif %}
+      {% else %}Ikke skannet ennå{% endif %}</p>
+  </div>
+</header>
+
+{% if not data %}
+  <section class="empty">
+    <h2>Ingen skann ennå</h2>
+    <p>Trykk «Skann nå» for å hente originale, datadrevne saksforslag fra SSB m.fl.</p>
+  </section>
+{% else %}
+
+<!-- KPI-rad -->
+<section class="kpis">
+  <div class="kpi">
+    <div class="kpi-top"><span class="kpi-ic">📄</span><span class="kpi-label">Leads totalt</span></div>
+    <div class="kpi-num">{{ s.total }}</div>
+    <div class="kpi-sub">{{ s.data }} datadrevne · {{ s.grassroots }} grasrot</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-top"><span class="dot dot-green"></span><span class="kpi-label">Uskrevet</span></div>
+    <div class="kpi-num green">{{ s.green }}</div>
+    <div class="kpi-sub">{{ green_pct }} % av totalen</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-top"><span class="kpi-ic">📊</span><span class="kpi-label">SSB-datafunn</span></div>
+    <div class="kpi-num">{{ s.data }}</div>
+    <div class="kpi-sub">Åpne offentlige data</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-top"><span class="kpi-ic">🕐</span><span class="kpi-label">Sist skannet</span></div>
+    <div class="kpi-num small">{{ scanned_at or "—" }}</div>
+    <div class="kpi-sub">Kun offentlige kilder</div>
+  </div>
+</section>
+
+<div class="layout">
+  <main class="maincol">
+
+    <!-- Prioritering -->
+    <section class="panel priority">
+      <div class="panel-head">
+        <h2>Prioritering</h2>
+        <span class="panel-sub">Topp leads rangert etter score (originalitet, relevans og påvirkning)</span>
+      </div>
+      {% set max_score = (data.cases | map(attribute='score') | max) if data.cases else 1 %}
+      {% for case in data.cases[:6] %}
+      <div class="prio-row">
+        <span class="prio-rank">{{ loop.index }}</span>
+        <span class="prio-label" title="{{ case.title }}">{{ case.title }}</span>
+        <span class="prio-track">
+          <span class="prio-fill cov-{{ case.coverage_status }}"
+                style="width: {{ ((case.score / max_score * 100) | round(0,'floor')) if max_score else 0 }}%"></span>
+        </span>
+        <span class="prio-score cov-text-{{ case.coverage_status }}">{{ case.score }}</span>
+      </div>
+      {% endfor %}
+      <div class="legend">
+        <span><span class="dot dot-green"></span> Uskrevet (ingen har skrevet dette)</span>
+        <span><span class="dot dot-amber"></span> Delvis dekket (skrevet noe)</span>
+        <span><span class="dot dot-red"></span> Allerede dekket (skrevet mye)</span>
+      </div>
+    </section>
+
+    <!-- Lead-kort -->
+    <div class="filters">
+      <button class="chip active" data-filter="alle">Alle</button>
+      <button class="chip" data-filter="green">🟢 Uskrevet</button>
+      <button class="chip" data-filter="lokal">Stavanger/Rogaland</button>
+    </div>
+
+    {% for case in data.cases %}
+    <article class="lead" data-cov="{{ case.coverage_status }}" data-geo="{{ case.geo }}">
+      <div class="lead-num">{{ loop.index }}</div>
+      <div class="lead-body">
+        <div class="lead-tags">
+          {% if case.coverage_status == 'green' %}
+            <span class="pill pill-green">🟢 Uskrevet — ingen har skrevet dette</span>
+          {% elif case.coverage_status == 'yellow' %}
+            <span class="pill pill-amber">🟡 Delvis dekket — skrevet noe</span>
+          {% elif case.coverage_status == 'red' %}
+            <span class="pill pill-red">🔴 Allerede dekket — skrevet mye</span>
+          {% else %}
+            <span class="pill pill-grey">Dekning ukjent</span>
+          {% endif %}
+          <span class="tag">{{ 'SSB-data' if case.kind == 'data' else 'Grasrot' }}</span>
+          {% if case.geo == 'lokal' %}<span class="tag tag-loc">📍 Stavanger/Rogaland</span>{% endif %}
+        </div>
+
+        <h3 class="lead-title">{{ case.title }}</h3>
+        <p class="lead-desc">{{ case.finding or case.why }}</p>
+
+        <div class="lead-grid">
+          {% if case.metric_value %}
+          <div class="funn">
+            <span class="funn-label">Funn</span>
+            <span class="funn-val cov-text-{{ case.coverage_status }}">{{ case.metric_value }}</span>
+            <span class="funn-period">{{ case.metric_period }}</span>
+          </div>
+          {% endif %}
+          <div class="vinkel">
+            <p class="vinkel-h">Vinkling:</p>
+            <p class="vinkel-t">{{ case.angle }}</p>
+            {% if case.data_url %}
+              <a class="kilde" href="{{ case.data_url }}" target="_blank" rel="noopener">Datakilde: {{ case.data_source }} ↗</a>
+            {% elif case.sources %}
+              <a class="kilde" href="{{ case.sources[0].url }}" target="_blank" rel="noopener">Kilde: {{ case.sources[0].source }} ↗</a>
+            {% endif %}
+            {% if case.coverage_examples %}
+              <p class="alt-dekning">Allerede skrevet: {{ case.coverage_examples[0].source }}
+                ({{ case.coverage_examples[0].date }})</p>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if case.editor %}
+        <div class="ai-block">
+          <details class="ai-editor">
+            <summary>🧭 KI-redaktør: {{ '✅ Sak' if case.editor.is_story else '⛔ Ikke sak' }}
+              {% if case.editor.confidence %}({{ case.editor.confidence }}%){% endif %}
+              {% if case.ai_mode == 'mal' %}<span class="ai-tag">demo</span>{% endif %}</summary>
+            <p><strong>{{ case.editor.headline }}</strong></p>
+            <p class="ai-angle">{{ case.editor.angle }}</p>
+            <p class="ai-verdict">💬 {{ case.editor.verdict }}</p>
+          </details>
+          {% if case.draft and case.draft.body %}
+          <details class="ai-draft">
+            <summary>📝 Prøveartikkel (utkast)</summary>
+            <h4>{{ case.draft.title }}</h4>
+            <p class="draft-ingress">{{ case.draft.ingress }}</p>
+            <div class="draft-body">{{ case.draft.body }}</div>
+            {% if case.draft.checks %}
+            <p class="draft-checks-h">Sjekk / kilder å ringe:</p>
+            <ul class="draft-checks">
+              {% for chk in case.draft.checks %}<li>{{ chk }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+          </details>
+          {% endif %}
+          <div class="ai-actions">
+            {% set dec = decisions.get(case.key) %}
+            {% if dec == 'approved' %}
+              <span class="pill pill-green">✓ Godkjent</span>
+            {% elif dec == 'rejected' %}
+              <span class="pill pill-grey">Forkastet</span>
+            {% endif %}
+            <form method="post" action="/leads/{{ case.key }}/approve">
+              <button class="btn-approve" type="submit">Godkjenn sak</button>
+            </form>
+            <form method="post" action="/leads/{{ case.key }}/reject">
+              <button class="btn-reject" type="submit">Forkast</button>
+            </form>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+
+    <p class="see-all">Viser {{ data.cases|length }} leads fra siste skann</p>
+  </main>
+
+  <!-- Planlegger -->
+  <aside class="sidebar">
+    <section class="panel">
+      <div class="panel-head"><h2>📅 Planlegger</h2></div>
+
+      <div class="cal-block">
+        <p class="cal-status-line">Kalender:
+          {% if data.plan.calendar_status == 'koblet_til' %}<span class="green">koblet til</span>
+          {% elif data.plan.calendar_status == 'trenger_innlogging' %}<span class="amber">trenger innlogging</span>
+          {% else %}<span class="muted">ikke konfigurert</span>{% endif %}
+        </p>
+        {% if data.plan.calendar_events %}
+          {% for ev in data.plan.calendar_events %}
+          <div class="cal-row"><span class="cal-day">{{ ev.start }}</span><span>{{ ev.summary }}</span></div>
+          {% endfor %}
+        {% else %}
+          <p class="cal-note">{{ data.plan.calendar_note }}</p>
+        {% endif %}
+      </div>
+
+      <h3 class="side-h">Forslag til uka</h3>
+      <ul class="todo">
+        {% for sug in data.plan.suggestions %}
+        <li class="prio-{{ sug.priority }}">
+          <span class="todo-box"></span>
+          <div>
+            <strong>{{ sug.title }}</strong>
+            <p>{{ sug.action }}</p>
+          </div>
+        </li>
+        {% else %}
+        <li class="muted">Ingen forslag ennå — kjør et skann.</li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="panel status">
+      <details>
+        <summary>Kildestatus (siste skann)</summary>
+        <ul>
+          {% for line in data.status %}
+          <li class="{{ 'err' if '[FEIL]' in line else '' }}">{{ line }}</li>
+          {% endfor %}
+        </ul>
+      </details>
+    </section>
+  </aside>
+</div>
+{% endif %}
+
+<footer class="foot">
+  <span>ⓘ Case-radar henter og analyserer åpne data fra SSB og andre offentlige kilder.</span>
+  <span class="foot-right">Case-radar v{{ version }} · bruk treff som tips, ikke fasit</span>
+</footer>
+
+<script>
+  document.querySelectorAll('.chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      var f = chip.dataset.filter;
+      document.querySelectorAll('.lead').forEach(function (el) {
+        var show = f === 'alle'
+          || (f === 'green' && el.dataset.cov === 'green')
+          || (f === 'lokal' && el.dataset.geo === 'lokal');
+        el.style.display = show ? '' : 'none';
+      });
+    });
+  });
+</script>
+</body>
+</html>
