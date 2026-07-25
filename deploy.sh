@@ -49,18 +49,43 @@ if [ -z "$KEY" ]; then
   warn "Ingen nøkkel oppgitt → appen kjører i DEMO-modus (maler, ikke ekte KI)."
   warn "Vil du ha ekte KI gratis: hent nøkkel på https://aistudio.google.com/app/apikey"
   warn "og kjør:  bash deploy.sh AIzaSy…"
-elif [ "${KEY#AIzaSy}" != "$KEY" ]; then
-  ok "Gemini-nøkkel oppdaget (gratis-nivå)"
-  KEY_ARGS="-e GEMINI_API_KEY=$KEY"
 elif [ "${KEY#sk-ant-}" != "$KEY" ]; then
-  ok "Claude-nøkkel oppdaget (betalt API-kreditt)"
+  ok "Claude-nøkkel (betalt API-kreditt)"
   KEY_ARGS="-e ANTHROPIC_API_KEY=$KEY"
 else
-  bad "Dette ser ikke ut som en gyldig nøkkel."
-  echo "     Gemini (gratis) starter med  AIzaSy…   → https://aistudio.google.com/app/apikey"
-  echo "     Claude (betalt) starter med  sk-ant-…  → https://console.anthropic.com"
-  echo "     Avbryter så du slipper å deploye noe som uansett blir demo."
-  exit 1
+  # Ingen prefiks-gjetting: Google har flere nøkkelformater (AIza…, AQ.…, ya29.…).
+  # Vi TESTER nøkkelen mot ekte API og lar svaret avgjøre.
+  echo "  Tester nøkkelen mot Gemini…"
+  GM=${CASE_RADAR_GEMINI_MODEL:-gemini-2.0-flash}
+  GURL="https://generativelanguage.googleapis.com/v1beta/models/$GM:generateContent"
+  BODY='{"contents":[{"role":"user","parts":[{"text":"ping"}]}],"generationConfig":{"maxOutputTokens":4}}'
+  R1=$(curl -s -o /tmp/cr_key.json -w '%{http_code}' -m 20 -X POST \
+        -H 'Content-Type: application/json' -d "$BODY" "$GURL?key=$KEY" 2>/dev/null || echo 000)
+  R2=000
+  if [ "$R1" != "200" ]; then
+    R2=$(curl -s -o /tmp/cr_key.json -w '%{http_code}' -m 20 -X POST \
+          -H 'Content-Type: application/json' -H "Authorization: Bearer $KEY" \
+          -d "$BODY" "$GURL" 2>/dev/null || echo 000)
+  fi
+  if [ "$R1" = "200" ] || [ "$R2" = "200" ]; then
+    ok "Nøkkelen VIRKER mot Gemini (gratis-nivå)"
+    KEY_ARGS="-e GEMINI_API_KEY=$KEY"
+  else
+    bad "Nøkkelen ble avvist av Google (HTTP $R1 / Bearer $R2). Googles egen melding:"
+    head -c 400 /tmp/cr_key.json 2>/dev/null; echo
+    echo
+    echo "     Vanligste årsaker:"
+    echo "       • Tokenet er et kortlevd/ephemeral token — de utløper etter minutter."
+    echo "         Du trenger en varig API-nøkkel: https://aistudio.google.com/app/apikey"
+    echo "         (Create API key → kopier hele strengen)"
+    echo "       • Generative Language API ikke aktivert for prosjektet."
+    echo "       • Feil kopiert (mellomrom eller manglende tegn)."
+    echo
+    echo "     Deployer i DEMO-modus nå så du får en fungerende lenke uansett."
+    echo "     Legg på nøkkel senere:  bash deploy.sh <nøkkel>"
+    KEY_ARGS=""
+  fi
+  rm -f /tmp/cr_key.json
 fi
 
 # ── 3. Bygg ──────────────────────────────────────────────────────────────────

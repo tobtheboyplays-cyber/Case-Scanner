@@ -95,7 +95,7 @@ def _gemini_text(system: str, user: str, *, max_tokens: int) -> str:
     key = os.getenv("GEMINI_API_KEY", "")
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{GEMINI_MODEL}:generateContent?key={key}"
+        f"{GEMINI_MODEL}:generateContent"
     )
     body = {
         "systemInstruction": {"parts": [{"text": system}]},
@@ -105,7 +105,22 @@ def _gemini_text(system: str, user: str, *, max_tokens: int) -> str:
             "responseMimeType": "application/json",
         },
     }
-    resp = httpx.post(url, json=body, timeout=60)
+    # Google har flere nokkelformater. Klassiske API-nokler (AIza...) sendes som
+    # ?key=, mens OAuth-/ephemeral-tokens (f.eks. AQ....) maa sendes som Bearer.
+    # Vi antar ikke ut fra prefiks alene: proev den mest sannsynlige foerst, og
+    # fall tilbake til den andre ved autentiseringsfeil.
+    if key.startswith("AIza"):
+        attempts = [("params", {"key": key}), ("bearer", None)]
+    else:
+        attempts = [("bearer", None), ("params", {"key": key})]
+
+    resp = None
+    for mode, params in attempts:
+        headers = {"Authorization": f"Bearer {key}"} if mode == "bearer" else {}
+        resp = httpx.post(url, json=body, params=params, headers=headers, timeout=60)
+        if resp.status_code not in (401, 403):
+            break  # ikke en autentiseringsfeil - dette svaret er det ekte svaret
+    assert resp is not None
     resp.raise_for_status()
     data = resp.json()
     candidates = data.get("candidates") or []
