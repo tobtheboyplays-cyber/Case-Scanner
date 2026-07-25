@@ -61,8 +61,28 @@ if [ -n "$KEY" ]; then
 fi
 if [ -z "$KEY" ]; then
   warn "Ingen nøkkel oppgitt → appen kjører i DEMO-modus (maler, ikke ekte KI)."
-  warn "Vil du ha ekte KI gratis: hent nøkkel på https://aistudio.google.com/app/apikey"
-  warn "og kjør:  bash deploy.sh AIzaSy…"
+  warn "Vil du ha ekte KI GRATIS: hent nøkkel på https://console.groq.com/keys (ingen kort)"
+  warn "og kjør:  bash deploy.sh --ask"
+elif [ "${KEY#gsk_}" != "$KEY" ]; then
+  # Groq: gratis, ingen kort, blokkerer ikke datasenter-IP-er.
+  echo "  Tester Groq-nøkkelen…"
+  GQ=$(curl -s -o /tmp/cr_key.json -w '%{http_code}' -m 25 -X POST \
+        -H 'Content-Type: application/json' -H "Authorization: Bearer $KEY" \
+        -d "{\"model\":\"${CASE_RADAR_GROQ_MODEL:-llama-3.3-70b-versatile}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":4}" \
+        "https://api.groq.com/openai/v1/chat/completions" 2>/dev/null || echo 000)
+  if [ "$GQ" = "200" ]; then
+    ok "Groq-nøkkelen VIRKER (gratis)"
+    KEY_ARGS="-e GROQ_API_KEY=$KEY"
+  else
+    bad "Groq avviste nøkkelen (HTTP $GQ):"
+    head -c 300 /tmp/cr_key.json 2>/dev/null; echo
+    echo "     Deployer i DEMO-modus. Ny nøkkel: https://console.groq.com/keys"
+    KEY_ARGS=""
+  fi
+  rm -f /tmp/cr_key.json
+elif [ "${KEY#sk-or-}" != "$KEY" ]; then
+  ok "OpenRouter-nøkkel (gratis modeller)"
+  KEY_ARGS="-e OPENROUTER_API_KEY=$KEY"
 elif [ "${KEY#sk-ant-}" != "$KEY" ]; then
   ok "Claude-nøkkel (betalt API-kreditt)"
   KEY_ARGS="-e ANTHROPIC_API_KEY=$KEY"

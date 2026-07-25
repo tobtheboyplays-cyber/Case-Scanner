@@ -1,13 +1,20 @@
-"""Tynn KI-klient for agentene, med to leverandorer og gratis-vei.
+"""Tynn KI-klient for agentene, med flere leverandorer og gratis-veier.
 
-Velger leverandor automatisk ut fra hvilken nokkel som ligger i server-miljoet:
-  - ANTHROPIC_API_KEY  -> Claude (betalt API-kreditt, ikke abonnement)
-  - GEMINI_API_KEY     -> Google Gemini (GRATIS-nivaa, ingen kort)
-  - ingen nokkel       -> maler (demo)
+Velger leverandor automatisk ut fra hvilken nokkel som ligger i server-miljoet
+(foerste treff vinner):
 
-Nokler leses kun fra miljoet, aldri hardkodet. Ved feil settes last_error() slik at
-UI kan vise HVORFOR live falt tilbake til mal (feil nokkel, tom kvote, ukjent modell,
-ugyldig svar) i stedet for a tie stille.
+  GROQ_API_KEY       -> Groq        GRATIS, ingen kort, raskt (anbefalt)
+  OPENROUTER_API_KEY -> OpenRouter  GRATIS modeller (:free), ingen kort
+  ANTHROPIC_API_KEY  -> Claude      betalt API-kreditt (ikke abonnementet)
+  GEMINI_API_KEY     -> Gemini      gratis-nivaa, MEN Google blokkerer enkelte
+                                    datasenter-IP-er (HTML 403 foer API-et)
+  CASE_RADAR_OLLAMA  -> Ollama      helt lokalt paa serveren, ingen nokkel,
+                                    ingen ekstern avhengighet
+  ingen              -> maler (demo)
+
+Groq, OpenRouter og Ollama snakker alle OpenAI-kompatibel chat, saa de deler én
+kodevei. Nokler leses kun fra miljoet, aldri hardkodet. Ved feil settes
+last_error() slik at UI kan vise HVORFOR live falt tilbake til mal.
 """
 
 from __future__ import annotations
@@ -21,9 +28,17 @@ MODEL_ANALYST = os.getenv("CASE_RADAR_MODEL_FAST", "claude-haiku-4-5")
 MODEL_EDITOR = os.getenv("CASE_RADAR_MODEL_FAST", "claude-haiku-4-5")
 MODEL_JOURNALIST = os.getenv("CASE_RADAR_MODEL_WRITER", "claude-sonnet-5")
 
-# --- Gemini-modell (gratis-nivaa) -------------------------------------------
-# gemini-2.0-flash ligger paa gratis-nivaaet (rimelige daglige grenser).
+# --- Gemini (gratis-nivaa) ---------------------------------------------------
 GEMINI_MODEL = os.getenv("CASE_RADAR_GEMINI_MODEL", "gemini-3.6-flash")
+
+# --- OpenAI-kompatible leverandorer -----------------------------------------
+# (base_url, default-modell). Alle tre bruker samme /chat/completions-format.
+GROQ_MODEL = os.getenv("CASE_RADAR_GROQ_MODEL", "llama-3.3-70b-versatile")
+OPENROUTER_MODEL = os.getenv(
+    "CASE_RADAR_OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"
+)
+OLLAMA_MODEL = os.getenv("CASE_RADAR_OLLAMA_MODEL", "llama3.2:3b")
+OLLAMA_URL = os.getenv("CASE_RADAR_OLLAMA", "")  # f.eks. http://localhost:11434
 
 # Siste grunn til at et kall ikke ga brukbart svar (for diagnose i UI).
 # Ikke en hemmelighet: feilene er ting som "authentication_error" eller
@@ -37,19 +52,45 @@ def last_error() -> str | None:
 
 
 def provider() -> str | None:
-    """Hvilken leverandor er aktiv ut fra miljoet: 'anthropic', 'gemini' eller None.
-
-    Claude foretrekkes hvis begge nokler finnes (eksplisitt betalt valg)."""
+    """Aktiv leverandor ut fra miljoet. Gratis-veiene foerst, saa betalt."""
+    if os.getenv("GROQ_API_KEY"):
+        return "groq"
+    if os.getenv("OPENROUTER_API_KEY"):
+        return "openrouter"
     if os.getenv("ANTHROPIC_API_KEY"):
         return "anthropic"
     if os.getenv("GEMINI_API_KEY"):
         return "gemini"
+    if OLLAMA_URL:
+        return "ollama"
     return None
 
 
 def provider_label() -> str:
     """Menneskevennlig navn for UI."""
-    return {"anthropic": "Claude", "gemini": "Gemini (gratis)"}.get(provider() or "", "demo")
+    return {
+        "groq": "Groq (gratis)",
+        "openrouter": "OpenRouter (gratis)",
+        "anthropic": "Claude",
+        "gemini": "Gemini (gratis)",
+        "ollama": "Ollama (lokal)",
+    }.get(provider() or "", "demo")
+
+
+def _openai_compatible() -> tuple[str, str, str] | None:
+    """(base_url, modell, noekkel) for den aktive OpenAI-kompatible leverandoren."""
+    prov = provider()
+    if prov == "groq":
+        return "https://api.groq.com/openai/v1", GROQ_MODEL, os.getenv("GROQ_API_KEY", "")
+    if prov == "openrouter":
+        return (
+            "https://openrouter.ai/api/v1",
+            OPENROUTER_MODEL,
+            os.getenv("OPENROUTER_API_KEY", ""),
+        )
+    if prov == "ollama":
+        return f"{OLLAMA_URL.rstrip('/')}/v1", OLLAMA_MODEL, "ollama"
+    return None
 
 
 def has_llm() -> bool:
@@ -83,6 +124,46 @@ def _anthropic_text(system: str, user: str, *, model: str, max_tokens: int) -> s
         messages=[{"role": "user", "content": user}],
     )
     return "".join(b.text for b in resp.content if b.type == "text")
+
+
+def _openai_chat(system: str, user: str, *, max_tokens: int) -> str:
+    """OpenAI-kompatibel chat - dekker Groq, OpenRouter og Ollama.
+
+    Alle tre eksponerer POST /chat/completions med Bearer-noekkel. response_format
+    json_object ber om ren JSON; leverandorer som ikke stotter det ignorerer feltet,
+    og _extract_json plukker uansett ut JSON-en fra teksten."""
+    import httpx
+
+    conf = _openai_compatible()
+    if conf is None:
+        raise ValueError("ingen OpenAI-kompatibel leverandor aktiv")
+    base, model, key = conf
+
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "max_tokens": max_tokens,
+        "response_format": {"type": "json_object"},
+    }
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    resp = httpx.post(f"{base}/chat/completions", json=body, headers=headers, timeout=90)
+
+    # Noen modeller/leverandorer avviser response_format - prov en gang til uten.
+    if resp.status_code == 400:
+        body.pop("response_format", None)
+        resp = httpx.post(
+            f"{base}/chat/completions", json=body, headers=headers, timeout=90
+        )
+
+    resp.raise_for_status()
+    data = resp.json()
+    choices = data.get("choices") or []
+    if not choices:
+        raise ValueError(f"{provider_label()} ga ingen svar (mulig tom kvote)")
+    return (choices[0].get("message") or {}).get("content") or ""
 
 
 def _gemini_text(system: str, user: str, *, max_tokens: int) -> str:
@@ -178,13 +259,15 @@ def complete_json(system: str, user: str, *, model: str, max_tokens: int = 1500)
     global _LAST_ERROR
     prov = provider()
     if prov is None:
-        _LAST_ERROR = "ingen ANTHROPIC_API_KEY eller GEMINI_API_KEY i miljoet"
+        _LAST_ERROR = "ingen KI-nokkel i miljoet (GROQ/OPENROUTER/ANTHROPIC/GEMINI)"
         return None
     try:
         if prov == "anthropic":
             text = _anthropic_text(system, user, model=model, max_tokens=max_tokens)
-        else:
+        elif prov == "gemini":
             text = _gemini_text(system, user, max_tokens=max_tokens)
+        else:
+            text = _openai_chat(system, user, max_tokens=max_tokens)
         parsed = _extract_json(text)
         if parsed is None:
             _LAST_ERROR = f"{provider_label()} svarte ikke gyldig JSON"
@@ -205,12 +288,14 @@ def check_live() -> tuple[bool, str]:
     global _LAST_ERROR
     prov = provider()
     if prov is None:
-        return False, "ingen ANTHROPIC_API_KEY eller GEMINI_API_KEY i miljoet"
+        return False, "ingen KI-nokkel i miljoet (GROQ/OPENROUTER/ANTHROPIC/GEMINI)"
     try:
         if prov == "anthropic":
             _anthropic_text("", "ping", model=MODEL_JOURNALIST, max_tokens=4)
-        else:
+        elif prov == "gemini":
             _gemini_text("", "ping", max_tokens=4)
+        else:
+            _openai_chat("Svar med JSON.", "ping", max_tokens=8)
         _LAST_ERROR = None
         return True, "ok"
     except Exception as exc:  # noqa: BLE001
