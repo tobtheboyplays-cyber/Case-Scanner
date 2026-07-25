@@ -127,7 +127,27 @@ spesifikk at leseren skjonner hvilken sak det er. IKKE spoersmaalstitler av type
 «Hva betyr tallet i praksis for Stavanger?» - det er en mal, ikke en tittel. Ikke
 gjenta vinkeltypen i tittelen.
 
-DE TRE TITLENE MAA VAERE HELT ULIKE - ikke bare i ordlyd, men i hva de handler om:
+DE TRE TITLENE MAA VAERE HELT ULIKE - ikke bare i ordlyd, men i hva de handler om.
+
+Tenk slik: ett tall kan aapne mange forskjellige saker. Hver vinkel skal foreslaa
+SIN EGEN mulige forklaring eller konsekvens - ikke gjenta tallet med nye ord.
+
+  Faktum: «Gutter er 1,3 prosent mer voldelige enn i fjor.»
+  BRA (tre ulike spor, tre ulike saker):
+    1. Skjermtid og gaming - hva sier forskerne, og hva ser hjelpetjenesten?
+    2. Guttene faller ut av fritidsklubbene - hva skjedde med tilbudet?
+    3. Politiet endret registreringspraksis - er okningen ekte?
+  DAARLIG (samme sak tre ganger):
+    1. Gutter 1,3 prosent mer voldelige
+    2. Okning i vold blant gutter
+    3. Hva betyr 1,3 prosent for Stavanger?
+
+VIKTIG - hypotese, ikke paastand. «Videospill oedelegger unge gutter» er en
+paastand tallet IKKE dekker, og en tittel som den setter journalisten i knipe.
+Vinkelen skal peke paa noe som kan UNDERSOEKES, og risiko-feltet skal si hva som
+maa bekreftes foer den holder.
+
+Krav:
 1. Hver tittel skal hvile paa SITT EGET faktum fra KILDEGRUNNLAG. To vinkler som
    bygger paa samme tall er én vinkel skrevet to ganger.
 2. Bytter man om paa to av titlene, skal saken bli en annen. Blir den ikke det,

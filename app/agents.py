@@ -230,36 +230,74 @@ def write_draft(case: Case, editor: dict, angle: dict) -> dict:
     }
 
 
+# Hva et tall betyr i praksis avhenger av HVA det handler om. Uten dette ble
+# alle tre malvinklene varianter av «hva betyr tallet for Stavanger?».
+TEMA_SPOR: dict[str, tuple[str, str]] = {
+    "bolig og leie": ("leiemarkedet", "Eiendom Norge, en utleiemegler og Leieboerforeningen"),
+    "studentliv": ("studentboligene", "SiS og Studentparlamentet ved UiS"),
+    "jobb og okonomi": ("arbeidsmarkedet", "NAV Rogaland og NHO"),
+    "psykisk helse": ("helsekoeen", "kommuneoverlegen og fastlegevakta"),
+    "trygghet og kriminalitet": ("politiets ressurser", "politistasjonssjefen"),
+    "uteliv og kultur": ("utelivet", "bransjeforeningen og kommunens naeringsavdeling"),
+    "klima og miljo": ("klimaregnskapet", "kommunens klimaraadgiver"),
+    "trening og livsstil": ("folkehelsa", "folkehelsekoordinatoren i kommunen"),
+    "gaming og digitalt": ("skjermbruk blant unge", "en forsker paa feltet"),
+    "dating og relasjoner": ("hvordan unge lever", "en samfunnsforsker"),
+}
+TEMA_STANDARD = ("hva kommunen maa planlegge for", "kommunedirektoeren")
+
+
 def _fallback_angles(case: Case, editor: dict) -> list[dict]:
-    """Malbaserte vinkelforslag naar KI-en ikke er tilgjengelig. Tydelig merket."""
+    """Vinkelforslag naar KI-en er av. Tydelig merket «demo», men ikke tre
+    varianter av samme setning.
+
+    De tre hviler paa HVER SIN opplysning, saa valget mellom dem er ekte:
+      1. selve endringen  -> hva driver den?
+      2. sammenligningen  -> skiller stedet seg fra landet?
+      3. temaet           -> hva treffer den i praksis?
+
+    Merk hva disse IKKE gjor: de paastaar ingen aarsak. «Videospill oedelegger
+    unge gutter» er en hypotese, ikke et funn - og et verktoy som trykker den
+    som tittel setter journalisten i knipe. Malene peker paa hva som maa
+    UNDERSOEKES for aa finne aarsaken. Den ekte kreativiteten kommer fra
+    journalist-agenten naar en KI-noekkel er satt."""
     sted = "Stavanger" if case.geo == "lokal" else "Norge"
     kilder = [{"navn": case.data_source or "SSB", "hva": "tallet i saken", "url": case.data_url}]
-    tall = case.metric_value or ""
-    periode = case.metric_period or ""
+    tall = (case.metric_value or "").strip()
+    periode = (case.metric_period or "").strip()
+    emne, ringe = next(
+        (TEMA_SPOR[t] for t in case.topics if t in TEMA_SPOR), TEMA_STANDARD
+    )
+    endring = tall or "endringen"
 
-    # Malene henter inn det faktiske tallet slik at de tre iallfall peker paa
-    # hver sin del av funnet. De er fortsatt maler - merket "mal" og med lav
-    # styrke - men de skal ikke vaere tre varianter av «Hva betyr tallet?».
     maler = [
-        ("menneske",
-         f"De som merker {tall or 'endringen'} i {sted}".strip(),
-         "Finn én person som kjenner endringen paa kroppen.",
+        # 1) Aarsaken. Faktum: selve tallet.
+        ("uventet",
+         f"Ingen har forklart hvorfor {sted} fikk {endring}",
+         f"Ring {ringe} og faa dem til aa peke paa hva som driver tallet. "
+         f"Ikke ta imot «tilfeldig svingning» uten en begrunnelse.",
+         f"{case.title} ({periode})".strip() if periode else case.title),
+        # 2) Sammenligningen. Faktum: hvordan stedet ligger an mot andre.
+        ("motsetning",
+         f"{sted} mot resten av landet: hvem beveger seg mest?",
+         "Sett tallet ved siden av landet og nabokommunene i samme tabell. "
+         "Er avviket stort nok til aa vaere en sak i seg selv?",
          case.finding or case.title),
+        # 3) Konsekvensen. Faktum: temaet tallet treffer.
         ("konsekvens",
-         f"{sted} maa haandtere {tall or 'endringen'}"
-         + (f" fra {periode}" if periode else ""),
-         "Regn om endringen til kroner, koe eller tid.",
-         f"{tall} {periode}".strip() or case.finding or case.title),
-        ("naerhet",
-         f"Hvorfor {sted} skiller seg ut i {case.data_source or 'SSB-tallene'}",
-         "Ring kommunen og en fagperson om avviket fra landet.",
-         case.data_source or case.title),
+         f"Hva {endring} betyr for {emne} i {sted}",
+         f"Regn endringen om til noe konkret: plasser, koe, kroner eller tid. "
+         f"Sjekk med {ringe} om de har planlagt for den.",
+         f"Tema: {', '.join(case.topics) or 'ikke tagget'} · kilde: "
+         f"{case.data_source or 'SSB'}"),
     ]
     return [
         {
             "mode": "mal", "vinkel": vinkel, "title": tittel, "kort": kort,
             "headline_fact": faktum,
-            "styrke": 50, "risiko": "Laget uten KI - vurder selv om vinkelen baerer.",
+            "styrke": 45,
+            "risiko": "Laget uten KI-nokkel. Dette er et utgangspunkt, ikke en "
+                      "ferdig vinkel - journalisten maa finne saken selv.",
             "mangler": "", "kilder": kilder,
         }
         for vinkel, tittel, kort, faktum in maler

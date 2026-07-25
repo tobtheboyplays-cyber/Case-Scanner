@@ -5,6 +5,7 @@ Kjor:  uv run uvicorn app.main:app --reload
 
 from __future__ import annotations
 
+import contextlib
 import re
 import threading
 from calendar import monthrange
@@ -30,6 +31,7 @@ from app.storage import (
     approve_lead,
     arkiver,
     calendar_month,
+    dagskapasitet,
     decisions_map,
     gjenopprett,
     list_approved,
@@ -39,6 +41,8 @@ from app.storage import (
     save_scan,
     seen_map,
     set_plan,
+    sett_dagskapasitet,
+    timer_per_dag,
 )
 
 # Ikon per vinkel-inngang. Brukes i UI saa valget kan tas uten aa aapne noe.
@@ -189,6 +193,9 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
         "topic_trends": _case_topic_trends(cases),
         "kommende": kommende,
         "ai_mode": ai_mode,
+        # Grunnen hoerer hjemme ved siden av varselet, ikke nederst under
+        # «Kildestatus» der ingen leter naar noe ser rart ut.
+        "ai_feil": llm.last_error() if ai_mode == "llm-feilet" else "",
     }
     save_scan(payload)
     return payload
@@ -370,11 +377,24 @@ def plan_lead(
     start_date: str = Form(""),
     deadline: str = Form(""),
     stage: str = Form(""),
+    timer: str = Form(""),
     tilbake: str = Form("/godkjente"),
 ):
-    """Endre start, deadline og/eller stadium paa en sak som alt er godkjent."""
-    set_plan(key, start_date=start_date, deadline=deadline, stage=stage or None)
+    """Endre start, deadline, stadium og/eller timer per dag paa en godkjent sak."""
+    set_plan(
+        key, start_date=start_date, deadline=deadline,
+        stage=stage or None, timer=timer or None,
+    )
     return RedirectResponse(url=tilbake or "/godkjente", status_code=303)
+
+
+@app.post("/kalender/kapasitet")
+def endre_kapasitet(timer: str = Form(""), tilbake: str = Form("/kalender")):
+    """Hvor mange timer journalisten faktisk har paa en dag. Justerbart, fordi en
+    frilanser og en fast ansatt ikke har samme dag."""
+    with contextlib.suppress(TypeError, ValueError):
+        sett_dagskapasitet(float(timer.replace(",", ".")))
+    return RedirectResponse(url=tilbake or "/kalender", status_code=303)
 
 
 @app.post("/leads/{key:path}/reject")
@@ -433,6 +453,8 @@ def kalender(request: Request, ym: str = ""):
         year, month = today.year, today.month
 
     by_day = calendar_month(year, month)
+    dag_timer = timer_per_dag(by_day)
+    kapasitet = dagskapasitet()
     approved = list_approved()
     uplanlagt = [x for x in approved if not (x.get("_start") or x.get("_deadline"))]
 
@@ -449,6 +471,8 @@ def kalender(request: Request, ym: str = ""):
                 "iso": iso,
                 "today": date(year, month, d) == today,
                 "leads": by_day.get(iso, []),
+                "timer": dag_timer.get(iso, 0.0),
+                "overbooket": dag_timer.get(iso, 0.0) > kapasitet,
             }
         )
     while len(cells) % 7:
@@ -491,6 +515,9 @@ def kalender(request: Request, ym: str = ""):
             "uplanlagt": uplanlagt,
             "kommende": kommende,
             "planned_count": sum(len(v) for v in by_day.values()),
+            "kapasitet": kapasitet,
+            "maaned_timer": round(sum(dag_timer.values()), 1),
+            "overbookede_dager": sum(1 for t in dag_timer.values() if t > kapasitet),
             "stages": STAGES,
             "stage_labels": STAGE_LABELS,
             "version": __version__,

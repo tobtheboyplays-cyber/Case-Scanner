@@ -197,8 +197,8 @@ def test_ukjent_jobb_gir_404_med_forklaring(klient):
 def test_banner_varsler_nar_ki_er_av(klient):
     """Uten KI er vinklene faste maler. Det skal staa, ikke gjemmes."""
     html = klient.get("/").text
-    assert "KI-en er av" in html
-    assert "faste maler" in html
+    assert "KI-en er AV" in html
+    assert "maler, ikke journalistens" in html
 
 
 # ── Sveipearkiv paa lagrede utkast ───────────────────────────────────────────
@@ -380,3 +380,138 @@ def test_collect_all_melder_uten_aa_kreve_det(monkeypatch):
 
     sig = inspect.signature(collect_all)
     assert sig.parameters["si"].default is None
+
+
+# ── Kalenderens timebudsjett ─────────────────────────────────────────────────
+
+
+def test_timer_legges_sammen_per_dag(klient):
+    """Tre saker à tre timer på samme dag er ni timer - det skal synes."""
+    for i in range(3):
+        k = f"sak-{i}"
+        storage.approve_lead(k, {"title": f"Sak {i}", "key": k})
+        storage.set_plan(k, start_date="2026-08-03", deadline="2026-08-03", timer="3")
+
+    dager = storage.calendar_month(2026, 8)
+    assert storage.timer_per_dag(dager)["2026-08-03"] == 9.0
+
+
+def test_timer_fordeles_over_hele_spennet(klient):
+    storage.approve_lead(KEY, {"title": "Sak", "key": KEY})
+    storage.set_plan(KEY, start_date="2026-08-03", deadline="2026-08-05", timer="2.5")
+    timer = storage.timer_per_dag(storage.calendar_month(2026, 8))
+    assert timer == {"2026-08-03": 2.5, "2026-08-04": 2.5, "2026-08-05": 2.5}
+
+
+def test_ugyldige_timer_ignoreres_i_stedet_for_aa_kaste(klient):
+    """UI-et skal aldri låse seg på en skrivefeil - samme regel som datoene."""
+    storage.approve_lead(KEY, {"title": "Sak", "key": KEY})
+    storage.set_plan(KEY, start_date="2026-08-03", timer="3")
+    storage.set_plan(KEY, timer="tre timer")          # tull
+    assert storage.list_approved()[0]["_timer"] == 3.0
+    storage.set_plan(KEY, timer="2,5")                 # norsk komma
+    assert storage.list_approved()[0]["_timer"] == 2.5
+    storage.set_plan(KEY, timer="900")                 # over taket
+    assert storage.list_approved()[0]["_timer"] == storage.MAKS_TIMER
+
+
+def test_dagskapasitet_kan_justeres_og_taaler_soppel(klient):
+    assert storage.dagskapasitet() == storage.DAGSKAPASITET_STANDARD
+    assert storage.sett_dagskapasitet(6) == 6.0
+    assert storage.dagskapasitet() == 6.0
+    storage.meta_set("dagskapasitet", "ikke et tall")
+    assert storage.dagskapasitet() == storage.DAGSKAPASITET_STANDARD
+
+
+def test_kalenderen_merker_overbookede_dager(klient):
+    storage.sett_dagskapasitet(7.5)
+    for i in range(4):
+        k = f"full-{i}"
+        storage.approve_lead(k, {"title": f"Sak {i}", "key": k})
+        storage.set_plan(k, start_date="2026-08-10", deadline="2026-08-10", timer="3")
+
+    html = klient.get("/kalender", params={"ym": "2026-08"}).text
+    assert "er-full" in html            # ruta er merket i månedsrutenettet
+    assert "12" in html                 # 4 × 3 timer
+    assert "dag over" in html or "dager over" in html
+
+
+def test_kapasitet_endres_fra_kalenderen(klient):
+    r = klient.post("/kalender/kapasitet", data={"timer": "5"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert storage.dagskapasitet() == 5.0
+
+
+# ── At KI-veien faktisk gir ekte vinkler når nøkkelen er på plass ────────────
+
+
+def _sak():
+    from datetime import datetime
+
+    from app.models import Case
+
+    return Case(
+        key="k", title="Vold blant gutter opp 1,3 %", score=30, geo="lokal",
+        topics=["trygghet og kriminalitet"], angle="", why="", signals=[],
+        created_at=datetime.now(tz=UTC), kind="data",
+        finding="Anmeldte voldslovbrudd med gutteregistrert gjerningsperson i "
+                "Stavanger: 1,3 % opp fra i fjor. Hele landet: 0,2 % ned.",
+        metric_value="+1,3 %", metric_period="2025–2026",
+        data_source="SSB tabell 08487", data_url="https://www.ssb.no/statbank/table/08487",
+    )
+
+
+def test_journalisten_gir_tre_ulike_vinkler_nar_ki_svarer(monkeypatch):
+    """Med nøkkel skal vinklene komme fra modellen - tre ulike spor, ikke tre
+    omskrivninger av tallet."""
+    from app import agents
+
+    svar = {"angles": [
+        {"vinkel": "uventet", "title": "Skjermtid og gaming: hva sier hjelpetjenesten?",
+         "headline_fact": "+1,3 % i Stavanger", "kort": "k", "styrke": 70},
+        {"vinkel": "handling", "title": "Fritidsklubbene mistet støtte i fjor",
+         "headline_fact": "Hele landet gikk 0,2 % ned", "kort": "k", "styrke": 65},
+        {"vinkel": "motsetning", "title": "Endret politiet registreringspraksis?",
+         "headline_fact": "SSB tabell 08487", "kort": "k", "styrke": 60},
+    ]}
+    monkeypatch.setattr(agents.llm, "complete_json", lambda *a, **k: svar)
+
+    vinkler = agents.journalist_angles(_sak(), {})
+    assert len(vinkler) == 3
+    assert all(v["mode"] == "llm" for v in vinkler), "skal være merket som ekte KI"
+    assert len({v["title"] for v in vinkler}) == 3
+    assert len({v["headline_fact"] for v in vinkler}) == 3
+
+
+def test_ki_som_leverer_samme_faktum_to_ganger_gir_to_vinkler(monkeypatch):
+    """Beskjed er ingen garanti. To titler på samme tall er ett falskt valg."""
+    from app import agents
+
+    svar = {"angles": [
+        {"vinkel": "uventet", "title": "A", "headline_fact": "+1,3 % i Stavanger"},
+        {"vinkel": "konsekvens", "title": "B", "headline_fact": "+1,3 % i Stavanger"},
+        {"vinkel": "motsetning", "title": "C", "headline_fact": "Landet 0,2 % ned"},
+    ]}
+    monkeypatch.setattr(agents.llm, "complete_json", lambda *a, **k: svar)
+    assert len(agents.journalist_angles(_sak(), {})) == 2
+
+
+def test_uten_nokkel_faller_vi_til_maler_som_fortsatt_er_ulike(monkeypatch):
+    from app import agents
+
+    monkeypatch.setattr(agents.llm, "complete_json", lambda *a, **k: None)
+    vinkler = agents.journalist_angles(_sak(), {})
+    assert all(v["mode"] == "mal" for v in vinkler)
+    assert len({v["title"] for v in vinkler}) == 3
+    assert len({v["headline_fact"] for v in vinkler}) == 3
+    # Malene skal peke på hva som må undersøkes, ikke påstå en årsak.
+    assert all("ødelegger" not in v["title"].lower() for v in vinkler)
+
+
+def test_prompten_krever_tre_ulike_spor():
+    from app import prompts
+
+    p = prompts.JOURNALIST_ANGLES_SYSTEM
+    assert "SITT EGET faktum" in p
+    assert "hypotese, ikke paastand" in p.lower() or "hypotese" in p.lower()
+    assert "FORSLAG TIL TITTEL" in p

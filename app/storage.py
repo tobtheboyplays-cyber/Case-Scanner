@@ -66,8 +66,36 @@ def _connect() -> sqlite3.Connection:
     # en time med arbeid som er borte for godt.
     if "arkivert_at" not in cols:
         conn.execute("ALTER TABLE approved ADD COLUMN arkivert_at TEXT")
+    # Timer per dag saken krever. Kalenderen legger dem sammen per dag, saa
+    # journalisten ser at fire saker med tre timer hver ikke faar plass i én dag.
+    if "timer_per_dag" not in cols:
+        conn.execute(
+            f"ALTER TABLE approved ADD COLUMN timer_per_dag REAL NOT NULL "
+            f"DEFAULT {TIMER_STANDARD}"
+        )
     conn.commit()
     return conn
+
+
+# Antatt tid per sak per arbeidsdag naar journalisten ikke har sagt noe annet.
+TIMER_STANDARD = 2.0
+# Hvor mye han faktisk kan jobbe paa en dag. Justerbart - en frilanser og en
+# fast ansatt har ikke samme dag.
+DAGSKAPASITET_STANDARD = 7.5
+MAKS_TIMER = 24.0
+
+
+def dagskapasitet() -> float:
+    try:
+        return max(0.5, min(MAKS_TIMER, float(meta_get("dagskapasitet", ""))))
+    except (TypeError, ValueError):
+        return DAGSKAPASITET_STANDARD
+
+
+def sett_dagskapasitet(timer: float) -> float:
+    ny = max(0.5, min(MAKS_TIMER, float(timer)))
+    meta_set("dagskapasitet", f"{ny:g}")
+    return ny
 
 
 def save_scan(payload: dict) -> None:
@@ -135,18 +163,19 @@ def list_approved(*, arkiverte: bool = False) -> list[dict]:
     try:
         hvor = "arkivert_at IS NOT NULL" if arkiverte else "arkivert_at IS NULL"
         rows = conn.execute(
-            "SELECT payload, created_at, start_date, deadline, stage, arkivert_at "
-            f"FROM approved WHERE {hvor} "
+            "SELECT payload, created_at, start_date, deadline, stage, arkivert_at, "
+            f"timer_per_dag FROM approved WHERE {hvor} "
             "ORDER BY COALESCE(deadline, start_date, created_at) ASC"
         ).fetchall()
         out = []
-        for payload, created, start, deadline, stage, arkivert in rows:
+        for payload, created, start, deadline, stage, arkivert, timer in rows:
             lead = json.loads(payload)
             lead["_approved_at"] = created
             lead["_start"] = start or ""
             lead["_deadline"] = deadline or ""
             lead["_stage"] = stage or "ide"
             lead["_arkivert"] = arkivert or ""
+            lead["_timer"] = float(timer if timer is not None else TIMER_STANDARD)
             out.append(lead)
         return out
     finally:
@@ -202,6 +231,7 @@ def set_plan(
     start_date: str | None = None,
     deadline: str | None = None,
     stage: str | None = None,
+    timer: float | str | None = None,
 ) -> None:
     """Sett startdato, deadline og/eller stadium for en godkjent sak.
 
@@ -235,9 +265,28 @@ def set_plan(
             conn.execute("UPDATE approved SET deadline = ? WHERE key = ?", (d or None, key))
         if stage is not None and stage in STAGES:
             conn.execute("UPDATE approved SET stage = ? WHERE key = ?", (stage, key))
+        if timer is not None and str(timer).strip():
+            # Ugyldig tall ignoreres i stedet for aa kaste - samme regel som
+            # datoene. UI-et skal aldri laase seg paa en skrivefeil.
+            try:
+                t = max(0.0, min(MAKS_TIMER, float(str(timer).replace(",", ".").strip())))
+            except ValueError:
+                t = None
+            if t is not None:
+                conn.execute(
+                    "UPDATE approved SET timer_per_dag = ? WHERE key = ?", (t, key)
+                )
         conn.commit()
     finally:
         conn.close()
+
+
+def timer_per_dag(dager: dict[str, list[dict]]) -> dict[str, float]:
+    """Sum timer per dag. Fire saker à tre timer er tolv timer - det skal synes."""
+    return {
+        iso: round(sum(float(x.get("_timer") or 0) for x in saker), 2)
+        for iso, saker in dager.items()
+    }
 
 
 def calendar_month(year: int, month: int) -> dict[str, list[dict]]:

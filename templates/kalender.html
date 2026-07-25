@@ -40,6 +40,19 @@
 
   <!-- Månedsrutenett -->
   <section class="panel cal-panel">
+    {# Hvor mye tid du har per dag er ikke en universell sannhet - den justeres. #}
+    <form class="kap-linje" method="post" action="/kalender/kapasitet">
+      <input type="hidden" name="tilbake" value="/kalender?ym={{ '%04d-%02d'|format(year, month) }}" />
+      <span class="kap-t">Arbeidsdag</span>
+      <input class="kap-felt" type="number" name="timer" min="0.5" max="24" step="0.5"
+             value="{{ kapasitet }}" aria-label="Timer du kan jobbe per dag" />
+      <span class="kap-t">timer</span>
+      <button class="btn-small" type="submit">Lagre</button>
+      <span class="kap-sum">
+        {{ maaned_timer|round(1) }} t planlagt i {{ month_name }}{% if overbookede_dager %} ·
+        <strong class="kap-varsel">{{ overbookede_dager }} dag{{ '' if overbookede_dager == 1 else 'er' }} over</strong>{% endif %}
+      </span>
+    </form>
     <div class="cal-weekdays" aria-hidden="true">
       <span>man</span><span>tir</span><span>ons</span><span>tor</span>
       <span>fre</span><span class="we">lør</span><span class="we">søn</span>
@@ -51,9 +64,11 @@
           {% if cell is none %}
             <div class="cal-cell cal-empty" aria-hidden="true"></div>
           {% else %}
-            <a class="cal-cell{{ ' is-today' if cell.today }}{{ ' has-leads' if cell.leads }}"
+            {# Timetallet i ruta er hele poenget med aa se en maaned: du ser med
+               én gang hvilke dager som er fulle, uten aa aapne noen av dem. #}
+            <a class="cal-cell{{ ' is-today' if cell.today }}{{ ' has-leads' if cell.leads }}{{ ' er-full' if cell.overbooket }}"
                href="#dag-{{ cell.iso }}"
-               aria-label="{{ cell.day }}. {{ month_name }}{% if cell.leads %}, {{ cell.leads|length }} sak{{ '' if cell.leads|length == 1 else 'er' }}{% endif %}">
+               aria-label="{{ cell.day }}. {{ month_name }}{% if cell.leads %}, {{ cell.leads|length }} sak{{ '' if cell.leads|length == 1 else 'er' }}, {{ cell.timer|round(1) }} timer{% if cell.overbooket %} — mer enn du har{% endif %}{% endif %}">
               <span class="cal-daynum">{{ cell.day }}</span>
               {% if cell.leads %}
                 <span class="cal-bands">
@@ -62,6 +77,9 @@
                   {% endfor %}
                   {% if cell.leads|length > 3 %}<i class="cal-more">+{{ cell.leads|length - 3 }}</i>{% endif %}
                 </span>
+                {% if cell.timer %}
+                <span class="cal-timer">{{ cell.timer|round(1)|int if cell.timer == cell.timer|round(0) else cell.timer|round(1) }}t</span>
+                {% endif %}
               {% endif %}
             </a>
           {% endif %}
@@ -97,7 +115,17 @@
         <section class="panel day-panel" id="dag-{{ cell.iso }}">
           <div class="panel-head">
             <h2>{{ cell.day }}. {{ month_name }}</h2>
-            <span class="panel-sub">{{ cell.leads|length }} sak{{ '' if cell.leads|length == 1 else 'er' }}</span>
+            <span class="panel-sub">
+              {{ cell.leads|length }} sak{{ '' if cell.leads|length == 1 else 'er' }} ·
+              <strong class="{{ 'dag-over' if cell.overbooket else 'dag-ok' }}">
+                {{ cell.timer|round(1) }} av {{ kapasitet }} timer</strong>
+              {% if cell.overbooket %} — mer enn du rekker{% endif %}
+            </span>
+          </div>
+          {# Ett blikk: hvor full er dagen? Baren tar hensyn til at den kan gaa
+             over 100 % - da er det nettopp det som er poenget aa se. #}
+          <div class="dag-bar{{ ' dag-bar-over' if cell.overbooket }}">
+            <span style="width: {{ [ (cell.timer / kapasitet * 100) if kapasitet else 0, 100 ]|min|round|int }}%"></span>
           </div>
 
           {% for lead in cell.leads %}
@@ -111,7 +139,7 @@
             <a class="dag-midt" href="#dag-{{ lead._start }}">
               <span class="dot-stage stage-bg-{{ lead._stage or 'ide' }}" aria-hidden="true"></span>
               <span class="dag-midt-t">{{ draft.title or lead.title }}</span>
-              <span class="dag-midt-m">i arbeid · frist {{ lead._deadline or '—' }}</span>
+              <span class="dag-midt-m">{{ lead._timer|round(1) }} t · frist {{ lead._deadline or '—' }}</span>
             </a>
             {% else %}
             <article class="day-lead">
@@ -189,6 +217,11 @@
                       <option value="{{ st }}"{{ ' selected' if (lead._stage or 'ide') == st }}>{{ stage_labels[st] }}</option>
                     {% endfor %}
                   </select>
+                </label>
+                <label class="fld fld-timer">
+                  <span>Timer/dag</span>
+                  <input type="number" name="timer" min="0" max="24" step="0.5"
+                         value="{{ lead._timer|round(1) }}" />
                 </label>
                 <button type="submit" class="btn-small">Lagre</button>
               </form>

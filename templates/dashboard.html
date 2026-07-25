@@ -36,17 +36,22 @@
    ikke gjemmes bak en liten «demo»-brikke. #}
 {% if data and data.ai_mode and data.ai_mode != 'llm' %}
 <section class="ki-av">
-  <p class="ki-av-h">⚠️ KI-en er av — vinklene under er faste maler</p>
+  <p class="ki-av-h">⚠️ KI-en er AV — vinklene under er maler, ikke journalistens</p>
   <p class="ki-av-b">
     {% if data.ai_mode == 'llm-feilet' %}
-      Nøkkelen finnes, men kallet feilet. Grunnen står nederst under «Kildestatus».
+      Nøkkelen finnes, men kallet feilet:
+      <span class="ki-av-feil">{{ data.ai_feil or 'ukjent grunn — se «Kildestatus» nederst' }}</span>
     {% elif data.ai_mode == 'av' %}
       KI-arbeidsflyten er slått av (<code>CASE_RADAR_ENABLE_AI=false</code>).
     {% else %}
       Ingen KI-nøkkel er satt på serveren.
     {% endif %}
-    Journalisten skriver først ekte, unike vinkler når en nøkkel er på plass:
-    <code>bash deploy.sh --ask</code> på serveren.
+  </p>
+  <p class="ki-av-b">
+    Derfor ligner de tre forslagene på hverandre — malene kan bare peke på hva
+    som må undersøkes. Ekte, ulike vinkler kommer først når journalist-agenten
+    kjører. Sett nøkkelen på serveren:
+    <code>cd ~/case-radar &amp;&amp; bash deploy.sh --ask</code>
   </p>
 </section>
 {% endif %}

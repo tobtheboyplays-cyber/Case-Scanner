@@ -930,3 +930,100 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
   .radar-arm { animation: none; background: conic-gradient(from 0deg, rgba(78,161,255,.4), transparent 70deg); }
   .skann-fyll { transition: none; }
 }
+
+/* ── Kalender: timebudsjett ──────────────────────────────────────────────────
+   Tre saker à tre timer på samme dag er ni timer. Det skal synes i månedsruta,
+   ikke først når dagen er i gang. */
+.kap-linje {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid #202b36;
+  font-size: 12.5px;
+}
+.kap-t { color: #8fa2b6; }
+.kap-felt {
+  width: 68px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #141c25;
+  border: 1px solid #2a3542;
+  color: #e8eef5;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.kap-sum { margin-left: auto; color: #7d8fa3; font-size: 11.5px; }
+.kap-varsel { color: #ffb3ad; }
+
+/* Timetallet i månedsruta. Blir dagen for full, farges den. */
+.cal-timer {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #7d8fa3;
+  font-variant-numeric: tabular-nums;
+}
+.cal-cell { position: relative; }
+.cal-cell.er-full { box-shadow: inset 0 0 0 1px #7a2f2f; }
+.cal-cell.er-full .cal-timer { color: #ff9d95; }
+
+/* Dagens fyllingsgrad i dagpanelet. */
+.dag-bar {
+  height: 5px;
+  border-radius: 4px;
+  background: #1c2531;
+  overflow: hidden;
+  margin: 0 0 13px;
+}
+.dag-bar span { display: block; height: 100%; border-radius: 4px; background: #4ea1ff; }
+.dag-bar-over span { background: #d4574f; }
+.dag-ok { color: #96e5b0; }
+.dag-over { color: #ffb3ad; }
+
+.fld-timer input { width: 88px; }
+
+/* Grunnen til at KI-en er av hører hjemme ved siden av varselet. */
+.ki-av-feil {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #191308;
+  color: #ffc98a;
+  font-size: .95em;
+}
+
+/* ── Dagruta: dagtall, striper og timetall får hver sin rad ──────────────────
+   Da aspect-ratio 1/1 møtte tre striper PLUSS et timetall, vokste rutene med
+   saker seg høyere enn de tomme og hele rutenettet mistet takten. Nå er høyden
+   fast og innholdet stablet, så en full dag ser lik ut som en tom - bortsett
+   fra det som faktisk skal skille dem. */
+.cal-cell {
+  aspect-ratio: auto;
+  min-height: 58px;
+  justify-content: flex-start;
+  padding: 6px 3px 5px;
+  gap: 2px;
+}
+.cal-daynum { line-height: 1.1; }
+.cal-bands { margin-top: auto; }
+.cal-timer {
+  position: static;
+  margin-top: 2px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #8fa2b6;
+  font-variant-numeric: tabular-nums;
+}
+.cal-cell.er-full .cal-timer { color: #ff9d95; }
+@media (min-width: 900px) { .cal-cell { min-height: 74px; } }
+
+/* Fast høyde på alle ruter: en dag med saker og en tom dag skal stå på linje. */
+.cal-cell { height: 72px; min-height: 0; overflow: hidden; }
+.cal-cell.cal-empty { height: 72px; }
+@media (min-width: 900px) { .cal-cell { height: 84px; } }
