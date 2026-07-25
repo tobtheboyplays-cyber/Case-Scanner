@@ -40,17 +40,29 @@ class Jobb:
         self._laas = threading.Lock()
         self._fase = 0
         self._fase_start = time.monotonic()
+        self._siste = ""
         self.status = "kjorer"          # kjorer | ferdig | feilet
         self.resultat: Any = None
         self.feil = ""
         self.ferdig_tid = 0.0
 
     # -- skrives av arbeideren --------------------------------------------
-    def fase(self, nr: int) -> None:
+    def fase(self, nr: int, tekst: str = "") -> None:
         with self._laas:
             if nr > self._fase:
                 self._fase = min(nr, len(self.faser) - 1)
                 self._fase_start = time.monotonic()
+                self._siste = ""
+        if tekst:
+            self.notat(tekst)
+
+    def notat(self, tekst: str) -> None:
+        """Én linje om hva som skjer NAA. Vises under fasen i UI-et.
+
+        Prosenten er et anslag; dette er ikke. Ser brukeren «SSB-soek: gikk
+        gjennom katalogside 3 av 127», vet han at noe faktisk beveger seg."""
+        with self._laas:
+            self._siste = tekst.strip()[:120]
 
     def ferdig(self, resultat: Any = None) -> None:
         with self._laas:
@@ -68,9 +80,11 @@ class Jobb:
     def tilstand(self) -> dict:
         with self._laas:
             if self.status == "ferdig":
-                return {"status": "ferdig", "pct": 100, "tekst": "Ferdig", "feil": ""}
+                return {"status": "ferdig", "pct": 100, "tekst": "Ferdig",
+                        "siste": self._siste, "feil": ""}
             if self.status == "feilet":
-                return {"status": "feilet", "pct": 100, "tekst": "Stoppet", "feil": self.feil}
+                return {"status": "feilet", "pct": 100, "tekst": "Stoppet",
+                        "siste": self._siste, "feil": self.feil}
 
             start_pct, tekst, antatt = self.faser[self._fase]
             neste_pct = (
@@ -81,7 +95,8 @@ class Jobb:
             # taket. Da kan ikke baren staa og late som den er ferdig.
             andel = min(1.0, gaatt / antatt) if antatt > 0 else 1.0
             pct = start_pct + (neste_pct - start_pct) * andel * 0.9
-            return {"status": "kjorer", "pct": int(pct), "tekst": tekst, "feil": ""}
+            return {"status": "kjorer", "pct": int(pct), "tekst": tekst,
+                    "siste": self._siste, "feil": ""}
 
 
 _JOBBER: dict[str, Jobb] = {}

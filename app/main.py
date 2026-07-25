@@ -89,9 +89,21 @@ def kortkilde(navn: str) -> str:
 templates.env.filters["kortkilde"] = kortkilde
 
 
-def run_scan() -> dict:
-    """Hent kilder, bygg caser + plan, lagre og returner resultatet."""
-    signals, ssb_cases, status = collect_all()
+def run_scan(jobb: jobs.Jobb | None = None) -> dict:
+    """Hent kilder, bygg caser + plan, lagre og returner resultatet.
+
+    `jobb` er valgfri. Er den satt, meldes framdrift underveis slik at UI-et kan
+    vise hva som faktisk skjer i de 40-60 sekundene skannet tar - i stedet for at
+    journalisten sitter og ser paa den samme skjermen og lurer paa om noe henger."""
+    def steg(nr: int, tekst: str = "") -> None:
+        if jobb is not None:
+            jobb.fase(nr, tekst)
+
+    def si(tekst: str) -> None:
+        if jobb is not None:
+            jobb.notat(tekst)
+
+    signals, ssb_cases, status = collect_all(si)
 
     # Grasrot-leads (Trends/Reddit) klynges; SSB-leads er ferdige.
     grassroots = build_cases(signals)  # tagger signals med geo/tema in-place
@@ -102,8 +114,10 @@ def run_scan() -> dict:
     cases = ssb_cases + grassroots
 
     # Originalitetssjekk: har noen allerede skrevet om dette?
+    steg(1)
     n_green = 0
-    for c in cases:
+    for i, c in enumerate(cases, 1):
+        si(f"Sjekker dekning {i} av {len(cases)}: {c.title[:60]}")
         cov = coverage.check(c.coverage_query or c.title)
         c.coverage_status = cov["status"]
         c.coverage_examples = cov["examples"]
@@ -118,6 +132,7 @@ def run_scan() -> dict:
     # Redaksjonell KI-arbeidsflyt: analytiker -> redaktor -> journalist.
     ai_mode = "av"
     if ENABLE_AI:
+        steg(2, "Analytiker plukker ut de sterkeste funnene")
         ai_mode = run_workflow(cases)
         if ai_mode == "llm":
             status.append(f"KI-arbeidsflyt: ekte KI ({llm.provider_label()}) ✓")
@@ -130,6 +145,7 @@ def run_scan() -> dict:
 
     # Forsprang: hva SSB slipper de neste ukene. Egen try - en dod feed skal aldri
     # velte et skann.
+    steg(3, "Henter SSBs publiseringskalender")
     try:
         kommende, kal_status = ssb_kalender.collect()
         status.extend(kal_status)
@@ -216,9 +232,23 @@ def dashboard(request: Request, apen: str = ""):
     )
 
 
+# Skannet tar 40-60 sekunder. Tidene er maalt paa ekte kjoringer, ikke gjettet.
+SKANN_FASER: list[tuple[int, str, float]] = [
+    (2, "Henter kilder", 30.0),
+    (46, "Sjekker om noen allerede har skrevet om det", 14.0),
+    (70, "Redaktør og journalist vurderer funnene", 22.0),
+    (92, "Rangerer og lagrer", 4.0),
+]
+
+
 @app.post("/scan")
-def scan():
-    run_scan()
+def scan(js: str = Form("")):
+    """Start et skann. Med JavaScript faar UI-et en jobb-id og viser skjermbilde
+    med framdrift; uten JS venter vi som foer og omdirigerer."""
+    jobb = jobs.start(SKANN_FASER, run_scan)
+    if js:
+        return JSONResponse({"jobb": jobb.id})
+    jobs.vent(jobb, 240)
     return RedirectResponse(url="/", status_code=303)
 
 

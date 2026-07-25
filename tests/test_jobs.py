@@ -315,3 +315,68 @@ def test_kortkilde_beholder_tabellnummeret():
     assert kortkilde("SSB (befolkning, 07459)") == "SSB tabell 07459"
     assert kortkilde("Stavanger Aftenblad") == "Stavanger Aftenblad"
     assert kortkilde("") == ""
+
+
+# ── Skanneskjermen ───────────────────────────────────────────────────────────
+
+
+def test_skann_med_js_svarer_med_en_gang(klient, monkeypatch):
+    """Skannet tar 40-60 sekunder. POST-en skal ikke holde på brukeren så lenge."""
+    import app.main as m
+
+    monkeypatch.setattr(m, "run_scan", lambda jobb=None: {"cases": []})
+    r = klient.post("/scan", data={"js": "1"})
+    assert r.status_code == 200
+    assert _vent(klient, r.json()["jobb"])["status"] == "ferdig"
+
+
+def test_skann_uten_js_omdirigerer_som_for(klient, monkeypatch):
+    import app.main as m
+
+    monkeypatch.setattr(m, "run_scan", lambda jobb=None: {"cases": []})
+    r = klient.post("/scan", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/"
+
+
+def test_skannet_melder_hvilken_kilde_som_jobber(klient, monkeypatch):
+    """Prosenten er et anslag. Kildenavnet er det ikke - det er sant."""
+    import app.main as m
+
+    def falskt_skann(jobb=None):
+        jobb.fase(1, "Sjekker dekning 3 av 15: Boligprisene i Stavanger")
+        time.sleep(0.25)
+        return {"cases": []}
+
+    monkeypatch.setattr(m, "run_scan", falskt_skann)
+    jobb_id = klient.post("/scan", data={"js": "1"}).json()["jobb"]
+    for _ in range(40):
+        s = klient.get(f"/jobb/{jobb_id}").json()
+        if s.get("siste"):
+            assert "Boligprisene i Stavanger" in s["siste"]
+            assert s["tekst"] == "Sjekker om noen allerede har skrevet om det"
+            return
+        time.sleep(0.05)
+    raise AssertionError("statuslinja kom aldri fram")
+
+
+def test_feilet_skann_sier_hva_som_gikk_galt(klient, monkeypatch):
+    import app.main as m
+
+    def kraesj(jobb=None):
+        raise RuntimeError("SSB svarte ikke")
+
+    monkeypatch.setattr(m, "run_scan", kraesj)
+    s = _vent(klient, klient.post("/scan", data={"js": "1"}).json()["jobb"])
+    assert s["status"] == "feilet"
+    assert "SSB svarte ikke" in s["feil"]
+
+
+def test_collect_all_melder_uten_aa_kreve_det(monkeypatch):
+    """`si` er valgfri - uten den skal alt oppføre seg nøyaktig som før."""
+    import inspect
+
+    from app.collectors import collect_all
+
+    sig = inspect.signature(collect_all)
+    assert sig.parameters["si"].default is None

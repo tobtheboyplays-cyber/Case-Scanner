@@ -23,7 +23,7 @@
   <div class="top-actions">
     <a class="btn-ghost" href="/kalender">🗓 Kalender</a>
     <a class="btn-approved-link" href="/godkjente">📁 Lagret{% if approved_count %} ({{ approved_count }}){% endif %}</a>
-    <form method="post" action="/scan"><button type="submit" class="btn-scan">🛰 Skann nå</button></form>
+    <form method="post" action="/scan" data-skann><button type="submit" class="btn-scan">🛰 Skann nå</button></form>
     <p class="last-scan">{% if scanned_at %}Sist skannet: {{ scanned_at }}
       {% if data and data.ai_mode %}· KI: {{ 'på' if data.ai_mode == 'llm' else 'AV' }}{% endif %}
       {% else %}Ikke skannet ennå{% endif %}</p>
@@ -422,6 +422,22 @@
   <span class="foot-right">Case-radar v{{ version }} · bruk treff som tips, ikke fasit</span>
 </footer>
 
+<!-- Skanneskjerm. Et skann tar 40-60 sekunder; foer dette sto journalisten og
+     saa paa den samme siden uten et eneste tegn paa at noe skjedde. -->
+<div id="skann-skjerm" class="skann-skjerm" hidden role="dialog" aria-modal="true"
+     aria-labelledby="skann-tittel">
+  <div class="skann-kort">
+    <div class="radar" aria-hidden="true"><span class="radar-arm"></span></div>
+    <h2 id="skann-tittel" class="skann-fase">Starter skann …</h2>
+    <div class="skann-spor"><div class="skann-fyll" style="width:0%"></div></div>
+    <p class="skann-pct"><span>0</span>&nbsp;%</p>
+    <p class="skann-siste" aria-live="polite"></p>
+    <p class="skann-hint">Henter fra SSB, sjekker hva som allerede er skrevet, og
+      lar redaktøren vurdere funnene. Tar vanligvis under ett minutt.</p>
+    <button type="button" class="skann-lukk" hidden>Lukk</button>
+  </div>
+</div>
+
 <!-- Framdrift for utkast. Ligger nede til venstre og er skjult til noe faktisk skjer. -->
 <div id="framdrift" class="framdrift" hidden role="status" aria-live="polite">
   <div class="fd-topp">
@@ -503,6 +519,73 @@
           knapp.disabled = false;
           knapp.textContent = '✍️ Prøv igjen';
         });
+    }
+  })();
+
+  /* Skanneskjermen. Samme jobbmotor som utkastet, men et skann tar 40-60
+     sekunder - da holder det ikke med en liten boks i hjornet. */
+  (function () {
+    var skjerm = document.getElementById('skann-skjerm');
+    if (!skjerm) { return; }
+    var fase = skjerm.querySelector('.skann-fase');
+    var fyll = skjerm.querySelector('.skann-fyll');
+    var pct = skjerm.querySelector('.skann-pct span');
+    var siste = skjerm.querySelector('.skann-siste');
+    var lukk = skjerm.querySelector('.skann-lukk');
+
+    lukk.addEventListener('click', function () { skjerm.hidden = true; });
+
+    function tegn(s) {
+      fase.textContent = s.tekst;
+      pct.textContent = Math.round(s.pct);
+      fyll.style.width = Math.max(2, Math.min(100, s.pct)) + '%';
+      siste.textContent = s.siste || '';
+    }
+
+    document.querySelectorAll('form[data-skann]').forEach(function (form) {
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        skjerm.hidden = false;
+        skjerm.classList.remove('skann-feil');
+        lukk.hidden = true;
+        tegn({ tekst: 'Starter skann …', pct: 2, siste: '' });
+
+        var d = new FormData(form);
+        d.append('js', '1');
+        fetch(form.action, { method: 'POST', body: d })
+          .then(function (r) { return r.json(); })
+          .then(function (svar) {
+            if (!svar.jobb) { throw new Error('Fikk ingen jobb tilbake'); }
+            folg(svar.jobb);
+          })
+          .catch(function (e) { stopp('Klarte ikke å starte: ' + e.message); });
+      });
+    });
+
+    function stopp(melding) {
+      skjerm.classList.add('skann-feil');
+      fase.textContent = melding;
+      fyll.style.width = '100%';
+      lukk.hidden = false;
+    }
+
+    function folg(id) {
+      fetch('/jobb/' + id)
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          if (s.status === 'kjorer') {
+            tegn(s);
+            setTimeout(function () { folg(id); }, 900);
+            return;
+          }
+          if (s.status === 'ferdig') {
+            tegn({ tekst: 'Ferdig — henter resultatet', pct: 100, siste: '' });
+            window.location.href = '/';
+            return;
+          }
+          stopp(s.feil || 'Skannet stoppet.');
+        })
+        .catch(function () { stopp('Mistet kontakten med serveren.'); });
     }
   })();
 

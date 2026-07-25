@@ -837,3 +837,96 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
   .dag-midt { flex-wrap: wrap; row-gap: 2px; }
   .dag-midt-m { flex: 1 1 100%; padding-left: 17px; }
 }
+
+/* ── Skanneskjerm ────────────────────────────────────────────────────────────
+   Et skann tar 40-60 sekunder. Før dette sto journalisten og så på den samme
+   siden uten et eneste tegn på at noe skjedde - og trykket gjerne igjen. */
+.skann-skjerm {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(7, 11, 18, .92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.skann-skjerm[hidden] { display: none; }
+.skann-kort {
+  width: min(340px, 100%);
+  padding: 26px 22px 22px;
+  border-radius: 18px;
+  background: #10151c;
+  border: 1px solid #2a3542;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
+  text-align: center;
+}
+
+/* Radaren snurrer så lenge noe faktisk kjører - den er ikke pynt, den er
+   signalet om at prosessen lever. */
+.radar {
+  width: 66px; height: 66px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  border: 1px solid #2a3542;
+  background:
+    radial-gradient(circle, rgba(78,161,255,.14) 0%, transparent 62%),
+    repeating-radial-gradient(circle, transparent 0 10px, rgba(42,53,66,.7) 10px 11px);
+  position: relative;
+  overflow: hidden;
+}
+.radar-arm {
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(from 0deg, rgba(78,161,255,.55), transparent 70deg);
+  animation: sveip 1.7s linear infinite;
+}
+@keyframes sveip { to { transform: rotate(360deg); } }
+
+.skann-fase { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.35; }
+.skann-spor {
+  margin: 14px 0 7px;
+  height: 6px;
+  border-radius: 4px;
+  background: #1c2531;
+  overflow: hidden;
+}
+.skann-fyll {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #3d7fd6, #4ea1ff);
+  transition: width .7s ease;
+}
+.skann-pct { margin: 0; font-size: 12.5px; color: #9fb3c8; font-variant-numeric: tabular-nums; }
+.skann-siste {
+  margin: 11px 0 0;
+  min-height: 2.6em;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #8fa6bd;
+  word-break: break-word;
+}
+.skann-hint { margin: 12px 0 0; font-size: 10.5px; line-height: 1.45; color: #6f8195; }
+.skann-lukk {
+  margin-top: 14px;
+  padding: 9px 18px;
+  border-radius: 10px;
+  background: #1c2531;
+  border: 1px solid #2f3d4c;
+  color: #dbe4ee;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.skann-lukk[hidden] { display: none; }
+
+.skann-skjerm.skann-feil .skann-fase { color: #ffb3ad; }
+.skann-skjerm.skann-feil .skann-fyll { background: #d4574f; }
+.skann-skjerm.skann-feil .radar-arm { animation: none; background: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-arm { animation: none; background: conic-gradient(from 0deg, rgba(78,161,255,.4), transparent 70deg); }
+  .skann-fyll { transition: none; }
+}
