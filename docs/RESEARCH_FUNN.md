@@ -84,3 +84,62 @@ fortsatt kjører.
 SSBs API-er er åpne, gratis og krever **ingen nøkkel**. PxWebApi v2 gir hele
 Statistikkbanken inkludert kommunenivå, CC BY 4.0. Verktøyet trenger altså ingen
 credential-håndtering for datakilden — bare for KI-en.
+
+---
+
+# Research nr. 2: kilder som gir forsprang (25.07.2026)
+
+110 agenter, samme adversarielle verifisering.
+
+## Implementert: SSBs publiseringskalender ⭐
+
+**Dette er den eneste kilden i verktøyet som varsler om noe som ikke har skjedd enda.**
+
+`https://www.ssb.no/rss/statkal` — åpen, gratis, ingen nøkkel. 31 dagers horisont.
+Verifisert live av meg selv: HTTP 200, 54 framtidsdaterte publiseringer.
+
+Feeden har en egen namespace (`http://www.ssb.no/ns/ssbrss`) som bærer planlagt dato,
+kortnavn, emne — **og navn, telefon og e-post til statistikeren som eier tallet**.
+Ofte flere per publisering.
+
+Journalisten får ikke tallet tidlig (embargo til kl. 08.00 hverdager), men han får tid
+til å forberede saken og ringe kilden. Det er der forspranget ligger.
+
+→ **Implementert:** `collectors/ssb_kalender.py` + «⏳ Kommer snart»-panel øverst på
+radaren, vektet etter emne (arbeid/priser/bolig høyest), lokale nøkkelord og hvor nært
+slippet er. Telefonnumre er klikkbare på mobil.
+
+*Merk:* researchen oppga feil namespace-URI og en flat kontaktstruktur. Begge deler var
+gale — jeg fant det ved å teste mot den ekte feeden. Det er derfor jeg verifiserer selv
+i stedet for å kode etter en oppsummering.
+
+## Verifisert, men ikke implementert ennå
+
+**SSB StatBank API v2** (`https://data.ssb.no/api/pxwebapi/v2/`) — nøkkelfritt,
+verifisert HTTP 200 uten autentisering. 7 747 tabeller (3 786 aktive), kommunenivå for
+Stavanger (1103) og Sandnes (1108), CC BY 4.0.
+Driftsgrenser å designe rundt: **30 spørringer/min per IP** (deles av hele
+redaksjonen), 800 000 celler per uttrekk, ~2 100 tegn URL-grense på GET (bruk POST),
+metadata-nedetid 05.00 og 11.30, og unngå 07.55–08.15 rundt frigivelsen.
+Fallgruve: `includeDiscontinued=false` er default — en naiv crawler ser bare halve
+katalogen.
+
+**Postjournaler.** Ikke ett nasjonalt API, men en oppstykket virkelighet:
+- `norske-postlister.no` aggregerer 176 mill. journalposter fra 722 myndigheter.
+  Stavanger, Sandnes og Rogaland fylkeskommune alle merket «Ferske data».
+- eInnsyn har et udokumentert, men åpent søke-API: `POST https://einnsyn.no/api/result`,
+  OpenAPI på `/api/v3/api-docs`. Dekker Stavanger, men **ikke** Sandnes (verifisert:
+  null journalposter, `skjult=true`). Sandnes ligger på egne 360Online-endepunkter.
+
+**Størst strukturell nyhetsverdi:** 52 kommuner — inkludert Stavanger, Sola, Randaberg,
+Strand og Karmøy — skjuler politikeres forslag i digitale møteportaler **før** møtet.
+Presseforbundet har et ferdig, rettslig forankret innsynskrav-templat som kan sendes
+rutinemessig per møtedato. Dette er ikke et API-problem, men et arbeidsflyt-problem —
+og potensielt den mest verdifulle enkeltkilden.
+
+## Ærlig hull
+
+Delspørsmålene om **sektor-API-er** (NVE, Vegvesen, NAV, FHI, Udir …), **statistisk
+metodikk for små kommunetall** (sesongjustering, anomalideteksjon, multippel testing)
+og **hvordan andre redaksjoner gjør dette** ble IKKE dekket av verifiserte påstander.
+De er ubesvart, ikke besvart svakt. Ikke bygg på antakelser om dem.

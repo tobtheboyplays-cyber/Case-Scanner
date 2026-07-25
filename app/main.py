@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import __version__, llm, verify
 from app.agents import run_workflow, write_draft
-from app.collectors import collect_all, coverage
+from app.collectors import collect_all, coverage, ssb_kalender
 from app.config import ENABLE_AI
 from app.models import Case
 from app.planner import build_plan
@@ -98,6 +98,14 @@ def run_scan() -> dict:
         else:
             status.append("KI-arbeidsflyt: demo-modus (maler, ingen nokkel)")
 
+    # Forsprang: hva SSB slipper de neste ukene. Egen try - en dod feed skal aldri
+    # velte et skann.
+    try:
+        kommende, kal_status = ssb_kalender.collect()
+        status.extend(kal_status)
+    except Exception as exc:  # noqa: BLE001
+        kommende, _ = [], status.append(f"[FEIL] SSB-kalender: {exc}")
+
     plan = build_plan(cases)
     summary = {
         "total": len(cases),
@@ -115,6 +123,7 @@ def run_scan() -> dict:
         "ssb_count": len(ssb_cases),
         "summary": summary,
         "topic_trends": _case_topic_trends(cases),
+        "kommende": kommende,
         "ai_mode": ai_mode,
     }
     save_scan(payload)

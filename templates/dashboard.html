@@ -60,6 +60,32 @@
   </div>
 </section>
 
+<section class="page" style="padding-bottom:0">
+{% if data and data.kommende %}
+  <div class="panel forsprang">
+    <div class="panel-head">
+      <h2>⏳ Kommer snart — forbered saken nå</h2>
+      <span class="panel-sub">SSB slipper disse tallene kl. 08.00. Ring kilden før.</span>
+    </div>
+    {% for v in data.kommende[:5] %}
+      <div class="komm">
+        <div class="komm-when">{{ v.dager_til }}<span>dager</span></div>
+        <div class="komm-mid">
+          <a class="komm-title" href="{{ v.lenke }}" target="_blank" rel="noopener">{{ v.tittel }}</a>
+          <div class="komm-meta">
+            {% for c in v.kontakter[:1] %}
+              <span class="komm-contact">📞 {{ c.navn }}
+                {% if c.telefon %}<a href="tel:{{ c.telefon }}">{{ c.telefon }}</a>{% endif %}
+              </span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+</section>
+
 <div class="layout">
   <main class="maincol">
 

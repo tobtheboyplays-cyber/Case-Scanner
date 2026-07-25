@@ -2,6 +2,8 @@
 
 v2-pipeline:
 - SSB (ssb.py) gir ferdige DATADREVNE leads (Case-objekter) - primaerkilden.
+- SSB-kalenderen (ssb_kalender.py) varsler om tall som IKKE er publisert enda -
+  det eneste ekte forspranget i verktoyet.
 - Reddit + Google Trends gir raa SignalItems (grasrot) som klynges i scoring.
 - Nyhets-RSS genererer IKKE lenger caser; dekning sjekkes via coverage.py
   (Google News) per lead.
@@ -11,7 +13,7 @@ Alle kollektorer er "fail-soft": en kilde som er nede stopper ikke resten.
 
 from __future__ import annotations
 
-from app.collectors import google_trends, reddit, schibsted, ssb
+from app.collectors import google_trends, reddit, schibsted, ssb, ssb_kalender
 from app.models import Case, SignalItem
 
 
