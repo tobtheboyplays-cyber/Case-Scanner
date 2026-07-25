@@ -105,18 +105,20 @@ def _gemini_text(system: str, user: str, *, max_tokens: int) -> str:
             "responseMimeType": "application/json",
         },
     }
-    # Google har flere nokkelformater. Klassiske API-nokler (AIza...) sendes som
-    # ?key=, mens OAuth-/ephemeral-tokens (f.eks. AQ....) maa sendes som Bearer.
-    # Vi antar ikke ut fra prefiks alene: proev den mest sannsynlige foerst, og
-    # fall tilbake til den andre ved autentiseringsfeil.
-    if key.startswith("AIza"):
-        attempts = [("params", {"key": key}), ("bearer", None)]
-    else:
-        attempts = [("bearer", None), ("params", {"key": key})]
+    # Google dokumenterer x-goog-api-key som DEN maaten aa sende noekkelen paa
+    # (ai.google.dev/gemini-api/docs/api-key). Alle nye AI-Studio-noekler er
+    # "auth keys" og fungerer med den headeren; ?key= er den eldre varianten og
+    # Bearer daekker OAuth-/ephemeral-tokens. Vi proever alle tre i den
+    # rekkefoelgen og stopper paa foerste svar som ikke er en autentiseringsfeil,
+    # slik at noekkelformatet aldri avgjoer om den faar proeve seg.
+    attempts: list[tuple[dict[str, str], dict[str, str] | None]] = [
+        ({"x-goog-api-key": key}, None),
+        ({}, {"key": key}),
+        ({"Authorization": f"Bearer {key}"}, None),
+    ]
 
     resp = None
-    for mode, params in attempts:
-        headers = {"Authorization": f"Bearer {key}"} if mode == "bearer" else {}
+    for headers, params in attempts:
         resp = httpx.post(url, json=body, params=params, headers=headers, timeout=60)
         if resp.status_code not in (401, 403):
             break  # ikke en autentiseringsfeil - dette svaret er det ekte svaret
