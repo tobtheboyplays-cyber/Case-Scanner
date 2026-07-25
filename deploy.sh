@@ -46,6 +46,13 @@ ok "Docker kjører"
 
 # ── 2. Nøkkelsjekk (før vi bygger, så du slipper å vente på en feil) ─────────
 say "2/6  KI-nøkkel"
+KEYFILE="$HOME/.case-radar-key"
+# Ingen nøkkel oppgitt? Bruk den vi lagret sist, slik at oppdateringer ikke krever
+# at nøkkelen limes inn paa nytt hver gang.
+if [ -z "$KEY" ] && [ "$ASK_KEY" != "1" ] && [ -r "$KEYFILE" ]; then
+  KEY=$(cat "$KEYFILE")
+  [ -n "$KEY" ] && ok "Bruker lagret nøkkel ($HOME/.case-radar-key)"
+fi
 if [ "$ASK_KEY" = "1" ]; then
   printf '  Lim inn nøkkelen (den vises ikke) og trykk enter: '
   IFS= read -r KEY
@@ -73,6 +80,7 @@ elif [ "${KEY#gsk_}" != "$KEY" ]; then
   if [ "$GQ" = "200" ]; then
     ok "Groq-nøkkelen VIRKER (gratis)"
     KEY_ARGS="-e GROQ_API_KEY=$KEY"
+    printf '%s' "$KEY" > "$KEYFILE" && chmod 600 "$KEYFILE"
   else
     bad "Groq avviste nøkkelen (HTTP $GQ):"
     head -c 300 /tmp/cr_key.json 2>/dev/null; echo
@@ -83,9 +91,11 @@ elif [ "${KEY#gsk_}" != "$KEY" ]; then
 elif [ "${KEY#sk-or-}" != "$KEY" ]; then
   ok "OpenRouter-nøkkel (gratis modeller)"
   KEY_ARGS="-e OPENROUTER_API_KEY=$KEY"
+  printf '%s' "$KEY" > "$KEYFILE" && chmod 600 "$KEYFILE"
 elif [ "${KEY#sk-ant-}" != "$KEY" ]; then
   ok "Claude-nøkkel (betalt API-kreditt)"
   KEY_ARGS="-e ANTHROPIC_API_KEY=$KEY"
+  printf '%s' "$KEY" > "$KEYFILE" && chmod 600 "$KEYFILE"
 else
   # Ingen prefiks-gjetting: Google har flere nøkkelformater (AIza…, AQ.…, ya29.…).
   # Vi TESTER nøkkelen mot ekte API og lar svaret avgjøre.
@@ -109,6 +119,7 @@ else
   if [ "$R1" = "200" ] || [ "$R2" = "200" ] || [ "$R3" = "200" ]; then
     ok "Nøkkelen VIRKER mot Gemini (gratis-nivå)"
     KEY_ARGS="-e GEMINI_API_KEY=$KEY"
+    printf '%s' "$KEY" > "$KEYFILE" && chmod 600 "$KEYFILE"
   else
     bad "Nøkkelen ble avvist (nytt API $R1 / gammelt API $R2). Googles egen melding:"
     head -c 400 /tmp/cr_key.json 2>/dev/null; echo
