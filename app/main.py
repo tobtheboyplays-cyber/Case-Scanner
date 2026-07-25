@@ -23,6 +23,8 @@ from app.planner import build_plan
 from app.scoring import build_cases, finalize_scores
 from app.storage import (
     STAGE_LABELS,
+    mark_seen,
+    seen_map,
     STAGES,
     calendar_month,
     set_plan,
@@ -106,6 +108,23 @@ def run_scan() -> dict:
     except Exception as exc:  # noqa: BLE001
         kommende, _ = [], status.append(f"[FEIL] SSB-kalender: {exc}")
 
+    # Nytt siden sist: samme kilder gir de samme funnene om igjen. Vi markerer hva
+    # som ikke er sett foer, skjuler det Mathias allerede har forkastet, og loefter
+    # det nye oeverst - saa et nytt soek faktisk gir noe nytt.
+    for_dette_skannet = [c.key for c in cases]
+    tidligere = seen_map()
+    beslutninger = decisions_map()
+    cases = [c for c in cases if beslutninger.get(c.key) != "rejected"]
+    for c in cases:
+        c.er_ny = c.key not in tidligere
+    cases.sort(key=lambda c: (not c.er_ny, -c.score))
+    mark_seen(for_dette_skannet)
+    antall_nye = sum(1 for c in cases if c.er_ny)
+    status.append(
+        f"Nytt siden sist: {antall_nye} av {len(cases)} leads"
+        + (" (ingen nye - kildene har ikke endret seg)" if not antall_nye else "")
+    )
+
     plan = build_plan(cases)
     summary = {
         "total": len(cases),
@@ -122,6 +141,7 @@ def run_scan() -> dict:
         "signal_count": len(signals),
         "ssb_count": len(ssb_cases),
         "summary": summary,
+        "antall_nye": antall_nye,
         "topic_trends": _case_topic_trends(cases),
         "kommende": kommende,
         "ai_mode": ai_mode,

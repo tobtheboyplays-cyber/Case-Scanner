@@ -241,6 +241,46 @@ def calendar_month(year: int, month: int) -> dict[str, list[dict]]:
     return out
 
 
+# ── Nytt siden sist ──────────────────────────────────────────────────────────
+# Et skann henter de samme kildene hver gang, saa de samme funnene dukker opp igjen.
+# Vi husker naar en sak ble sett foerste gang, slik at UI kan loefte fram det som
+# faktisk er NYTT - og la det gamle synke.
+
+
+def mark_seen(keys: list[str]) -> dict[str, str]:
+    """Registrer saker som sett. Returnerer {key: forste_gang_sett} for ALLE."""
+    conn = _connect()
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS seen (key TEXT PRIMARY KEY, first_seen TEXT NOT NULL)"
+        )
+        now = _now()
+        conn.executemany(
+            "INSERT OR IGNORE INTO seen (key, first_seen) VALUES (?, ?)",
+            [(k, now) for k in keys],
+        )
+        conn.commit()
+        rows = conn.execute("SELECT key, first_seen FROM seen").fetchall()
+        return {k: v for k, v in rows}
+    finally:
+        conn.close()
+
+
+def seen_map() -> dict[str, str]:
+    """{key: forste_gang_sett} uten aa registrere noe nytt."""
+    if not os.path.exists(DB_PATH):
+        return {}
+    conn = _connect()
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS seen (key TEXT PRIMARY KEY, first_seen TEXT NOT NULL)"
+        )
+        rows = conn.execute("SELECT key, first_seen FROM seen").fetchall()
+        return {k: v for k, v in rows}
+    finally:
+        conn.close()
+
+
 def decisions_map() -> dict[str, str]:
     """{key: "approved"|"rejected"} for aa vise status paa radaren."""
     if not os.path.exists(DB_PATH):

@@ -41,7 +41,7 @@
   <div class="kpi">
     <div class="kpi-top"><span class="kpi-ic">📄</span><span class="kpi-label">Leads totalt</span></div>
     <div class="kpi-num">{{ s.total }}</div>
-    <div class="kpi-sub">{{ s.data }} datadrevne · {{ s.grassroots }} grasrot</div>
+    <div class="kpi-sub">{% if data.antall_nye %}{{ data.antall_nye }} nye siden sist{% else %}{{ s.data }} datadrevne · {{ s.grassroots }} grasrot{% endif %}</div>
   </div>
   <div class="kpi">
     <div class="kpi-top"><span class="dot dot-green"></span><span class="kpi-label">Uskrevet</span></div>
@@ -126,6 +126,7 @@
       <div class="lead-num">{{ loop.index }}</div>
       <div class="lead-body">
         <div class="lead-head">
+          {% if case.er_ny %}<span class="ny-merke">NY</span>{% endif %}
           {% if case.coverage_status == 'green' %}
             <span class="cov cov-green"><span class="cov-ic" aria-hidden="true">◆</span>INGEN HAR SKREVET DETTE</span>
           {% elif case.coverage_status == 'yellow' %}

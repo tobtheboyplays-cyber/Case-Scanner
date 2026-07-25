@@ -62,6 +62,7 @@ class Case:
     editor: dict = field(default_factory=dict)   # {is_story, confidence, headline, angle, verdict, novelty}
     draft: dict = field(default_factory=dict)     # foerste vinkel (bakoverkompatibelt)
     angles: list[dict] = field(default_factory=list)  # TRE komplette pakker fra journalisten
+    er_ny: bool = True             # ikke sett i et tidligere skann
 
     def to_dict(self) -> dict:
         return {
@@ -86,6 +87,7 @@ class Case:
             "editor": self.editor,
             "draft": self.draft,
             "angles": self.angles,
+            "er_ny": self.er_ny,
             "sources": [
                 {
                     "source": s.source,
