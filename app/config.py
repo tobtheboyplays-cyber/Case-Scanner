@@ -1,6 +1,6 @@
 """Konfigurasjon: kilder, geografi- og demografi-nokkelord.
 
-Alt som er lett a tilpasse for redaksjonen samles her, slik at man kan justere
+Alt som er lett a tilpasse for Mathias samles her, slik at man kan justere
 kilder og tema uten a rore selve logikken.
 """
 
@@ -115,6 +115,12 @@ STOPWORDS: set[str] = {
 # --- Innstillinger (kan overstyres via miljovariabler) ----------------------
 DB_PATH = os.getenv("CASE_RADAR_DB", "data/case_radar.sqlite3")
 ENABLE_TRENDS = os.getenv("CASE_RADAR_ENABLE_TRENDS", "true").lower() == "true"
+
+# Reddit er AV som standard. Reddit strammet det anonyme API-et, og alle tre
+# subredditene svarer nå med HTTP-feil. Maalt 25.07.2026: 0 signaler, 3 mislykte
+# kall og 3 rode [FEIL]-linjer i statuspanelet ved hvert eneste skann. Koden
+# staar igjen - aapner Reddit igjen, er det ett miljovariabel-bytte unna.
+ENABLE_REDDIT = os.getenv("CASE_RADAR_ENABLE_REDDIT", "false").lower() == "true"
 GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
 GOOGLE_TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "token.json")
 

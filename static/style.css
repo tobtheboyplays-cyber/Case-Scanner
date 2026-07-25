@@ -1027,3 +1027,120 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .cal-cell { height: 72px; min-height: 0; overflow: hidden; }
 .cal-cell.cal-empty { height: 72px; }
 @media (min-width: 900px) { .cal-cell { height: 84px; } }
+
+/* ── Faner: Kalender / Oppgaver ──────────────────────────────────────────────
+   Rene lenker, ingen JavaScript. Kalenderen svarer på NÅR arbeidet ligger,
+   oppgavelista på HVA som står for tur. Samme saker, to spørsmål. */
+.faner {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+}
+.fane {
+  flex: 1 1 0;
+  padding: 9px 10px;
+  border-radius: 9px;
+  text-align: center;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.fane.er-valgt { background: var(--accent); color: #fff; }
+.fane:not(.er-valgt):active { background: var(--panel); }
+
+/* ── Oppgavekort ────────────────────────────────────────────────────────── */
+.oppg {
+  margin-bottom: 11px;
+  padding: 14px 15px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.oppg-forsinket { border-color: #7a2f2f; }
+.oppg-topp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 9px;
+}
+.oppg-frist {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.frist-naer { color: var(--amber); }
+.oppg-forsinket .oppg-frist { color: #ffb3ad; }
+.oppg-timer { margin-left: auto; font-size: 11px; color: var(--faint); }
+.oppg-tittel { margin: 0 0 5px; font-size: 16px; font-weight: 700; line-height: 1.3; }
+.oppg-desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.oppg-bunn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid #202b36;
+}
+.oppg-spenn { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.oppg-lenke { font-size: 12px; color: var(--accent); text-decoration: none; }
+.btn-ferdig {
+  margin-left: auto;
+  padding: 9px 17px;
+  border-radius: 10px;
+  background: #16281d;
+  border: 1px solid #2f6b45;
+  color: #96e5b0;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-ferdig:active { transform: scale(.97); }
+
+/* Ferdig-lista: ute av kalenderen, men aldri slettet. */
+.ferdig-liste { margin-top: 16px; }
+.ferdig-liste > summary { cursor: pointer; font-size: 13.5px; font-weight: 600; }
+.ferdig-hint { font-size: 11.5px; line-height: 1.45; margin: 7px 0 10px; }
+.ferdig-rad {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid #1a232d;
+}
+.ferdig-t {
+  flex: 1 1 auto;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: line-through;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.btn-angre {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 6px;
+}

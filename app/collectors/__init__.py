@@ -24,6 +24,7 @@ from app.collectors import (
     ssb_kalender,
     ssb_sok,
 )
+from app.config import ENABLE_REDDIT
 from app.models import Case, SignalItem
 
 
@@ -81,8 +82,17 @@ def collect_all(si: Callable[[str], None] | None = None) -> tuple[
     except Exception as exc:  # noqa: BLE001
         status.append(f"[FEIL] Schibsted: {exc}")
 
-    # 2) Grasrot-signaler (klynges i scoring)
-    for name, fn in (("Reddit", reddit.collect), ("Google Trends", google_trends.collect)):
+    # 2) Grasrot-signaler (klynges i scoring). Reddit er av som standard - se
+    # config.ENABLE_REDDIT for hvorfor.
+    kilder = [("Google Trends", google_trends.collect)]
+    if ENABLE_REDDIT:
+        kilder.insert(0, ("Reddit", reddit.collect))
+    else:
+        status.append(
+            "Reddit: av (anonymt API stengt av Reddit) - "
+            "skru paa med CASE_RADAR_ENABLE_REDDIT=true"
+        )
+    for name, fn in kilder:
         meld(name)
         try:
             items, notes = fn()

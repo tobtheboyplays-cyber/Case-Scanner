@@ -73,6 +73,12 @@ def _connect() -> sqlite3.Connection:
             f"ALTER TABLE approved ADD COLUMN timer_per_dag REAL NOT NULL "
             f"DEFAULT {TIMER_STANDARD}"
         )
+    # Ferdig er noe annet enn arkivert. Arkivert = «denne ville jeg ikke ha».
+    # Ferdig = «denne er gjort». Begge forsvinner fra kalenderen, men de betyr
+    # ikke det samme, og en ferdig sak skal kunne aapnes igjen uten aa se ut som
+    # om den ble forkastet.
+    if "fullfort_at" not in cols:
+        conn.execute("ALTER TABLE approved ADD COLUMN fullfort_at TEXT")
     conn.commit()
     return conn
 
@@ -98,6 +104,13 @@ def sett_dagskapasitet(timer: float) -> float:
     return ny
 
 
+# Hvor mange skann vi tar vare paa. Bare det nyeste leses noen gang, men noen
+# fa gamle er greit aa ha hvis noe ser rart ut. Uten taket vokser tabellen for
+# alltid: hvert skann OG hvert utkast skriver en full kopi, saa ett skann i
+# timen ble rundt 90 MB paa ett aar - paa en liten VPS er det ren sloesing.
+MAKS_SKANN = 20
+
+
 def save_scan(payload: dict) -> None:
     payload = {**payload, "created_at": datetime.now(tz=UTC).isoformat()}
     conn = _connect()
@@ -105,6 +118,11 @@ def save_scan(payload: dict) -> None:
         conn.execute(
             "INSERT INTO scans (created_at, payload) VALUES (?, ?)",
             (payload["created_at"], json.dumps(payload, ensure_ascii=False)),
+        )
+        conn.execute(
+            "DELETE FROM scans WHERE id NOT IN "
+            "(SELECT id FROM scans ORDER BY id DESC LIMIT ?)",
+            (MAKS_SKANN,),
         )
         conn.commit()
     finally:
@@ -155,31 +173,88 @@ def reject_lead(key: str) -> None:
         conn.close()
 
 
-def list_approved(*, arkiverte: bool = False) -> list[dict]:
-    """Godkjente saker. Arkiverte er som standard ute av veien, men ikke borte."""
+def list_approved(*, arkiverte: bool = False, fullforte: bool | None = None) -> list[dict]:
+    """Godkjente saker. Arkiverte (sveipet bort) er ute av veien som standard.
+
+    Ferdige saker er IKKE ute av veien her. «Ferdig» betyr ute av KALENDEREN -
+    artikkelen ligger fortsatt under Lagrede utkast, for det er der journalisten
+    finner igjen det han har skrevet. Bare kalenderen og oppgavelista filtrerer
+    dem bort (`fullforte=False`)."""
     if not os.path.exists(DB_PATH):
         return []
     conn = _connect()
     try:
-        hvor = "arkivert_at IS NOT NULL" if arkiverte else "arkivert_at IS NULL"
+        if arkiverte:
+            hvor = "arkivert_at IS NOT NULL"
+        elif fullforte is True:
+            hvor = "fullfort_at IS NOT NULL AND arkivert_at IS NULL"
+        elif fullforte is False:
+            hvor = "arkivert_at IS NULL AND fullfort_at IS NULL"
+        else:
+            hvor = "arkivert_at IS NULL"
         rows = conn.execute(
             "SELECT payload, created_at, start_date, deadline, stage, arkivert_at, "
-            f"timer_per_dag FROM approved WHERE {hvor} "
+            f"timer_per_dag, fullfort_at FROM approved WHERE {hvor} "
             "ORDER BY COALESCE(deadline, start_date, created_at) ASC"
         ).fetchall()
         out = []
-        for payload, created, start, deadline, stage, arkivert, timer in rows:
+        for payload, created, start, deadline, stage, arkivert, timer, fullfort in rows:
             lead = json.loads(payload)
             lead["_approved_at"] = created
             lead["_start"] = start or ""
             lead["_deadline"] = deadline or ""
             lead["_stage"] = stage or "ide"
             lead["_arkivert"] = arkivert or ""
+            lead["_fullfort"] = fullfort or ""
             lead["_timer"] = float(timer if timer is not None else TIMER_STANDARD)
             out.append(lead)
         return out
     finally:
         conn.close()
+
+
+def fullfor(key: str) -> bool:
+    """«Ferdig». Saken forsvinner fra kalenderen og oppgavelista.
+
+    Vi sletter ikke og nullstiller ikke datoene: trykker han feil, skal ett trykk
+    paa «angre» sette den tilbake nøyaktig der den sto."""
+    conn = _connect()
+    try:
+        cur = conn.execute(
+            "UPDATE approved SET fullfort_at = ? WHERE key = ? AND fullfort_at IS NULL",
+            (_now(), key),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def gjenapne(key: str) -> bool:
+    """Angre «Ferdig» - saken tilbake i kalenderen med datoer og timer i behold."""
+    conn = _connect()
+    try:
+        cur = conn.execute(
+            "UPDATE approved SET fullfort_at = NULL WHERE key = ?", (key,)
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def oppgaver() -> list[dict]:
+    """Saker som ligger i kalenderen, med naermeste frist foerst.
+
+    Uten dato er den ikke lagt inn i kalenderen enda, og hoerer derfor ikke
+    hjemme i oppgavelista - den staar under «Uten dato» paa kalendersida."""
+    med_dato = [
+        x for x in list_approved(fullforte=False)
+        if x.get("_deadline") or x.get("_start")
+    ]
+    # Frist foerst. Mangler frist, sorterer vi paa startdato - da er den fortsatt
+    # planlagt, bare uten sluttstrek.
+    return sorted(med_dato, key=lambda x: (x.get("_deadline") or x.get("_start") or "9999"))
 
 
 def arkiver(key: str) -> bool:
@@ -300,7 +375,8 @@ def calendar_month(year: int, month: int) -> dict[str, list[dict]]:
     month_start = date(year, month, 1)
     month_end = date(year, month, last_day)
 
-    for lead in list_approved():
+    # Ferdige saker skal ut av kalenderen - det er hele poenget med «Ferdig».
+    for lead in list_approved(fullforte=False):
         s_raw, d_raw = lead.get("_start") or "", lead.get("_deadline") or ""
         if not s_raw and not d_raw:
             continue

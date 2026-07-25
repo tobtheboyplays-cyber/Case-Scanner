@@ -26,6 +26,80 @@
 
 <main class="page">
 
+  {# To fane-lenker, ikke JavaScript. Kalenderen viser NAAR arbeidet ligger;
+     oppgavelista viser HVA som staar for tur. Samme saker, to spoersmaal. #}
+  <nav class="faner" aria-label="Visning">
+    <a class="fane{{ ' er-valgt' if fane != 'oppgaver' }}"
+       href="/kalender?ym={{ '%04d-%02d'|format(year, month) }}"
+       {% if fane != 'oppgaver' %}aria-current="page"{% endif %}>🗓 Kalender</a>
+    <a class="fane{{ ' er-valgt' if fane == 'oppgaver' }}"
+       href="/kalender?ym={{ '%04d-%02d'|format(year, month) }}&amp;fane=oppgaver"
+       {% if fane == 'oppgaver' %}aria-current="page"{% endif %}>✓ Oppgaver{% if oppgaver %} ({{ oppgaver|length }}){% endif %}</a>
+  </nav>
+
+{% if fane == 'oppgaver' %}
+  <!-- ── Oppgaver: samme saker som i kalenderen, nærmeste frist først ── -->
+  {% if not oppgaver %}
+    <section class="panel empty-inline">
+      <p>Ingen oppgaver i kalenderen ennå.</p>
+      <p class="muted">Godkjenn en sak på radaren og gi den en start- og sluttdato,
+        så dukker den opp her.</p>
+    </section>
+  {% endif %}
+
+  {% for o in oppgaver %}
+  <article class="oppg{{ ' oppg-forsinket' if o._dager_igjen is not none and o._dager_igjen < 0 }}">
+    <div class="oppg-topp">
+      <span class="pill pill-stage stage-bg-{{ o._stage or 'ide' }}">{{ stage_labels[o._stage or 'ide'] }}</span>
+      {% if o._deadline %}
+        <span class="oppg-frist{{ ' frist-naer' if o._dager_igjen is not none and 0 <= o._dager_igjen <= 2 }}">
+          ⚑ {{ o._deadline }}
+          {% if o._dager_igjen is not none %}
+            · {% if o._dager_igjen < 0 %}{{ -o._dager_igjen }} dag{{ '' if o._dager_igjen == -1 else 'er' }} på overtid
+              {% elif o._dager_igjen == 0 %}i dag
+              {% elif o._dager_igjen == 1 %}i morgen
+              {% else %}om {{ o._dager_igjen }} dager{% endif %}
+          {% endif %}
+        </span>
+      {% else %}
+        <span class="oppg-frist">▶ starter {{ o._start }}</span>
+      {% endif %}
+      <span class="oppg-timer">{{ o._timer|round(1) }} t/dag</span>
+    </div>
+
+    <h3 class="oppg-tittel">{{ o.draft.title if o.draft and o.draft.title else o.title }}</h3>
+    {% if o.finding %}<p class="oppg-desc">{{ o.finding }}</p>{% endif %}
+
+    <div class="oppg-bunn">
+      {% if o._start %}<span class="oppg-spenn">{{ o._start }} → {{ o._deadline or '—' }}</span>{% endif %}
+      <a class="oppg-lenke" href="/kalender?ym={{ (o._start or o._deadline)[:7] }}#dag-{{ o._start or o._deadline }}">Se i kalenderen</a>
+      <form method="post" action="/oppgaver/{{ o.key }}/ferdig">
+        <input type="hidden" name="tilbake" value="/kalender?ym={{ '%04d-%02d'|format(year, month) }}&amp;fane=oppgaver" />
+        <button type="submit" class="btn-ferdig">✓ Ferdig</button>
+      </form>
+    </div>
+  </article>
+  {% endfor %}
+
+  {% if ferdige %}
+  <details class="panel ferdig-liste">
+    <summary>✓ Ferdig ({{ ferdige|length }})</summary>
+    <p class="muted ferdig-hint">Ute av kalenderen, men ikke slettet. Trykk «Angre»
+      for å sette saken tilbake med datoer og timer i behold.</p>
+    {% for f in ferdige %}
+    <div class="ferdig-rad">
+      <span class="ferdig-t">{{ f.draft.title if f.draft and f.draft.title else f.title }}</span>
+      <form method="post" action="/oppgaver/{{ f.key }}/angre">
+        <input type="hidden" name="tilbake" value="/kalender?ym={{ '%04d-%02d'|format(year, month) }}&amp;fane=oppgaver" />
+        <button type="submit" class="btn-angre">Angre</button>
+      </form>
+    </div>
+    {% endfor %}
+  </details>
+  {% endif %}
+
+{% else %}
+
   <!-- Månedsnavigasjon -->
   <section class="cal-nav">
     <a class="cal-arrow" href="/kalender?ym={{ prev_ym }}" aria-label="Forrige måned">‹</a>
@@ -128,7 +202,15 @@
             <span style="width: {{ [ (cell.timer / kapasitet * 100) if kapasitet else 0, 100 ]|min|round|int }}%"></span>
           </div>
 
-          {% for lead in cell.leads %}
+          {# Tak per dag. Med mange saker som gaar over lange spenn kan én dag
+             ellers rendre hundrevis av kort - kalendersida ble 1,8 MB HTML i
+             stresstest. Ingen leser den 13. saken paa en dag uansett. #}
+          {% set dagens = cell.leads[:12] %}
+          {% if cell.leads|length > 12 %}
+          <p class="dag-flere">Viser 12 av {{ cell.leads|length }} saker denne dagen.
+            Resten står i <a href="/kalender?ym={{ '%04d-%02d'|format(year, month) }}&amp;fane=oppgaver">Oppgaver</a>.</p>
+          {% endif %}
+          {% for lead in dagens %}
             {% set draft = lead.draft or {} %}
             {# En sak som gaar fra 27. til 31. dukker opp paa fem dager. Full
                artikkel + skjema fem ganger er samme sak fem ganger - ikke fem
@@ -276,6 +358,8 @@
     {% endfor %}
   </section>
   {% endif %}
+
+{% endif %}{# fane #}
 
 </main>
 

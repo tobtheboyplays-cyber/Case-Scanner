@@ -52,7 +52,11 @@
     <div class="swipe-merke swipe-hoyre" aria-hidden="true">✓ Behold</div>
     <div class="lead-body">
       <div class="lead-tags">
-        <span class="pill pill-green">✓ Godkjent</span>
+        {% if lead._fullfort %}
+          <span class="pill pill-green">✓ Ferdig</span>
+        {% else %}
+          <span class="pill pill-green">✓ Godkjent</span>
+        {% endif %}
         {% if lead.data_source %}<span class="tag">{{ lead.data_source|kortkilde }}</span>{% endif %}
         {% if lead.ai_mode == 'mal' %}<span class="tag">demo-utkast</span>{% endif %}
         {% if lead._stage %}<span class="pill pill-stage stage-bg-{{ lead._stage }}">{{ lead._stage|capitalize }}</span>{% endif %}

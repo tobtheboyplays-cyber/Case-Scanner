@@ -442,6 +442,109 @@ def test_kapasitet_endres_fra_kalenderen(klient):
     assert storage.dagskapasitet() == 5.0
 
 
+# ── Oppgavefanen ─────────────────────────────────────────────────────────────
+
+
+def _oppgave(key: str, tittel: str, start: str, frist: str, timer: str = "2") -> None:
+    storage.approve_lead(key, {"title": tittel, "key": key, "finding": "f"})
+    storage.set_plan(key, start_date=start, deadline=frist, timer=timer)
+
+
+def test_oppgavene_kommer_i_rekkefolge_etter_deadline(klient):
+    _oppgave("c", "Sist frist", "2026-08-01", "2026-08-20")
+    _oppgave("a", "Naermest frist", "2026-08-01", "2026-08-03")
+    _oppgave("b", "Midt imellom", "2026-08-01", "2026-08-10")
+
+    assert [x["title"] for x in storage.oppgaver()] == [
+        "Naermest frist", "Midt imellom", "Sist frist"
+    ]
+
+
+def test_sak_uten_dato_er_ikke_en_oppgave(klient):
+    """Uten dato er den ikke lagt i kalenderen - da hører den ikke hjemme her."""
+    storage.approve_lead("udatert", {"title": "Ingen dato", "key": "udatert"})
+    _oppgave("datert", "Har dato", "2026-08-01", "2026-08-05")
+    assert [x["key"] for x in storage.oppgaver()] == ["datert"]
+
+
+def test_ferdig_fjerner_oppgaven_fra_bade_liste_og_kalender(klient):
+    _oppgave("x", "Artikkel om gutter som blir aggressive", "2026-08-03", "2026-08-05")
+    assert len(storage.calendar_month(2026, 8)) == 3      # 3., 4. og 5.
+
+    assert storage.fullfor("x") is True
+    assert storage.oppgaver() == []
+    assert storage.calendar_month(2026, 8) == {}
+    # ... men den er ikke slettet.
+    assert [y["key"] for y in storage.list_approved(fullforte=True)] == ["x"]
+
+
+def test_angre_setter_oppgaven_tilbake_med_datoer_og_timer(klient):
+    _oppgave("x", "Sak", "2026-08-03", "2026-08-05", timer="3.5")
+    storage.fullfor("x")
+
+    assert storage.gjenapne("x") is True
+    tilbake = storage.oppgaver()
+    assert len(tilbake) == 1
+    assert tilbake[0]["_start"] == "2026-08-03"
+    assert tilbake[0]["_deadline"] == "2026-08-05"
+    assert tilbake[0]["_timer"] == 3.5
+
+
+def test_dobbel_ferdig_er_ufarlig(klient):
+    _oppgave("x", "Sak", "2026-08-03", "2026-08-05")
+    assert storage.fullfor("x") is True
+    assert storage.fullfor("x") is False      # allerede ferdig - ikke en ny hendelse
+
+
+def test_ferdig_og_arkivert_er_ikke_det_samme(klient):
+    """«Denne ville jeg ikke ha» og «denne er gjort» skal ikke blandes."""
+    _oppgave("ferdig", "Gjort", "2026-08-01", "2026-08-02")
+    _oppgave("bortlagt", "Ville ikke ha", "2026-08-01", "2026-08-02")
+    storage.fullfor("ferdig")
+    storage.arkiver("bortlagt")
+
+    assert [x["key"] for x in storage.list_approved(fullforte=True)] == ["ferdig"]
+    assert [x["key"] for x in storage.list_approved(arkiverte=True)] == ["bortlagt"]
+    # Ingen av dem er i arbeid lenger ...
+    assert storage.list_approved(fullforte=False) == []
+    # ... men den ferdige ligger fortsatt under Lagrede utkast. «Ferdig» tar den
+    # ut av KALENDEREN, ikke ut av arkivet der journalisten finner igjen teksten.
+    assert [x["key"] for x in storage.list_approved()] == ["ferdig"]
+
+
+def test_ferdig_sak_blir_staaende_under_lagrede_utkast(klient):
+    _oppgave("x", "Artikkel om gutter som blir aggressive", "2026-08-03", "2026-08-05")
+    storage.fullfor("x")
+    html = klient.get("/godkjente").text
+    assert "Artikkel om gutter som blir aggressive" in html
+    assert "Ferdig" in html                 # merket som ferdig, ikke borte
+
+
+def test_oppgavefanen_viser_saken_og_ferdigknappen(klient):
+    _oppgave("x", "Artikkel om gutter som blir aggressive", "2026-08-03", "2026-08-05")
+    html = klient.get("/kalender", params={"ym": "2026-08", "fane": "oppgaver"}).text
+    assert "Artikkel om gutter som blir aggressive" in html
+    assert "Ferdig" in html
+    assert "/oppgaver/x/ferdig" in html
+
+
+def test_ferdigknappen_virker_fra_fanen(klient):
+    _oppgave("x", "Sak", "2026-08-03", "2026-08-05")
+    r = klient.post("/oppgaver/x/ferdig", follow_redirects=False)
+    assert r.status_code == 303
+    assert storage.oppgaver() == []
+
+    r = klient.post("/oppgaver/x/angre", follow_redirects=False)
+    assert r.status_code == 303
+    assert len(storage.oppgaver()) == 1
+
+
+def test_kalenderfanen_er_standard(klient):
+    html = klient.get("/kalender").text
+    assert 'class="fane er-valgt"' in html
+    assert "cal-grid" in html          # rutenettet, ikke oppgavelista
+
+
 # ── At KI-veien faktisk gir ekte vinkler når nøkkelen er på plass ────────────
 
 
@@ -515,3 +618,55 @@ def test_prompten_krever_tre_ulike_spor():
     assert "SITT EGET faktum" in p
     assert "hypotese, ikke paastand" in p.lower() or "hypotese" in p.lower()
     assert "FORSLAG TIL TITTEL" in p
+
+
+# ── Ting som vokser uten tak, og sider som blir for tunge ────────────────────
+
+
+def test_skann_tabellen_har_tak(klient):
+    """Hvert skann OG hvert utkast skriver en full kopi. Uten tak ble det rundt
+    90 MB på et år - på en liten VPS er det ren sløsing, og bare det nyeste
+    skannet leses noen gang."""
+    import sqlite3
+
+    for _ in range(storage.MAKS_SKANN + 15):
+        storage.save_scan(_skann())
+
+    conn = sqlite3.connect(storage.DB_PATH)
+    try:
+        antall = conn.execute("SELECT COUNT(*) FROM scans").fetchone()[0]
+    finally:
+        conn.close()
+    assert antall == storage.MAKS_SKANN
+    # Det nyeste skal fortsatt være der - taket kutter de eldste, ikke de nye.
+    assert storage.load_latest()["cases"][0]["key"] == KEY
+
+
+def test_kalenderdagen_har_tak_paa_antall_kort(klient):
+    """En dag med 40 saker rendret 40 fulle kort med hvert sitt skjema.
+    Kalendersida ble 1,8 MB HTML i stresstest."""
+    for i in range(40):
+        k = f"m{i}"
+        storage.approve_lead(k, {"title": f"Sak {i}", "key": k})
+        storage.set_plan(k, start_date="2026-08-10", deadline="2026-08-10", timer="0.5")
+
+    html = klient.get("/kalender", params={"ym": "2026-08"}).text
+    assert "Viser 12 av 40 saker" in html
+    assert html.count('name="timer"') <= 14      # 12 dagskort + kapasitetsfeltet
+    assert len(html) < 400_000                    # ikke en megabyte
+
+
+def test_reddit_er_av_og_sier_hvorfor(klient, monkeypatch):
+    """Reddit ga 0 signaler og 3 røde feillinjer ved hvert skann. Av som
+    standard - men koden står igjen, og statuslinja sier hvordan man slår på."""
+    from app import collectors
+
+    kalt = []
+    monkeypatch.setattr(collectors.reddit, "collect", lambda: kalt.append(1) or ([], []))
+    monkeypatch.setattr(collectors.google_trends, "collect", lambda: ([], []))
+    for navn in ("ssb", "ssb_flytting", "ssb_sok", "schibsted"):
+        monkeypatch.setattr(getattr(collectors, navn), "collect", lambda: ([], []))
+
+    _, _, status = collectors.collect_all()
+    assert not kalt, "Reddit skal ikke kalles når den er av"
+    assert any("CASE_RADAR_ENABLE_REDDIT" in s for s in status)

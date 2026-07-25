@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -33,10 +33,13 @@ from app.storage import (
     calendar_month,
     dagskapasitet,
     decisions_map,
+    fullfor,
+    gjenapne,
     gjenopprett,
     list_approved,
     load_latest,
     mark_seen,
+    oppgaver,
     reject_lead,
     save_scan,
     seen_map,
@@ -388,6 +391,19 @@ def plan_lead(
     return RedirectResponse(url=tilbake or "/godkjente", status_code=303)
 
 
+@app.post("/oppgaver/{key:path}/ferdig")
+def oppgave_ferdig(key: str, tilbake: str = Form("/kalender?fane=oppgaver")):
+    """«Ferdig» - saken ut av kalenderen og oppgavelista, men ikke slettet."""
+    fullfor(key)
+    return RedirectResponse(url=tilbake or "/kalender?fane=oppgaver", status_code=303)
+
+
+@app.post("/oppgaver/{key:path}/angre")
+def oppgave_angre(key: str, tilbake: str = Form("/kalender?fane=oppgaver")):
+    gjenapne(key)
+    return RedirectResponse(url=tilbake or "/kalender?fane=oppgaver", status_code=303)
+
+
 @app.post("/kalender/kapasitet")
 def endre_kapasitet(timer: str = Form(""), tilbake: str = Form("/kalender")):
     """Hvor mange timer journalisten faktisk har paa en dag. Justerbart, fordi en
@@ -440,7 +456,7 @@ def gjenopprett_sak(key: str, js: str = Form("")):
 
 
 @app.get("/kalender", response_class=HTMLResponse)
-def kalender(request: Request, ym: str = ""):
+def kalender(request: Request, ym: str = "", fane: str = "kalender"):
     """Redaksjonell kalender: maanedsrutenett med planlagte saker.
 
     Ingen Google-innlogging, ingen oppsett - den bygger paa saker Mathias selv har
@@ -455,7 +471,10 @@ def kalender(request: Request, ym: str = ""):
     by_day = calendar_month(year, month)
     dag_timer = timer_per_dag(by_day)
     kapasitet = dagskapasitet()
-    approved = list_approved()
+    # Hele kalendersida ser bare paa saker som fortsatt er i arbeid. En ferdig
+    # sak skal ikke dukke opp igjen under «Uten dato» eller i «Kommende
+    # deadlines» - den er jo gjort.
+    approved = list_approved(fullforte=False)
     uplanlagt = [x for x in approved if not (x.get("_start") or x.get("_deadline"))]
 
     # Bygg rutenettet: hele uker, mandag foerst, med tomme celler rundt maaneden.
@@ -515,6 +534,20 @@ def kalender(request: Request, ym: str = ""):
             "uplanlagt": uplanlagt,
             "kommende": kommende,
             "planned_count": sum(len(v) for v in by_day.values()),
+            # Oppgavefanen: det samme arbeidet som en liste, med naermeste frist
+            # foerst. Kalenderen viser NAAR; denne viser HVA som staar for tur.
+            "fane": "oppgaver" if fane == "oppgaver" else "kalender",
+            "oppgaver": [
+                {**x, "_dager_igjen": _dager_til(x.get("_deadline") or "")}
+                for x in oppgaver()
+            ],
+            # Sist fullfoert oeverst - det er den man angrer paa hvis man
+            # trykket feil, ikke den med fjernest deadline.
+            "ferdige": sorted(
+                list_approved(fullforte=True),
+                key=lambda x: x.get("_fullfort") or "",
+                reverse=True,
+            )[:20],
             "kapasitet": kapasitet,
             "maaned_timer": round(sum(dag_timer.values()), 1),
             "overbookede_dager": sum(1 for t in dag_timer.values() if t > kapasitet),
@@ -538,9 +571,34 @@ def health():
     return {"status": "ok", "version": __version__}
 
 
+# HTML-sidene har ikonet inline, men JSON-rutene har ingen <head> - da spor
+# nettleseren etter /favicon.ico og faar 404 i konsollen. Ett svar, ingen stoy.
+_FAVICON = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+    '<text y=".9em" font-size="90">📡</text></svg>'
+)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(
+        content=_FAVICON,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 def _human_time(iso: str) -> str:
     try:
         dt = datetime.fromisoformat(iso).astimezone(UTC)
         return dt.strftime("%d.%m.%Y %H:%M UTC")
     except (ValueError, TypeError):
         return iso
+
+
+def _dager_til(iso: str) -> int | None:
+    """Dager til frist. Negativt tall betyr at fristen er passert."""
+    try:
+        return (date.fromisoformat(iso) - date.today()).days
+    except (ValueError, TypeError):
+        return None
