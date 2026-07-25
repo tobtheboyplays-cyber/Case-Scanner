@@ -99,31 +99,44 @@
     <article class="lead" data-cov="{{ case.coverage_status }}" data-geo="{{ case.geo }}">
       <div class="lead-num">{{ loop.index }}</div>
       <div class="lead-body">
-        <div class="lead-tags">
+        <div class="lead-head">
           {% if case.coverage_status == 'green' %}
-            <span class="pill pill-green">🟢 Uskrevet — ingen har skrevet dette</span>
+            <span class="cov cov-green"><span class="cov-ic" aria-hidden="true">◆</span>INGEN HAR SKREVET DETTE</span>
           {% elif case.coverage_status == 'yellow' %}
-            <span class="pill pill-amber">🟡 Delvis dekket — skrevet noe</span>
+            <span class="cov cov-yellow"><span class="cov-ic" aria-hidden="true">◑</span>DELVIS DEKKET</span>
           {% elif case.coverage_status == 'red' %}
-            <span class="pill pill-red">🔴 Allerede dekket — skrevet mye</span>
+            <span class="cov cov-red"><span class="cov-ic" aria-hidden="true">●</span>GODT DEKKET</span>
           {% else %}
-            <span class="pill pill-grey">Dekning ukjent</span>
+            <span class="cov cov-unk"><span class="cov-ic" aria-hidden="true">○</span>DEKNING UKJENT</span>
           {% endif %}
-          <span class="tag">{{ 'SSB-data' if case.kind == 'data' else 'Grasrot' }}</span>
-          {% if case.geo == 'lokal' %}<span class="tag tag-loc">📍 Stavanger/Rogaland</span>{% endif %}
+          {% if case.data_source %}
+            {% if case.data_url %}
+              <a class="src-ref" href="{{ case.data_url }}" target="_blank" rel="noopener">{{ case.data_source }} ↗</a>
+            {% else %}
+              <span class="src-ref">{{ case.data_source }}</span>
+            {% endif %}
+          {% endif %}
         </div>
+
+        {% if case.metric_value %}
+        <div class="metric">
+          <span class="metric-v cov-text-{{ case.coverage_status }}">{{ case.metric_value }}</span>
+          <span class="metric-cmp">{{ case.metric_period }}</span>
+        </div>
+        {% endif %}
 
         <h3 class="lead-title">{{ case.title }}</h3>
         <p class="lead-desc">{{ case.finding or case.why }}</p>
 
-        <div class="lead-grid">
-          {% if case.metric_value %}
-          <div class="funn">
-            <span class="funn-label">Funn</span>
-            <span class="funn-val cov-text-{{ case.coverage_status }}">{{ case.metric_value }}</span>
-            <span class="funn-period">{{ case.metric_period }}</span>
-          </div>
+        <div class="lead-tags">
+          {% if case.geo == 'lokal' %}<span class="tag tag-loc">📍 Stavanger/Rogaland</span>{% endif %}
+          {% for tp in case.topics[:2] %}<span class="tag">{{ tp }}</span>{% endfor %}
+          {% if case.coverage_examples %}
+            <span class="tag">Skrevet av {{ case.coverage_examples[0].source }}</span>
           {% endif %}
+        </div>
+
+        <div class="lead-grid">
           <div class="vinkel">
             <p class="vinkel-h">Vinkling:</p>
             <p class="vinkel-t">{{ case.angle }}</p>
@@ -156,17 +169,29 @@
             {% for a in case.angles %}
             <details class="angle">
               <summary>
-                <span class="angle-nr">{{ loop.index }}</span>
-                <span class="angle-title">{{ a.title }}</span>
+                <span class="angle-ic" aria-hidden="true">{{ INNGANG_IKON.get(a.inngang, '📄') }}</span>
+                <span class="angle-txt">
+                  <span class="angle-kind">{{ (a.inngang or 'vinkel')|capitalize }}</span>
+                  <span class="angle-title">{{ a.title }}</span>
+                </span>
                 <span class="angle-meta">
-                  {% if a.inngang %}<span class="tag">{{ a.inngang }}</span>{% endif %}
                   {% if a.styrke %}<span class="angle-strength">{{ a.styrke }}</span>{% endif %}
                   {% if a.mode == 'mal' %}<span class="ai-tag">demo</span>{% endif %}
                 </span>
               </summary>
 
-              <p class="draft-ingress">{{ a.ingress }}</p>
-              <div class="draft-body">{{ a.body }}</div>
+              {% if a.kort %}<p class="draft-ingress">{{ a.kort }}</p>{% endif %}
+
+              {% if a.body %}
+                {% if a.ingress %}<p class="draft-ingress">{{ a.ingress }}</p>{% endif %}
+                <div class="draft-body">{{ a.body }}</div>
+              {% else %}
+                <form method="post" action="/leads/{{ case.key }}/utkast" class="ask-draft">
+                  <input type="hidden" name="vinkel" value="{{ loop.index0 }}" />
+                  <button class="btn-ask" type="submit">✍️ Be om utkast</button>
+                  <span class="ask-note">Artikkelen skrives først når du ber om den — sparer kvote.</span>
+                </form>
+              {% endif %}
 
               {% if a.risiko %}<p class="angle-risk">⚠ {{ a.risiko }}</p>{% endif %}
 
@@ -197,6 +222,7 @@
               </ul>
               {% endif %}
 
+              {% if a.body %}
               <details class="approve-pop">
                 <summary class="btn-approve as-summary">Godkjenn denne vinkelen →</summary>
                 <form class="angle-approve" method="post" action="/leads/{{ case.key }}/approve">
@@ -217,6 +243,7 @@
                   <p class="approve-note">Saken havner i Godkjente saker og vises i kalenderen fra start til deadline.</p>
                 </form>
               </details>
+              {% endif %}
             </details>
             {% endfor %}
           </div>

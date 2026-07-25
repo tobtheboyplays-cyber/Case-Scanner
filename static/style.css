@@ -373,3 +373,62 @@ summary:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 1
 .cal-dot.is-start { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--accent); }
 .cal-dot.is-deadline { border-radius: 2px; }
 .span-badge { font-size: 11px; color: var(--faint); }
+
+/* ══ Kort-hode: dekningsmerke + kilde, tallet stort ═══════════════════════
+   Dekningsstatus vises som IKON + TEKST + farge - aldri farge alene, saa den
+   er lesbar for fargeblinde og sier hva den betyr. */
+.lead-head { display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.cov { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px;
+  font-weight: 800; letter-spacing: .04em; padding: 6px 11px; border-radius: 8px; }
+.cov-ic { font-size: 11px; line-height: 1; }
+.cov.cov-green { background: rgba(55,196,109,.14); color: #4ede84; }
+.cov.cov-yellow { background: rgba(224,166,58,.14); color: #edb954; }
+.cov.cov-red { background: rgba(224,87,76,.14); color: #f0736a; }
+.cov.cov-unk { background: var(--panel2); color: var(--muted); }
+.src-ref { font-size: 11px; color: var(--faint); text-decoration: none; }
+.src-ref:hover { color: var(--accent); }
+
+/* Tallet ER nyheten - storst element, med perioden rett under */
+.metric { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 8px; }
+.metric-v { font-size: 40px; font-weight: 800; letter-spacing: -.03em; line-height: 1;
+  font-variant-numeric: tabular-nums; }
+.metric-cmp { font-size: 12px; color: var(--faint); }
+
+/* Vinkler som ikonknapper med undertekst */
+.angle-ic { width: 34px; height: 34px; flex: none; display: grid; place-items: center;
+  border-radius: 10px; background: var(--panel); border: 1px solid var(--border);
+  font-size: 16px; }
+.angle-txt { flex: 1 1 55%; display: flex; flex-direction: column; gap: 1px; }
+.angle-kind { font-size: 10px; color: var(--faint); text-transform: uppercase;
+  letter-spacing: .06em; font-weight: 700; }
+.angle-title { font-size: 14px; font-weight: 600; line-height: 1.3; }
+
+/* «Be om utkast» - lat generering */
+.ask-draft { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; margin-top: 4px; }
+.btn-ask { min-height: var(--tap); padding: 0 18px; border: 1px solid var(--accent);
+  background: rgba(59,130,246,.12); color: var(--accent); border-radius: 12px;
+  font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.btn-ask:active { transform: scale(.97); }
+.ask-note { font-size: 11px; color: var(--faint); }
+
+/* Kalenderbånd: viser lengde og overlapp, ikke bare at «noe skjer» */
+.cal-bands { display: flex; flex-direction: column; gap: 2px; width: 78%; margin-top: 2px; }
+.cal-band { height: 4px; border-radius: 1px; background: var(--faint); }
+.cal-band.b-start { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
+.cal-band.b-end { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+.cal-band.stage-ide { background: #4a5876; }
+.cal-band.stage-research { background: var(--accent); }
+.cal-band.stage-skriving { background: var(--amber); }
+.cal-band.stage-publisert { background: var(--green); }
+.cal-more { font-size: 8px; color: var(--faint); font-style: normal; }
+
+.deadlines { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.dl-h { font-size: 11px; color: var(--faint); text-transform: uppercase;
+  letter-spacing: .06em; margin: 0 0 6px; }
+.dl-row { display: flex; gap: 12px; align-items: baseline; padding: 9px 0;
+  border-bottom: 1px solid var(--border); text-decoration: none; color: var(--text); }
+.dl-row:last-child { border-bottom: 0; }
+.dl-date { flex: none; width: 56px; font-size: 12px; color: var(--amber);
+  font-variant-numeric: tabular-nums; }
+.dl-title { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -15,9 +15,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import __version__, llm
-from app.agents import run_workflow
+from app.agents import run_workflow, write_draft
 from app.collectors import collect_all, coverage
 from app.config import ENABLE_AI
+from app.models import Case
 from app.planner import build_plan
 from app.scoring import build_cases, finalize_scores
 from app.storage import (
@@ -32,6 +33,12 @@ from app.storage import (
     reject_lead,
     save_scan,
 )
+
+# Ikon per vinkel-inngang. Brukes i UI saa valget kan tas uten aa aapne noe.
+INNGANG_IKON = {
+    "menneske": "👤", "konsekvens": "📈", "aarsak": "🔍",
+    "motsetning": "⚖", "fremtid": "🔮", "sammenligning": "🗺",
+}
 
 MONTHS_NO = [
     "januar", "februar", "mars", "april", "mai", "juni",
@@ -132,6 +139,7 @@ def dashboard(request: Request):
             "scanned_at": scanned_at,
             "version": __version__,
             "decisions": decisions_map(),
+            "INNGANG_IKON": INNGANG_IKON,
             "approved_count": len(list_approved()),
         },
     )
@@ -148,6 +156,42 @@ def _find_lead(key: str) -> dict | None:
     if not data:
         return None
     return next((c for c in data.get("cases", []) if c.get("key") == key), None)
+
+
+@app.post("/leads/{key:path}/utkast")
+def be_om_utkast(key: str, vinkel: int = Form(0)):
+    """Skriv ut ÉN valgt vinkel. Kalles paa knappetrykk - ikke ved skann.
+
+    Resultatet lagres tilbake i siste skann slik at utkastet ikke maa skrives paa
+    nytt hvis siden lastes om."""
+    data = load_latest()
+    if not data:
+        return RedirectResponse(url="/", status_code=303)
+    for c in data.get("cases", []):
+        if c.get("key") != key:
+            continue
+        angles = c.get("angles") or []
+        if 0 <= vinkel < len(angles):
+            case = _case_from_dict(c)
+            angles[vinkel] = write_draft(case, c.get("editor") or {}, angles[vinkel])
+            c["angles"] = angles
+            save_scan({k: v for k, v in data.items() if k != "created_at"})
+        break
+    return RedirectResponse(url=f"/#sak-{key}", status_code=303)
+
+
+def _case_from_dict(d: dict) -> Case:
+    """Minimal Case for aa bygge kildegrunnlaget - kun feltene agenten bruker."""
+    return Case(
+        key=d.get("key", ""), title=d.get("title", ""), score=d.get("score", 0) or 0,
+        geo=d.get("geo", "nasjonal"), topics=d.get("topics") or [],
+        angle=d.get("angle", ""), why=d.get("why", ""), signals=[],
+        created_at=datetime.now(tz=timezone.utc), kind=d.get("kind", "data"),
+        finding=d.get("finding", ""), metric_value=d.get("metric_value", ""),
+        metric_period=d.get("metric_period", ""), data_source=d.get("data_source", ""),
+        data_url=d.get("data_url", ""), coverage_status=d.get("coverage_status", "unknown"),
+        coverage_examples=d.get("coverage_examples") or [],
+    )
 
 
 @app.post("/leads/{key:path}/approve")
@@ -237,6 +281,25 @@ def kalender(request: Request, ym: str = ""):
         cells.append(None)
     weeks = [cells[i : i + 7] for i in range(0, len(cells), 7)]
 
+    # Kommende deadlines: neste 5 frister fra i dag, uansett maaned.
+    kommende = []
+    for lead in sorted(approved, key=lambda x: x.get("_deadline") or "9999"):
+        dl = lead.get("_deadline") or ""
+        if not dl or dl < today.isoformat():
+            continue
+        try:
+            dd = date.fromisoformat(dl)
+        except ValueError:
+            continue
+        draft = lead.get("draft") or {}
+        kommende.append({
+            "iso": dl,
+            "label": f"{dd.day}. {MONTHS_NO[dd.month - 1][:3]}",
+            "title": draft.get("title") or lead.get("title", ""),
+        })
+        if len(kommende) == 5:
+            break
+
     prev_m = date(year, month, 1) - timedelta(days=1)
     next_m = date(year, month, days_in_month) + timedelta(days=1)
 
@@ -252,6 +315,7 @@ def kalender(request: Request, ym: str = ""):
             "next_ym": f"{next_m.year:04d}-{next_m.month:02d}",
             "today_ym": f"{today.year:04d}-{today.month:02d}",
             "uplanlagt": uplanlagt,
+            "kommende": kommende,
             "planned_count": sum(len(v) for v in by_day.values()),
             "stages": STAGES,
             "stage_labels": STAGE_LABELS,

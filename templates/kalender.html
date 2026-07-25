@@ -55,11 +55,11 @@
                aria-label="{{ cell.day }}. {{ month_name }}{% if cell.leads %}, {{ cell.leads|length }} sak{{ '' if cell.leads|length == 1 else 'er' }}{% endif %}">
               <span class="cal-daynum">{{ cell.day }}</span>
               {% if cell.leads %}
-                <span class="cal-count">{{ cell.leads|length }}</span>
-                <span class="cal-dots">
-                  {% for lead in cell.leads[:4] %}
-                    <i class="cal-dot stage-{{ lead._stage or 'ide' }}{{ ' is-start' if lead._is_start }}{{ ' is-deadline' if lead._is_deadline }}"></i>
+                <span class="cal-bands">
+                  {% for lead in cell.leads[:3] %}
+                    <i class="cal-band stage-{{ lead._stage or 'ide' }}{{ ' b-start' if lead._is_start }}{{ ' b-end' if lead._is_deadline }}"></i>
                   {% endfor %}
+                  {% if cell.leads|length > 3 %}<i class="cal-more">+{{ cell.leads|length - 3 }}</i>{% endif %}
                 </span>
               {% endif %}
             </a>
@@ -67,6 +67,18 @@
         {% endfor %}
       {% endfor %}
     </div>
+
+    {% if kommende %}
+    <div class="deadlines">
+      <p class="dl-h">Kommende deadlines</p>
+      {% for d in kommende %}
+        <a class="dl-row" href="#dag-{{ d.iso }}">
+          <span class="dl-date">{{ d.label }}</span>
+          <span class="dl-title">{{ d.title }}</span>
+        </a>
+      {% endfor %}
+    </div>
+    {% endif %}
 
     <div class="legend">
       {% for st in stages %}

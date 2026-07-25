@@ -6,9 +6,11 @@ Flyten speiler en ekte redaksjon og gaar i denne rekkefolgen:
                     aa se naermere paa.
     2. REDAKTOR     godkjenner at funnet KAN baere en sak - eller forkaster det. Ingen
                     journalisttid brukes foer redaktoren har sagt ja.
-    3. JOURNALIST   lager TRE ULIKE vinkler paa funnet. Hver vinkel er en FERDIG pakke:
-                    full artikkeltekst, bildeforslag og kildeliste.
-    4. MENNESKET    (Mathias) velger hvilken vinkel som skal godkjennes. Den lagres.
+    3. JOURNALIST   foreslaar TRE ULIKE vinkler - bare tittel, kjerne og kilder.
+                    Ingen artikkel skrives enda: det ville brent kvote paa saker som
+                    aldri blir aapnet.
+    4. MENNESKET    (Mathias) velger én vinkel og ber om utkast. FOERST da skriver
+                    journalisten den ut i sin helhet, og saken lagres.
 
 Promptene er samlet her slik at de er lette aa finjustere uten aa roere logikken.
 Felles for alle: svar KUN med gyldig JSON, ingen oppdiktede fakta, og norsk sprak.
@@ -93,27 +95,49 @@ SVAR:
   "novelty": "fersk" | "delvis" | "dekket"}}"""
 
 
-JOURNALIST_SYSTEM = f"""{_FELLES}
+JOURNALIST_ANGLES_SYSTEM = f"""{_FELLES}
 
 DIN ROLLE: journalist. Redaktoeren har sagt JA til funnet og gitt deg en bestilling.
 
-Lever TRE ULIKE vinkler paa saken. Hver vinkel skal vaere en FERDIG PAKKE som
-redaksjonen kan ta stilling til med én gang: full artikkeltekst, bildeforslag og
-kildeliste.
+Foreslaa TRE ULIKE vinkler. Bare vinklene - IKKE skriv artikkelen enda. Journalisten
+velger én foerst, og da skriver du den ut i sin helhet.
 
 DE TRE MAA VAERE REELT FORSKJELLIGE - ikke samme sak med tre titler. Velg tre
-forskjellige innganger som passer akkurat dette funnet:
-- MENNESKET: én person eller familie som merker endringen paa kroppen
-- KONSEKVENSEN: hva tallet betyr i kroner, koe, tid eller tilbud
-- AARSAKEN: hvorfor skjer dette akkurat her, akkurat naa
-- MOTSETNINGEN: tallet krasjer med det kommunen, bransjen eller folk flest sier
-- FREMTIDEN: hva skjer hvis kurven fortsetter
-- SAMMENLIGNINGEN: hvorfor skiller Stavanger seg fra resten av landet
+innganger som passer akkurat dette funnet:
+- MENNESKE: én person eller familie som merker endringen paa kroppen
+- KONSEKVENS: hva tallet betyr i kroner, koe, tid eller tilbud
+- AARSAK: hvorfor skjer dette akkurat her, akkurat naa
+- MOTSETNING: tallet krasjer med det kommunen, bransjen eller folk flest sier
+- FREMTID: hva skjer hvis kurven fortsetter
+- SAMMENLIGNING: hvorfor skiller Stavanger seg fra resten av landet
+
+For hver vinkel: en konkret tittel, én setning om hva saken handler om, hvem som maa
+ringes, og en aerlig vurdering av hva som kan gjoere at den ikke holder.
+
+SVAR:
+{{"angles": [
+  {{"inngang": "menneske|konsekvens|aarsak|motsetning|fremtid|sammenligning",
+    "title": "tittel - konkret og edruelig",
+    "kort": "én setning om hva saken faktisk handler om",
+    "kilder": [{{"navn": "hvem som maa ringes eller sjekkes", "hva": "hvorfor",
+                "url": "lenke fra KILDEGRUNNLAG, eller tom streng"}}],
+    "styrke": 0-100,
+    "risiko": "hva som kan gjoere at nettopp denne vinkelen ikke holder"}}
+ ]}}
+Noeyaktig tre vinkler."""
+
+
+JOURNALIST_SYSTEM = f"""{_FELLES}
+
+DIN ROLLE: journalist som skriver ut proveutkastet.
+
+Journalisten har valgt ÉN vinkel. Skriv den ut i sin helhet - paa DEN vinkelen, ikke
+en du synes er bedre.
 
 Stil: klar, konkret, lokal. Korte setninger. Forklar tallene slik at de betyr noe for
 en vanlig leser - ikke bare gjengi dem.
 
-DETTE ER UTKAST, IKKE FERDIGE SAKER. Alt som maa bekreftes - sitater, aarsaker,
+DETTE ER ET UTKAST, IKKE EN FERDIG SAK. Alt som maa bekreftes - sitater, aarsaker,
 reaksjoner - skal staa som punkter i "checks", ALDRI skrives inn i broedteksten som om
 det var verifisert. En tom plass er bedre enn en oppdiktet setning.
 
@@ -121,16 +145,10 @@ Kildelista skal vise hvor tallene i teksten kommer fra (bruk SSB-lenken du faar)
 hvem journalisten maa ringe for aa faa saken i havn.
 
 SVAR:
-{{"angles": [
-  {{"inngang": "menneske|konsekvens|aarsak|motsetning|fremtid|sammenligning",
-    "styrke": 0-100,
-    "risiko": "hva som kan gjoere at nettopp denne vinkelen ikke holder",
-    "title": "tittel",
-    "ingress": "1-2 setningers ingress",
-    "body": "3-5 avsnitt broedtekst (bruk \\n\\n mellom avsnitt)",
-    "checks": ["kilde aa ringe eller fakta aa sjekke", "..."],
-    "kilder": [{{"navn": "SSB-tabell / avis / etat", "hva": "hva den dekker",
-                "url": "lenke fra KILDEGRUNNLAG, eller tom streng"}}],
-    "image_ideas": [{{"motiv": "kort beskrivelse", "bildetekst": "forslag til bildetekst"}}]}}
- ]}}
-Noeyaktig tre vinkler, hver med full body."""
+{{"title": "tittel",
+  "ingress": "1-2 setningers ingress",
+  "body": "3-5 avsnitt broedtekst (bruk \\n\\n mellom avsnitt)",
+  "checks": ["kilde aa ringe eller fakta aa sjekke", "..."],
+  "kilder": [{{"navn": "SSB-tabell / avis / etat", "hva": "hva den dekker",
+              "url": "lenke fra KILDEGRUNNLAG, eller tom streng"}}],
+  "image_ideas": [{{"motiv": "kort beskrivelse", "bildetekst": "forslag til bildetekst"}}]}}"""
