@@ -13,7 +13,14 @@ Alle kollektorer er "fail-soft": en kilde som er nede stopper ikke resten.
 
 from __future__ import annotations
 
-from app.collectors import google_trends, reddit, schibsted, ssb, ssb_kalender
+from app.collectors import (
+    google_trends,
+    reddit,
+    schibsted,
+    ssb,
+    ssb_flytting,
+    ssb_kalender,
+)
 from app.models import Case, SignalItem
 
 
@@ -30,6 +37,15 @@ def collect_all() -> tuple[list[SignalItem], list[Case], list[str]]:
         status.extend(notes)
     except Exception as exc:  # noqa: BLE001
         status.append(f"[FEIL] SSB: {exc}")
+
+    # 1a) Kvartalsvise flyttetall - ferskere enn aarsstatistikken og en annen
+    # type sak (bevegelsene bak befolkningstallet).
+    try:
+        cases, notes = ssb_flytting.collect()
+        ssb_cases.extend(cases)
+        status.extend(notes)
+    except Exception as exc:  # noqa: BLE001
+        status.append(f"[FEIL] SSB flytting: {exc}")
 
     # 1b) Schibsted-soesteraviser - gjenbruks-leads (Case-objekter)
     try:
