@@ -5,16 +5,18 @@ Kjor:  uv run uvicorn app.main:app --reload
 
 from __future__ import annotations
 
+import threading
 from calendar import monthrange
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import __version__, llm, verify
+from app import __version__, jobs, llm, verify
 from app.agents import run_workflow, write_draft
 from app.collectors import collect_all, coverage, ssb_kalender
 from app.config import ENABLE_AI
@@ -23,17 +25,17 @@ from app.planner import build_plan
 from app.scoring import build_cases, finalize_scores
 from app.storage import (
     STAGE_LABELS,
-    mark_seen,
-    seen_map,
     STAGES,
-    calendar_month,
-    set_plan,
     approve_lead,
+    calendar_month,
     decisions_map,
     list_approved,
     load_latest,
+    mark_seen,
     reject_lead,
     save_scan,
+    seen_map,
+    set_plan,
 )
 
 # Ikon per vinkel-inngang. Brukes i UI saa valget kan tas uten aa aapne noe.
@@ -163,7 +165,11 @@ def _case_topic_trends(cases: list) -> list[dict]:
 
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request):
+def dashboard(request: Request, apen: str = ""):
+    """`apen` er «<sakskey>|<vinkelnr>» og aapner den vinkelen ved sidelast.
+
+    Uten dette landet journalisten paa en side der alt var slaatt sammen igjen -
+    utkastet var skrevet, men usynlig. Det saa ut som ingenting hadde skjedd."""
     data = load_latest()
     scanned_at = None
     if data and data.get("created_at"):
@@ -173,6 +179,7 @@ def dashboard(request: Request):
         name="dashboard.html",
         context={
             "data": data,
+            "apen": apen,
             "scanned_at": scanned_at,
             "version": __version__,
             "decisions": decisions_map(),
@@ -196,26 +203,72 @@ def _find_lead(key: str) -> dict | None:
     return next((c for c in data.get("cases", []) if c.get("key") == key), None)
 
 
-@app.post("/leads/{key:path}/utkast")
-def be_om_utkast(key: str, vinkel: int = Form(0)):
-    """Skriv ut ÉN valgt vinkel. Kalles paa knappetrykk - ikke ved skann.
+# Utkastet gaar gjennom disse fasene. Prosenten er et anslag (se app/jobs.py),
+# teksten er alltid det som faktisk skjer.
+UTKAST_FASER: list[tuple[int, str, float]] = [
+    (4, "Henter kildegrunnlaget", 1.5),
+    (14, "Journalisten skriver artikkelen …", 22.0),
+    (88, "Sporer hvert tall tilbake til kilden", 3.0),
+]
 
-    Resultatet lagres tilbake i siste skann slik at utkastet ikke maa skrives paa
-    nytt hvis siden lastes om."""
-    data = load_latest()
-    if not data:
-        return RedirectResponse(url="/", status_code=303)
-    for c in data.get("cases", []):
-        if c.get("key") != key:
-            continue
-        angles = c.get("angles") or []
-        if 0 <= vinkel < len(angles):
-            case = _case_from_dict(c)
-            angles[vinkel] = write_draft(case, c.get("editor") or {}, angles[vinkel])
-            c["angles"] = angles
-            save_scan({k: v for k, v in data.items() if k != "created_at"})
-        break
-    return RedirectResponse(url=f"/#sak-{key}", status_code=303)
+# To utkast samtidig ville ellers lese samme skann, skrive hver sin kopi tilbake,
+# og den siste ville slette den forstes arbeid.
+_SKANN_LAAS = threading.Lock()
+
+
+def _skriv_utkast(jobb: jobs.Jobb, key: str, vinkel: int) -> dict:
+    """Selve arbeidet bak «Be om utkast». Kjorer i en bakgrunnstraad."""
+    with _SKANN_LAAS:
+        data = load_latest()
+        if not data:
+            raise RuntimeError("Ingen skann å skrive fra — kjør et søk først.")
+        sak = next((c for c in data.get("cases", []) if c.get("key") == key), None)
+        if sak is None:
+            raise RuntimeError("Fant ikke saken i siste skann. Kjør søk på nytt.")
+        angles = sak.get("angles") or []
+        if not 0 <= vinkel < len(angles):
+            raise RuntimeError("Fant ikke vinkelen.")
+
+        jobb.fase(1)
+        utkast = write_draft(_case_from_dict(sak), sak.get("editor") or {}, angles[vinkel])
+        if not utkast.get("body"):
+            raise RuntimeError(f"Journalisten leverte ingen tekst. {llm.last_error()}".strip())
+
+        jobb.fase(2)
+        angles[vinkel] = utkast
+        sak["angles"] = angles
+        save_scan({k: v for k, v in data.items() if k != "created_at"})
+    return {"key": key, "vinkel": vinkel, "mode": utkast.get("mode", "mal")}
+
+
+@app.post("/leads/{key:path}/utkast")
+def be_om_utkast(key: str, vinkel: int = Form(0), js: str = Form("")):
+    """Start skrivingen. Med JavaScript svarer vi med én gang og UI-et viser framdrift.
+
+    Foer dette blokkerte hele POST-en i 10-30 sekunder mens modellen skrev. Paa
+    mobil saa det ut som knappen var doed. Uten JS beholder vi den gamle oppforselen
+    (vent, saa omdiriger) slik at siden fortsatt virker."""
+    jobb = jobs.start(UTKAST_FASER, lambda j: _skriv_utkast(j, key, vinkel))
+    if js:
+        return JSONResponse({"jobb": jobb.id})
+    jobs.vent(jobb, 120)
+    return RedirectResponse(url=_apen_url(key, vinkel), status_code=303)
+
+
+def _apen_url(key: str, vinkel: int) -> str:
+    return f"/?apen={quote(key)}%7C{vinkel}#sak-{key}"
+
+
+@app.get("/jobb/{jobb_id}")
+def jobb_status(jobb_id: str):
+    """Framdrift for en bakgrunnsjobb. Ukjent id betyr som regel at appen er restartet."""
+    jobb = jobs.hent(jobb_id)
+    if jobb is None:
+        return JSONResponse(
+            {"status": "ukjent", "pct": 0, "tekst": "", "feil": "Jobben finnes ikke lenger."},
+            status_code=404,
+        )
+    return JSONResponse({**jobb.tilstand(), "resultat": jobb.resultat})
 
 
 def _case_from_dict(d: dict) -> Case:
@@ -224,7 +277,7 @@ def _case_from_dict(d: dict) -> Case:
         key=d.get("key", ""), title=d.get("title", ""), score=d.get("score", 0) or 0,
         geo=d.get("geo", "nasjonal"), topics=d.get("topics") or [],
         angle=d.get("angle", ""), why=d.get("why", ""), signals=[],
-        created_at=datetime.now(tz=timezone.utc), kind=d.get("kind", "data"),
+        created_at=datetime.now(tz=UTC), kind=d.get("kind", "data"),
         finding=d.get("finding", ""), metric_value=d.get("metric_value", ""),
         metric_period=d.get("metric_period", ""), data_source=d.get("data_source", ""),
         data_url=d.get("data_url", ""), coverage_status=d.get("coverage_status", "unknown"),
@@ -384,7 +437,7 @@ def health():
 
 def _human_time(iso: str) -> str:
     try:
-        dt = datetime.fromisoformat(iso).astimezone(timezone.utc)
+        dt = datetime.fromisoformat(iso).astimezone(UTC)
         return dt.strftime("%d.%m.%Y %H:%M UTC")
     except (ValueError, TypeError):
         return iso
