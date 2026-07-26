@@ -1431,6 +1431,60 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .tall-pluss { color: var(--green); font-weight: 600; }
 .hend-aar { color: var(--faint); }
 
+/* ── Ideer til Tobias ────────────────────────────────────────────────────── */
+/* Eieren 26.07.2026: «Legg det helt nederst. Er kommentar felt saa staar det
+   ideer for Tobias over. Saa kan han skrive det, trykker send.»
+
+   Boksen skal se ut som et notatfelt, ikke som et skjema med felt og etiketter.
+   Terskelen for aa skrive én setning skal vaere naer null. */
+.ide-boks { margin-top: 4px; }
+.ide-felt {
+  width: 100%; margin-top: 12px; padding: 12px 14px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 11px;
+  font: inherit; font-size: 14.5px; line-height: 1.5;
+  resize: vertical; min-height: 80px;
+}
+.ide-felt::placeholder { color: var(--faint); }
+.ide-felt:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px #2f6bff33;
+}
+.ide-send-rad {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 10px; flex-wrap: wrap;
+}
+.ide-hint { font-size: 12px; color: var(--faint); }
+.ide-kvittering { font-size: 12.5px; font-weight: 600; color: var(--green); }
+.ide-tomt { font-size: 12.5px; font-weight: 600; color: var(--amber); }
+.btn-send {
+  background: linear-gradient(180deg, var(--accent), var(--accent2));
+  color: #fff; border: 0; padding: 10px 24px; border-radius: 10px;
+  font-size: 14.5px; font-weight: 600; cursor: pointer;
+  min-height: var(--tap);
+  box-shadow: 0 4px 14px #2f6bff3d;
+}
+.btn-send:hover { filter: brightness(1.08); }
+
+/* Radene inne i fanen. Samme skjelett som `.hend`, saa fanen ser lik ut
+   uansett hva den inneholder. */
+.ide { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.ide:first-of-type { border-top: 0; }
+.ide-ikon { font-size: 18px; line-height: 1.3; flex: none; }
+.ide-mid { min-width: 0; flex: 1; }
+.ide-tekst {
+  margin: 0; font-size: 14px; line-height: 1.5; color: var(--text);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.ide-fersk .ide-tekst { font-weight: 600; }
+.ide-meta { margin-top: 4px; font-size: 11.5px; color: var(--faint); }
+.ide-slett { flex: none; margin: 0; }
+.ide-slett-knapp {
+  background: none; border: 0; color: var(--faint); cursor: pointer;
+  font-size: 20px; line-height: 1; padding: 2px 6px; border-radius: 8px;
+  min-width: var(--tap); min-height: var(--tap);
+}
+.ide-slett-knapp:hover { color: var(--red); background: var(--bg); }
+
 /* ── Radaren: popper opp øverst, som matchmaking i et spill ──────────────── */
 /* Før var dette en helskjerm-overlay som dekket alt. Journalisten mistet
    konteksten sin i 40–60 sekunder og satt og så på en svart skjerm. Nå blir
@@ -2007,3 +2061,42 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 /* Forfalt frist er den ene tilstanden som krever en handling i dag. */
 .mnd-forfalt .mnd-frist { color: var(--red); font-weight: 700; }
 .mnd-forfalt .mnd-tittel { color: var(--text); }
+
+/* ── Piler ved fanene ────────────────────────────────────────────────────────
+   Eieren 26.07.2026, med skjermbilde: «lag en pil til høyre eller venstre slik
+   det er tydelig at det er fler faner.»
+
+   To faner fikk plass på en 414 px skjerm; de tre andre lå utenfor kanten uten
+   at noe røpet det. En vannrett scroll som ikke ser ut som en scroll, finnes
+   ikke for brukeren.
+
+   Pilen er en knapp med et trykkmål på 34 px, ikke en dekorasjon — og den er
+   skjult når det ikke er mer å rulle den veien. */
+.fane-boks { position: relative; }
+.fane-pil {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
+  width: 34px; height: 34px; padding: 0; border-radius: 50%; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--border); color: var(--text);
+  font-size: 20px; line-height: 1; display: flex; align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 12px #0007;
+}
+.fane-pil:hover { border-color: var(--accent); color: var(--accent); }
+.fane-pil:active { transform: translateY(-50%) scale(.92); }
+.fane-pil-v { left: -4px; }
+.fane-pil-h { right: -4px; }
+.fane-pil[hidden] { display: none; }
+
+/* Uttoning under pila, så fanene «forsvinner inn under» den i stedet for å bli
+   kappet midt i et ord. Rent visuelt, derfor pointer-events: none. */
+.fane-boks.har-mer::before,
+.fane-boks.har-mer::after {
+  content: ""; position: absolute; top: 0; bottom: 12px; width: 46px;
+  pointer-events: none; z-index: 2;
+}
+.fane-boks.har-mer::before {
+  left: 0; background: linear-gradient(90deg, var(--panel) 25%, transparent);
+}
+.fane-boks.har-mer::after {
+  right: 0; background: linear-gradient(270deg, var(--panel) 25%, transparent);
+}

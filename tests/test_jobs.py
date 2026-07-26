@@ -723,7 +723,8 @@ def test_reddit_er_av_og_sier_hvorfor(klient, monkeypatch):
     monkeypatch.setattr(collectors.google_trends, "collect", lambda: ([], []))
     # Stortinget kom til som kilde 26.07.2026. En ny kollektor i `collect_all`
     # maa stubbes her ogsaa, ellers ringer testen ut paa ekte nett.
-    for navn in ("ssb", "ssb_flytting", "ssb_sok", "stortinget"):
+    for navn in ("ssb", "ssb_flytting", "ssb_sok", "stortinget",
+                 "strompris", "sola"):
         monkeypatch.setattr(getattr(collectors, navn), "collect",
                             lambda *a, **k: ([], []))
 

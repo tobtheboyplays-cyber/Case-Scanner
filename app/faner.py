@@ -55,7 +55,14 @@ def _tom(mal: dict, slug: str) -> dict:
     return {**mal, "slug": slug, "elementer": [], "nytt": 0}
 
 
-def bygg(hendelser: list[dict] | None, kommende: list[dict] | None) -> list[dict]:
+IDEER = {"navn": "Ideer til Tobias", "ikon": "💡", "farge": "gul"}
+
+
+def bygg(
+    hendelser: list[dict] | None,
+    kommende: list[dict] | None,
+    ideer: list[dict] | None = None,
+) -> list[dict]:
     """[{slug, navn, ikon, farge, elementer, nytt}] — tomme faner utelates.
 
     `elementer` er dicts med `slag` («hendelse» eller «ssb») slik at malen vet
@@ -111,4 +118,27 @@ def bygg(hendelser: list[dict] | None, kommende: list[dict] | None) -> list[dict
     # Deretter SSB-varslene, med den mest innholdsrike fanen først.
     rang = {"konkurser": 0, "nyapninger": 1}
     ut.sort(key=lambda f: (rang.get(f["slug"], 2), -f["antall"]))
+
+    # Ideene sist, og alltid til slutt uansett hvor mange det er. Eieren
+    # 26.07.2026: «den blir lagret paa en av fanene der det staar ideer til
+    # Tobias.» Dette er den korteste veien fra «Mathias faar en idé mens han
+    # bruker verktoyet» til «Tobias ser den» - uten den gaar ideen via
+    # hukommelsen hans til en melding han kanskje sender.
+    if ideer:
+        ut.append({
+            **IDEER,
+            "slug": "ideer",
+            "antall": len(ideer),
+            # «Nytt» er det som ikke er lest. Da staar prikken der til Tobias
+            # faktisk har sett den, i stedet for aa forsvinne av seg selv.
+            "nytt": sum(1 for i in ideer if not i.get("lest")),
+            "elementer": [
+                # `id` blir en tekstnoekkel som resten av fanene bruker; det
+                # numeriske rad-id-et maa derfor tas vare paa under et eget navn,
+                # ellers har sletteknappen ingenting aa peke paa.
+                {**i, "slag": "ide", "id": f"i:{i.get('id')}",
+                 "ide_id": i.get("id"), "fersk": not i.get("lest")}
+                for i in ideer
+            ],
+        })
     return ut

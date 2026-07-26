@@ -176,6 +176,10 @@ class Nett:
             if "dagensrepresentanter" in url:
                 return FalsktSvar(200, {"dagensrepresentanter_liste": []})
             return FalsktSvar(200, {"saker_liste": []})
+        if "hvakosterstrommen.no" in url:
+            return FalsktSvar(404, {})       # ingen stroemsak i testene
+        if "asrv.avinor.no" in url:
+            return FalsktSvar(200, "<airport name='SVG'><flights/></airport>")
         if "data.brreg.no" in url:
             return FalsktSvar(200, KONKURS if self.brreg else {"page": {}})
         if "regnskapsregisteret" in url:

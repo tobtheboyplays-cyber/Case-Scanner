@@ -45,6 +45,9 @@ from app.storage import (
     fullfor,
     gjenapne,
     gjenopprett,
+    ide_legg_til,
+    ide_liste,
+    ide_slett,
     lagre_maalinger,
     list_approved,
     load_latest,
@@ -767,9 +770,15 @@ def dashboard(request: Request, apen: str = "", ferskt: str = ""):
             "valgte_temaer": valgte_temaer(),
             # Fanene for «Kommer snart». Bygges her og ikke i malen fordi
             # gruppering, sortering og telling er logikk - se app/faner.py.
+            # Bygges ogsaa naar det ikke finnes et skann: ideene ligger i basen
+            # uansett, og «jeg sendte en idé og ingenting skjedde» er nettopp den
+            # opplevelsen som gjor at neste idé ikke blir sendt.
             "faner": faner.bygg(
-                (data or {}).get("hendelser"), (data or {}).get("kommende")
-            ) if data else [],
+                (data or {}).get("hendelser"),
+                (data or {}).get("kommende"),
+                ide_liste(),
+            ),
+            "ideer": ide_liste(),
         },
     )
 
@@ -1116,6 +1125,41 @@ def oppgave_ferdig(key: str, tilbake: str = Form("/kalender?fane=oppgaver")):
 def oppgave_angre(key: str, tilbake: str = Form("/kalender?fane=oppgaver")):
     gjenapne(key)
     return RedirectResponse(url=tilbake or "/kalender?fane=oppgaver", status_code=303)
+
+
+def _med_flagg(url: str, flagg: str) -> str:
+    """`/` + `sendt=1` -> `/?sendt=1`, men `/?ym=..` -> `/?ym=..&sendt=1`.
+
+    Naiv strengsammenslaaing ga `/?ym=..?sendt=1` - to spoersmaalstegn, og
+    `sendt` ble en del av verdien til `ym` i stedet for et eget parameter."""
+    return f"{url}{'&' if '?' in url else '?'}{flagg}"
+
+
+@app.post("/ideer")
+def ny_ide(tekst: str = Form(""), tilbake: str = Form("/")):
+    """Mathias skriver en idé, trykker send, og Tobias ser den i fanen.
+
+    Eieren 26.07.2026: «Legg til ideer for Tobias. Legg det helt nederst ... saa
+    kan han skrive det, trykker send, og den blir lagret paa en av fanene der det
+    staar ideer til Tobias.»
+
+    Ingen validering utover «skriv noe foerst». En idé er ikke et skjema.
+
+    Kvitteringen (`sendt=1`) staar paa selve boksen og ikke bare i fanen: har han
+    ikke skannet enda, finnes ikke fanen, og da ville «send» sett ut som at
+    ingenting skjedde. En idé som ser ut til aa forsvinne blir ikke skrevet to
+    ganger - den blir ikke skrevet i det hele tatt."""
+    ok, _grunn = ide_legg_til(tekst)
+    return RedirectResponse(
+        url=f"{_med_flagg(tilbake, 'sendt=1' if ok else 'tomt=1')}#ideer",
+        status_code=303,
+    )
+
+
+@app.post("/ideer/{ide_id}/slett")
+def slett_ide(ide_id: int, tilbake: str = Form("/")):
+    ide_slett(ide_id)
+    return RedirectResponse(url=f"{tilbake}#ideer", status_code=303)
 
 
 @app.post("/temaer")

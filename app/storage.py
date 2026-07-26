@@ -987,3 +987,79 @@ def rekkefolge_map() -> dict[str, int]:
         return {k: p for k, p in conn.execute("SELECT key, plass FROM rekkefolge")}
     finally:
         conn.close()
+
+
+# ── Ideer til Tobias ─────────────────────────────────────────────────────────
+# Eieren 26.07.2026: «Legg til ideer for Tobias. Legg det helt nederst. Er
+# kommentarfelt saa staar det ideer for Tobias over. Saa kan han skrive det,
+# trykker send, og den blir lagret paa en av fanene der det staar ideer til
+# Tobias.»
+#
+# Dette er den korteste veien fra «Mathias faar en idé mens han bruker verktoyet»
+# til «Tobias ser den». Uten den gaar ideen via hukommelsen hans til en melding
+# han kanskje sender - altsaa som regel ingen steder.
+
+MAKS_IDE = 2000          # nok til et avsnitt, ikke nok til en artikkel
+MAKS_IDEER = 200         # boksen skal staa i aarevis; lista skal ikke vokse fritt
+
+
+def _ide_tabell(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS ideer ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " tekst TEXT NOT NULL,"
+        " lagt_inn TEXT NOT NULL,"
+        " lest INTEGER NOT NULL DEFAULT 0)"
+    )
+
+
+def ide_legg_til(tekst: str) -> tuple[bool, str]:
+    """Lagre en idé. Returnerer (ok, grunn-hvis-ikke)."""
+    ren = (tekst or "").strip()
+    if not ren:
+        return False, "Skriv noe først."
+    conn = _connect()
+    try:
+        _ide_tabell(conn)
+        conn.execute(
+            "INSERT INTO ideer (tekst, lagt_inn) VALUES (?, ?)",
+            (ren[:MAKS_IDE], _now()),
+        )
+        # Klipp halen. Uten dette vokser tabellen for alltid.
+        conn.execute(
+            "DELETE FROM ideer WHERE id NOT IN "
+            "(SELECT id FROM ideer ORDER BY id DESC LIMIT ?)",
+            (MAKS_IDEER,),
+        )
+        conn.commit()
+        return True, ""
+    finally:
+        conn.close()
+
+
+def ide_liste() -> list[dict]:
+    """Nyeste først — den siste ideen er den ferskeste tanken."""
+    if not os.path.exists(DB_PATH):
+        return []
+    conn = _connect()
+    try:
+        _ide_tabell(conn)
+        rows = conn.execute(
+            "SELECT id, tekst, lagt_inn, lest FROM ideer ORDER BY id DESC"
+        ).fetchall()
+    finally:
+        conn.close()
+    return [
+        {"id": r[0], "tekst": r[1], "lagt_inn": r[2], "lest": bool(r[3])}
+        for r in rows
+    ]
+
+
+def ide_slett(ide_id: int) -> None:
+    conn = _connect()
+    try:
+        _ide_tabell(conn)
+        conn.execute("DELETE FROM ideer WHERE id = ?", (ide_id,))
+        conn.commit()
+    finally:
+        conn.close()

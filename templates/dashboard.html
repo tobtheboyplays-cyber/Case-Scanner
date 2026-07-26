@@ -482,113 +482,6 @@
     </section>
   </aside>
 </div>
-{# «Kommer snart» flyttet hit fra toppen. Eieren 26.07.2026: «sett Kommer snart
-   nederst paa siden paa startsiden.»
-
-   Riktig prioritering: panelet svarer paa «hva kommer», og det er nyttig - men
-   det som skal avgjore hva han gjor NAA er saksforslagene. Sto det oeverst,
-   maatte han scrolle forbi femti konkurser og SSB-datoer for aa komme til
-   lista han faktisk aapnet appen for. #}
-<section class="page" style="padding-bottom:0">
-{% if faner %}
-  {# Panelet blandet to helt ulike ting under én overskrift: konkurser som HAR
-     skjedd, og SSB-tall som IKKE er sluppet. 52 rader der man måtte lese hver
-     enkelt for å vite hva slags sak det var.
-
-     Nå er det én fane per tema, hver med sin egen farge og sitt ikon — og en
-     prikk over fanen når det har kommet noe ferskt der. Fargen står aldri
-     alene: ikon og navn sier det samme.
-
-     Fanebyttet er ren CSS (skjulte radioknapper), så det virker uten JS og
-     overlever en refresh uten å måtte lagre noe. #}
-  <details class="panel forsprang" open>
-    <summary>
-      <h2>⏳ Kommer snart</h2>
-      <span class="panel-sub">Hva som har skjedd i næringslivet, og hvilke tall som slippes.</span>
-    </summary>
-
-    <div class="temafaner">
-      {# Radioknappen staar rett FORAN innholdet sitt, ikke inne i faneraden.
-         Det er hele trikset: da er de sosken, og `:checked + .fane-innhold`
-         treffer. Ligger radioen inni raden, er innholdet en onkel - og ingen
-         CSS-kombinator naar dit. Det var nettopp den feilen nettlesertesten
-         fanget: fanene fantes, men ingen av dem viste noe. #}
-      <div class="fane-rad" role="tablist">
-        {% for f in faner %}
-        <label class="fane fane-{{ f.farge }}" for="fane-{{ f.slug }}">
-          <span class="fane-ikon" aria-hidden="true">{{ f.ikon }}</span>
-          <span class="fane-navn">{{ f.navn }}</span>
-          <span class="fane-tall">{{ f.antall }}</span>
-          {% if f.nytt %}<span class="fane-prikk" title="{{ f.nytt }} ferske">{{ f.nytt }}</span>{% endif %}
-        </label>
-        {% endfor %}
-      </div>
-
-      {% for f in faner %}
-      <input type="radio" name="fane" id="fane-{{ f.slug }}" class="fane-radio"
-             {{ 'checked' if loop.first }} />
-      <div class="fane-innhold fane-{{ f.farge }}" id="innhold-{{ f.slug }}">
-        {% for e in f.elementer %}
-          {% if e.slag == 'hendelse' %}
-          <div class="hend{{ ' hend-fersk' if e.fersk }}">
-            <span class="hend-ikon" aria-hidden="true">{{ f.ikon }}</span>
-            <div class="hend-mid">
-              <a class="hend-navn" href="{{ e.lenke }}" target="_blank" rel="noopener">{{ e.navn }}</a>
-              <div class="hend-meta">
-                <span class="hend-type hend-{{ e.type }}">{{ {'konkurs':'Konkurs','avvikling':'Under avvikling','nytt':'Nytt foretak'}[e.type] }}</span>
-                <span>{{ e.kommune }}</span>
-                {% if e.publikum %}<span class="tag">{{ e.publikum }}</span>{% endif %}
-                {% if e.ansatte %}<span>{{ e.ansatte }} ansatte</span>{% endif %}
-                <span>{{ e.dato }}</span>
-              </div>
-              {% if e.bransje %}<p class="hend-bransje">{{ e.bransje }}</p>{% endif %}
-              {# Regnskapstallet er det som gjor en konkurs til en sak i stedet
-                 for et navn. «Gikk konkurs» er en notis; «omsatte for 4,1 mill
-                 og gikk med underskudd aaret for» er noe man kan ringe paa. #}
-              {% if e.regnskap %}
-              <p class="hend-tall">
-                {% if e.regnskap.omsetning is not none %}
-                  Omsetning {{ '{:,.0f}'.format(e.regnskap.omsetning)|replace(',', ' ') }} kr
-                {% endif %}
-                {% if e.regnskap.resultat is not none %}
-                  · <span class="{{ 'tall-minus' if e.regnskap.resultat < 0 else 'tall-pluss' }}">resultat
-                  {{ '{:,.0f}'.format(e.regnskap.resultat)|replace(',', ' ') }} kr</span>
-                {% endif %}
-                <span class="hend-aar">({{ e.regnskap.aar }})</span>
-              </p>
-              {% endif %}
-            </div>
-          </div>
-          {% else %}
-          <div class="komm{{ ' komm-fersk' if e.fersk }}">
-            <div class="komm-when">{{ e.dager_til }}<span>dager</span></div>
-            <div class="komm-mid">
-              <a class="komm-title" href="{{ e.lenke }}" target="_blank" rel="noopener">{{ e.tittel }}</a>
-              <div class="komm-meta">
-                {% for c in e.kontakter[:1] %}
-                  <span class="komm-contact">📞 {{ c.navn }}
-                    {% if c.telefon %}<a href="tel:{{ c.telefon }}">{{ c.telefon }}</a>{% endif %}
-                  </span>
-                {% endfor %}
-              </div>
-            </div>
-          </div>
-          {% endif %}
-        {% endfor %}
-        {% if f.antall > f.elementer|length %}
-        <p class="komm-note">Viser {{ f.elementer|length }} av {{ f.antall }} — de ferskeste først.</p>
-        {% endif %}
-        {% if f.slug in ('konkurser', 'nyapninger') %}
-        <p class="komm-note">Kilde: Brønnøysundregistrene. Et registrert foretak er
-          ikke det samme som en åpen dør — ring og sjekk før du skriver.</p>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-  </details>
-{% endif %}
-</section>
-
 <!-- Tallene sist: de forteller hvordan skannet gikk, men de er ikke noe
      journalisten HANDLER paa. Handlingen staar oeverst. -->
 <section class="kpis">
@@ -658,6 +551,181 @@
 {% endif %}{# slutt: tom-skjerm #}
 
 {% endif %}
+
+{# «Kommer snart» flyttet hit fra toppen. Eieren 26.07.2026: «sett Kommer snart
+   nederst paa siden paa startsiden.»
+
+   Riktig prioritering: panelet svarer paa «hva kommer», og det er nyttig - men
+   det som skal avgjore hva han gjor NAA er saksforslagene. Sto det oeverst,
+   maatte han scrolle forbi femti konkurser og SSB-datoer for aa komme til
+   lista han faktisk aapnet appen for. #}
+<section class="page" style="padding-bottom:0">
+{% if faner %}
+  {# Panelet blandet to helt ulike ting under én overskrift: konkurser som HAR
+     skjedd, og SSB-tall som IKKE er sluppet. 52 rader der man måtte lese hver
+     enkelt for å vite hva slags sak det var.
+
+     Nå er det én fane per tema, hver med sin egen farge og sitt ikon — og en
+     prikk over fanen når det har kommet noe ferskt der. Fargen står aldri
+     alene: ikon og navn sier det samme.
+
+     Fanebyttet er ren CSS (skjulte radioknapper), så det virker uten JS og
+     overlever en refresh uten å måtte lagre noe. #}
+  {# Er ideene den ENESTE fanen — typisk foer dagens skann har kjort — ville
+     overskriften «Kommer snart / hva som har skjedd i naeringslivet» loeyet om
+     hva som faktisk staar under den. Da sier den hva den viser. #}
+  {% set bare_ideer = faner|map(attribute='slug')|list == ['ideer'] %}
+  <details class="panel forsprang" open>
+    <summary>
+      <h2>{{ '💡 Ideer til Tobias' if bare_ideer else '⏳ Kommer snart' }}</h2>
+      <span class="panel-sub">{% if bare_ideer %}Ideene Mathias har sendt inn.{% else %}Hva som har skjedd i næringslivet, og hvilke tall som slippes.{% endif %}</span>
+    </summary>
+
+    <div class="temafaner">
+      {# Radioknappen staar rett FORAN innholdet sitt, ikke inne i faneraden.
+         Det er hele trikset: da er de sosken, og `:checked + .fane-innhold`
+         treffer. Ligger radioen inni raden, er innholdet en onkel - og ingen
+         CSS-kombinator naar dit. Det var nettopp den feilen nettlesertesten
+         fanget: fanene fantes, men ingen av dem viste noe. #}
+      {# Pilene: uten dem er det ingenting som roeper at det ligger flere faner
+         utenfor skjermkanten. Eieren 26.07.2026, med skjermbilde: «lag en pil
+         til hoyre eller venstre slik det er tydelig at det er fler faner.»
+
+         De er KNAPPER, ikke pynt - et trykk ruller raden et stykke. `hidden`
+         styres av JS ut fra hvor langt det faktisk er scrollet, saa en pil aldri
+         peker mot ingenting. Uten JS staar raden som foer og kan dras med
+         fingeren; pilene er en snarvei, ikke den eneste veien. #}
+      <div class="fane-boks">
+      <button class="fane-pil fane-pil-v" type="button" hidden
+              aria-label="Vis faner til venstre">‹</button>
+      <button class="fane-pil fane-pil-h" type="button" hidden
+              aria-label="Vis flere faner">›</button>
+      <div class="fane-rad" role="tablist">
+        {% for f in faner %}
+        <label class="fane fane-{{ f.farge }}" for="fane-{{ f.slug }}">
+          <span class="fane-ikon" aria-hidden="true">{{ f.ikon }}</span>
+          <span class="fane-navn">{{ f.navn }}</span>
+          <span class="fane-tall">{{ f.antall }}</span>
+          {% if f.nytt %}<span class="fane-prikk" title="{{ f.nytt }} ferske">{{ f.nytt }}</span>{% endif %}
+        </label>
+        {% endfor %}
+      </div>
+      </div>
+
+      {% for f in faner %}
+      <input type="radio" name="fane" id="fane-{{ f.slug }}" class="fane-radio"
+             {{ 'checked' if loop.first }} />
+      <div class="fane-innhold fane-{{ f.farge }}" id="innhold-{{ f.slug }}">
+        {% for e in f.elementer %}
+          {% if e.slag == 'hendelse' %}
+          <div class="hend{{ ' hend-fersk' if e.fersk }}">
+            <span class="hend-ikon" aria-hidden="true">{{ f.ikon }}</span>
+            <div class="hend-mid">
+              <a class="hend-navn" href="{{ e.lenke }}" target="_blank" rel="noopener">{{ e.navn }}</a>
+              <div class="hend-meta">
+                <span class="hend-type hend-{{ e.type }}">{{ {'konkurs':'Konkurs','avvikling':'Under avvikling','nytt':'Nytt foretak'}[e.type] }}</span>
+                <span>{{ e.kommune }}</span>
+                {% if e.publikum %}<span class="tag">{{ e.publikum }}</span>{% endif %}
+                {% if e.ansatte %}<span>{{ e.ansatte }} ansatte</span>{% endif %}
+                <span>{{ e.dato }}</span>
+              </div>
+              {% if e.bransje %}<p class="hend-bransje">{{ e.bransje }}</p>{% endif %}
+              {# Regnskapstallet er det som gjor en konkurs til en sak i stedet
+                 for et navn. «Gikk konkurs» er en notis; «omsatte for 4,1 mill
+                 og gikk med underskudd aaret for» er noe man kan ringe paa. #}
+              {% if e.regnskap %}
+              <p class="hend-tall">
+                {% if e.regnskap.omsetning is not none %}
+                  Omsetning {{ '{:,.0f}'.format(e.regnskap.omsetning)|replace(',', ' ') }} kr
+                {% endif %}
+                {% if e.regnskap.resultat is not none %}
+                  · <span class="{{ 'tall-minus' if e.regnskap.resultat < 0 else 'tall-pluss' }}">resultat
+                  {{ '{:,.0f}'.format(e.regnskap.resultat)|replace(',', ' ') }} kr</span>
+                {% endif %}
+                <span class="hend-aar">({{ e.regnskap.aar }})</span>
+              </p>
+              {% endif %}
+            </div>
+          </div>
+          {% elif e.slag == 'ide' %}
+          {# Ideene fra Mathias. Ingen lenke, ingen metadata - bare det han skrev
+             og naar. Sletteknappen er Tobias' «lest og notert»: naar ideen er
+             tatt, forsvinner den, og prikken paa fanen med den. #}
+          <div class="ide{{ ' ide-fersk' if e.fersk }}">
+            <span class="ide-ikon" aria-hidden="true">💡</span>
+            <div class="ide-mid">
+              <p class="ide-tekst">{{ e.tekst }}</p>
+              <div class="ide-meta"><span>{{ e.lagt_inn[:16]|replace('T', ' kl. ') }}</span></div>
+            </div>
+            <form method="post" action="/ideer/{{ e.ide_id }}/slett" class="ide-slett">
+              <input type="hidden" name="tilbake" value="/" />
+              <button type="submit" class="ide-slett-knapp" title="Fjern ideen"
+                      aria-label="Fjern ideen">×</button>
+            </form>
+          </div>
+          {% else %}
+          <div class="komm{{ ' komm-fersk' if e.fersk }}">
+            <div class="komm-when">{{ e.dager_til }}<span>dager</span></div>
+            <div class="komm-mid">
+              <a class="komm-title" href="{{ e.lenke }}" target="_blank" rel="noopener">{{ e.tittel }}</a>
+              <div class="komm-meta">
+                {% for c in e.kontakter[:1] %}
+                  <span class="komm-contact">📞 {{ c.navn }}
+                    {% if c.telefon %}<a href="tel:{{ c.telefon }}">{{ c.telefon }}</a>{% endif %}
+                  </span>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
+        {% if f.antall > f.elementer|length %}
+        <p class="komm-note">Viser {{ f.elementer|length }} av {{ f.antall }} — de ferskeste først.</p>
+        {% endif %}
+        {% if f.slug in ('konkurser', 'nyapninger') %}
+        <p class="komm-note">Kilde: Brønnøysundregistrene. Et registrert foretak er
+          ikke det samme som en åpen dør — ring og sjekk før du skriver.</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+{% endif %}
+</section>
+
+{# Ideer til Tobias. Eieren 26.07.2026: «Legg det helt nederst. Er kommentar felt
+   saa staar det ideer for Tobias over. Saa kan han skrive det, trykker send. Og
+   den blir lagret paa en av fanene der det staar ideer til Tobias.»
+
+   Den staar UTENFOR skann-blokka: en idé kommer like gjerne naar skannet var
+   tomt - da er det ofte nettopp DA han har en. Og den staar sist, som bedt om;
+   feltet skal ikke konkurrere med sakene om oppmerksomheten.
+
+   Ingen JS: en vanlig POST med redirect. Da virker den ogsaa hvis noe annet paa
+   sida har kraesjet, og teksten gaar aldri tapt i en feilet fetch. #}
+<section class="page">
+  <form class="panel ide-boks" method="post" action="/ideer" id="ny-ide">
+    <div class="panel-head">
+      <h2>💡 Ideer for Tobias</h2>
+      <span class="panel-sub">Noe som mangler, noe som irriterer, en sak radaren
+        burde funnet? Skriv det her — det havner rett i fanen hans.</span>
+    </div>
+    <input type="hidden" name="tilbake" value="/" />
+    <textarea name="tekst" class="ide-felt" rows="3" maxlength="2000"
+              placeholder="F.eks.: kan den sjekke byggesaker i Stavanger kommune?"
+              aria-label="Din idé til Tobias"></textarea>
+    <div class="ide-send-rad">
+      {% if request.query_params.get('sendt') %}
+      <span class="ide-kvittering" role="status">✓ Sendt — den ligger i fanen «Ideer til Tobias».</span>
+      {% elif request.query_params.get('tomt') %}
+      <span class="ide-tomt" role="status">Skriv noe først.</span>
+      {% else %}
+      <span class="ide-hint">Tobias ser den neste gang han er innom.</span>
+      {% endif %}
+      <button type="submit" class="btn-send">Send</button>
+    </div>
+  </form>
+</section>
 
 {# Bekreftelse for sletting. Eieren ba om «sikker?»-popup MED en «ikke vis
    dette igjen»-boks - han vet at han blir lei den etter tjuende sak. Valget
@@ -1355,6 +1423,35 @@
   /* «Velg flere temaer» fra tomskjermen. Temamenyen ER skanneknappen oeverst -
      det finnes ingen egen temaside - saa knappen aapner den og ruller dit i
      stedet for aa lenke til en URL som ikke finnes. */
+  /* Pilene ved fanene. Vises bare naar det FAKTISK er mer aa rulle til den
+     siden - en pil som peker mot ingenting er verre enn ingen pil. */
+  (function () {
+    var rad = document.querySelector('.fane-rad');
+    if (!rad) return;
+    var boks = rad.closest('.fane-boks');
+    var venstre = boks.querySelector('.fane-pil-v');
+    var hoyre = boks.querySelector('.fane-pil-h');
+
+    function oppdater() {
+      /* 2 px slingringsmonn: delbredder gjor at scrollLeft sjelden treffer
+         maksimum helt presist, og da ble hoyrepila staaende for alltid. */
+      var maks = rad.scrollWidth - rad.clientWidth;
+      venstre.hidden = rad.scrollLeft <= 2;
+      hoyre.hidden = rad.scrollLeft >= maks - 2;
+      boks.classList.toggle('har-mer', maks > 2);
+    }
+
+    function rull(retning) {
+      rad.scrollBy({ left: retning * rad.clientWidth * 0.7, behavior: 'smooth' });
+    }
+
+    venstre.addEventListener('click', function () { rull(-1); });
+    hoyre.addEventListener('click', function () { rull(1); });
+    rad.addEventListener('scroll', oppdater, { passive: true });
+    window.addEventListener('resize', oppdater);
+    oppdater();
+  })();
+
   document.querySelectorAll('[data-apne-temaer]').forEach(function (knapp) {
     knapp.addEventListener('click', function () {
       var meny = document.querySelector('.tema-meny');
@@ -1393,6 +1490,20 @@
     localStorage.setItem(NOKKEL, v.dataset.skann || '');
     timer = setTimeout(ut, 5000);
     v.querySelector('.varsel-lukk').addEventListener('click', ut);
+  })();
+
+  /* Etter «Send» sender serveren oss til /#ideer. Fanebyttet er ren CSS via
+     skjulte radioknapper, og en ankerlenke treffer ikke en radio - saa uten
+     dette landet han paa toppen av sida og maatte lete etter fanen selv. */
+  (function () {
+    if (location.hash !== '#ideer') return;
+    var r = document.getElementById('fane-ideer');
+    if (!r) return;
+    r.checked = true;
+    var panel = r.closest('details');
+    if (panel) panel.open = true;
+    document.getElementById('innhold-ideer')
+      .scrollIntoView({ block: 'center' });
   })();
 
 </script>

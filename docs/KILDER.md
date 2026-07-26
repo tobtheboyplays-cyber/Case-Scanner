@@ -19,7 +19,39 @@ antatt å virke. Statuskodene er de vi fikk.
 | **SSBs publiseringskalender** | Hva som slippes de neste ukene — det eneste ekte forspranget | åpen |
 | **Brønnøysundregistrene** | Konkurser, avviklinger, nyregistreringer + regnskapstall | åpen, ingen nøkkel |
 | **Stortinget** (data.stortinget.no) | Saker der en av Rogalands 14 representanter er saksordfører eller forslagsstiller | `Allow: /` |
+| **Strømpris NO2** (hvakosterstrommen.no) | Timepriser i Stavangers eget prisområde, i dag og i morgen | ingen direktiver + eksplisitt fri bruk |
+| **Sola lufthavn** (Avinor) | Kanselleringer og forsinkelser i sanntid | bare `Sitemap:`, ingen `Disallow` |
 | **Google News RSS** | Dekningssjekk + Aftenbladets eget arkiv (oppfølgere) | fasit, ikke råstoff |
+
+### Strømprisen — den mest personlige lokalnyheten som finnes
+
+Stavanger ligger i **NO2**. Prisen for i morgen settes klokka 13 i dag, så fra
+ettermiddagen har vi et tall ingen har skrevet om ennå, og som treffer hver eneste
+husstand i byen. For et publikum på 20–39 år er det vanskelig å slå.
+
+API-sida sier det rett ut: *«Fritt tilgjengelig for hvem som helst, til hva som
+helst. Fordi vi mener strømprisen tilhører folket.»* robots.txt inneholder bare
+den forklarende Cloudflare-blokka — ingen direktiver i det hele tatt.
+
+**Terskel:** minst 25 % endring fra i dag til i morgen, ELLER minst 3× sprik
+mellom billigste og dyreste time. Uten den ville strømprisen tatt en plass i lista
+hver eneste morgen uansett hva den gjorde. Målt på ekte data 26.07.2026: 4,8 ×
+sprik — 148,1 øre kl. 22 mot 30,9 øre kl. 10.
+
+**Forbeholdet står i hvert funn:** prisene er uten nettleie, avgifter og
+strømstøtte. En overskrift uten det er misvisende.
+
+### Sola — saken man kan ringe på i løpet av minutter
+
+Avinors XML-feed er åpen og oppdateres kontinuerlig. Terskel: minst én
+kansellering, eller minst fire samtidige forsinkelser over 20 minutter — en
+forsinket avgang er ikke en nyhet, det er en tirsdag.
+
+To feller som kostet et forsøk hver:
+- `TimeFrom` **må** være 0 eller større. Et negativt vindu gir `400`. Første
+  utkast prøvde å se én time bakover for å fange ferske kanselleringer.
+- Statuskoden `E` betyr bare at det er satt en forventet tid, ikke at flyet er
+  forsinket. Uten minuttgrensen ble hver avgang med et estimat «forsinket».
 
 ### Hvorfor Stortinget er verdt plassen
 

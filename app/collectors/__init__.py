@@ -21,8 +21,10 @@ from app.collectors import (
     ssb,
     ssb_flytting,
     ssb_kalender,
+    sola,
     ssb_sok,
     stortinget,
+    strompris,
 )
 from app.config import ENABLE_REDDIT
 from app.models import Case, SignalItem
@@ -93,6 +95,27 @@ def collect_all(
         status.extend(notes)
     except Exception as exc:  # noqa: BLE001
         status.append(f"[FEIL] Stortinget: {exc}")
+
+    # 1d) Stroemprisen i NO2 - Stavangers eget prisomraade. Prisen for i morgen
+    # settes klokka 13 i dag, saa fra ettermiddagen har vi et tall ingen har
+    # skrevet om enda, og som treffer hver husstand i byen.
+    meld("Strømpris: NO2 (Stavanger)")
+    try:
+        cases, notes = strompris.collect(temaer)
+        ssb_cases.extend(cases)
+        status.extend(notes)
+    except Exception as exc:  # noqa: BLE001
+        status.append(f"[FEIL] Strømpris: {exc}")
+
+    # 1e) Sola lufthavn. Naar noe stopper opp der, staar folk i avgangshallen
+    # akkurat naa - det er en sak man kan ringe paa i loepet av minutter.
+    meld("Sola lufthavn: kanselleringer og forsinkelser")
+    try:
+        cases, notes = sola.collect(temaer)
+        ssb_cases.extend(cases)
+        status.extend(notes)
+    except Exception as exc:  # noqa: BLE001
+        status.append(f"[FEIL] Sola: {exc}")
 
     # Her laa det EN GANG en kollektor som hentet saker fra Aftenposten, Bergens
     # Tidende og E24 og gjorde dem til leads. Den er slettet, ikke skrudd av.

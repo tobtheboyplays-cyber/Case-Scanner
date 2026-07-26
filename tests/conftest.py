@@ -29,6 +29,7 @@ def isolert_database(tmp_path, monkeypatch):
 _NETTKOLLEKTORER = (
     "brreg", "coverage", "news_rss", "reddit",
     "ssb", "ssb_flytting", "ssb_kalender", "ssb_sok", "stortinget",
+    "strompris", "sola",
 )
 
 
