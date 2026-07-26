@@ -77,3 +77,64 @@ def test_alle_kollektorer_holder_tallfeltet_kort():
             # Fjern feltnavnene; det er de faste ordene som teller.
             fast = re.sub(r"\{[^}]*\}", "", treff)
             assert len(fast) <= 20, f"{fil.name}: metric_value «{treff}» er for lang"
+
+
+# ── Beskjeden ved et skann som ikke ga noe ─────────────────────────────────
+#
+# Eieren 26.07.2026: «Må også legge til tydelig når en scan kommer tom ... du
+# kan legge til en 'trykk ok' på den popuppen» og «og popuppen fungerer når det
+# ikke kommer noe på scannen».
+#
+# Målt på tre ekte skann etter hverandre samme kveld:
+#   runde 1: 16 saker, 16 nye  -> ingen beskjed  (skjermen er full)
+#   runde 2:  5 saker,  0 nye  -> «ingenting nytt»
+#   runde 3:  1 sak,    1 ny   -> ingen beskjed
+#
+# Runde 2 er poenget: skjermen er IKKE tom, men journalisten fikk ingenting
+# nytt. Forskjellen mellom «0 kort» og «5 gamle kort» er usynlig for han.
+
+from datetime import UTC, datetime  # noqa: E402
+
+from app.main import _varsel  # noqa: E402
+from app.models import Case  # noqa: E402
+
+
+def _sak(uendret: bool = False) -> Case:
+    c = Case(key="k", title="t", score=1.0, geo="lokal", topics=[], angle="",
+             why="", signals=[], created_at=datetime.now(tz=UTC), kind="data",
+             finding="f")
+    c.uendret = uendret
+    return c
+
+
+def test_tomt_skann_er_viktig():
+    v = _varsel([], ["helse"], 0)
+    assert v["viktig"] is True
+    assert v["handling"] == "temaer"
+    assert "bytte tema" in v["tekst"].lower()
+
+
+def test_ingenting_nytt_er_ogsaa_viktig():
+    """5 gamle kort er like mye en blindvei som 0 kort."""
+    v = _varsel([_sak(uendret=True)] * 5, ["helse"], 0)
+    assert v["viktig"] is True
+    assert "Bytt tema" in v["tekst"]
+
+
+def test_ingen_nye_saker_er_ogsaa_viktig():
+    v = _varsel([_sak()], ["helse"], 0)
+    assert v["viktig"] is True
+
+
+def test_et_vellykket_skann_gir_ingen_beskjed():
+    """Sier den fra om alt, blir den støy — og da er vi tilbake til statuslinja
+    ingen leste."""
+    assert _varsel([_sak()], ["helse"], 3) == {}
+
+
+def test_ett_funn_skrives_i_entall():
+    """«Viser de 1 sterkeste funnene» er ikke norsk, og ett funn er vanligere
+    enn man tror når temavalget er smalt."""
+    t = _varsel([_sak(uendret=True)], ["helse"], 0)["tekst"]
+    assert "det sterkeste funnet" in t
+    assert "de 1 " not in t

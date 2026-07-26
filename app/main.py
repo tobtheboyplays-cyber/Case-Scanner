@@ -301,18 +301,36 @@ def _varsel(cases: list[Case], temaer: list[str], antall_nye: int) -> dict:
             "viktig": True,
             "handling": "temaer" if temaer else "",
         }
+    # Ogsaa VIKTIG, av samme grunn som det helt tomme skannet. Maalt paa tre
+    # ekte skann etter hverandre 26.07.2026: runde 2 ga 5 saker, 0 nye, alle
+    # merket «uendret». Skjermen er ikke tom, men journalisten fikk ingenting
+    # NYTT - og forskjellen mellom «0 kort» og «5 gamle kort» er usynlig for
+    # han. Begge er en beskjed han maa ta stilling til, ikke en opplysning som
+    # kan svippe forbi mens han ser en annen vei.
     if any(c.uendret for c in cases):
         return {
-            "tittel": "Ingenting har endret seg",
+            "tittel": "Ingenting nytt denne gangen",
+            # «Viser de 1 sterkeste funnene» er ikke norsk. Ett funn er
+            # vanligere enn man tror naar temavalget er smalt.
             "tekst": (
-                f"Viser de {len(cases)} sterkeste funnene på nytt, merket «uendret». "
-                "SSB publiserer nye tall på faste datoer."
+                "Kildene svarte, men ingen tall har endret seg. Viser "
+                + ("det sterkeste funnet" if len(cases) == 1
+                   else f"de {len(cases)} sterkeste funnene")
+                + " på nytt, merket «uendret». Bytt tema for å lete et annet "
+                  "sted — SSB publiserer nye tall på faste datoer."
             ),
+            "viktig": True,
+            "handling": "temaer",
         }
     if not antall_nye:
         return {
             "tittel": "Ingen nye saker",
-            "tekst": "Alt i lista har vært her før. Huk av flere temaer for å lete bredere.",
+            "tekst": (
+                "Alt i lista har vært her før. Bytt tema for å lete et annet "
+                "sted, eller fjern alle avhukinger for å lete bredt."
+            ),
+            "viktig": True,
+            "handling": "temaer",
         }
     return {}
 
