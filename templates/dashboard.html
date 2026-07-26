@@ -603,7 +603,10 @@
 
 <footer class="foot">
   <span>ⓘ Case-radar henter og analyserer åpne data fra SSB og andre offentlige kilder.</span>
-  <span class="foot-right">Case-radar v{{ version }} · bruk treff som tips, ikke fasit</span>
+  {# Byggmerket er ikke pynt: det er det eneste stedet man kan SE hvilken kode
+   som kjorer. «Føler ikke updates kommer igjennom» var umulig å svare på
+   uten det. #}
+  <span class="foot-right">Case-radar v{{ version }} <span class="bygg-id" title="Hvilken kode som kjører nå">{{ bygg }}</span> · bruk treff som tips, ikke fasit</span>
 </footer>
 
 <!-- Skanneskjerm. Et skann tar 40-60 sekunder; foer dette sto journalisten og

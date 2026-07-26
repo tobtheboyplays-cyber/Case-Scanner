@@ -315,3 +315,55 @@ def test_oppdiktet_id_droppes(monkeypatch):
     saker = lag_saker(2)
     run_workflow(saker)
     assert all(c.angles == [] for c in saker)
+
+
+def test_takene_holder_seg_under_groqs_minuttak():
+    """Regnestykket bak EDITOR_CAP/JOURNALIST_CAP = 3, voktet mekanisk.
+
+    Eieren spurte 26.07.2026: «Hva om den tar bare 3 saker med 2 vinkler
+    istedenfor 4?» Målingen ga ham rett:
+
+        saker   analytiker   redaktør   journalist      SUM   margin
+            4         1236       4036         6548    11820      180
+            3         1236       3451         5726    10413     1587
+
+    Marginen på 180 var én lang SSB-tabelltittel unna å sprekke — og når den
+    sprekker, er det journalist-kallet som ryker, altså forslagstitlene.
+
+    Denne testen er her fordi takene har blitt endret tre ganger (8 → 4 → 3) og
+    kommer til å bli fristende å skru opp igjen. Gjør noen det, eller vokser en
+    systemprompt forbi det kvoten tåler, skal DETTE feile — ikke journalistens
+    skann.
+    """
+    from app import llm, prompts
+    from app.config import EDITOR_CAP, JOURNALIST_CAP
+
+    GROQ_TPM = 12_000
+    # Romsligere enn et ekte kildegrunnlag, så testen ikke gir falsk trygghet.
+    kilde = "=== SAK ssb-sok:12345:1103:2026K2 ===\n" + ("x" * 1100)
+
+    analytiker = llm.anslaa_tokens(prompts.ANALYST_SYSTEM, "Funn:\n" + "y" * 800, 450)
+    redaktor = llm.anslaa_tokens(
+        prompts.EDITOR_BATCH_SYSTEM,
+        "\n\n".join([kilde] * EDITOR_CAP),
+        max(700, 300 * EDITOR_CAP),
+    )
+    journalist = llm.anslaa_tokens(
+        prompts.JOURNALIST_BATCH_SYSTEM,
+        "\n\n".join([kilde + "\n" + "z" * 350] * JOURNALIST_CAP),
+        max(1000, 450 * JOURNALIST_CAP),
+    )
+    sum_ett_skann = analytiker + redaktor + journalist
+
+    assert sum_ett_skann < GROQ_TPM, (
+        f"Ett skann anslås til {sum_ett_skann} tokens mot Groqs {GROQ_TPM}. "
+        f"analytiker={analytiker} redaktør={redaktor} journalist={journalist}. "
+        f"Senk EDITOR_CAP/JOURNALIST_CAP (nå {EDITOR_CAP}/{JOURNALIST_CAP}) "
+        "eller kort ned en systemprompt."
+    )
+    # Margin, ikke bare «akkurat innafor». 180 tokens klaring var det vi hadde
+    # da forslagstitlene uteble hos eieren.
+    assert GROQ_TPM - sum_ett_skann > 800, (
+        f"Bare {GROQ_TPM - sum_ett_skann} tokens klaring — for tynt. "
+        "Ett ekstra langt tabellnavn spiser den."
+    )

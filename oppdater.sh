@@ -124,9 +124,23 @@ if [ -z "$LENKE" ]; then
 else
   SVAR=$(curl -s -m 15 "$LENKE/health" 2>/dev/null || true)
   case "$SVAR" in
-    *'"ok"'*) ok "Lenka svarer utenfra: $SVAR" ;;
+    *'"ok"'*) ok "Lenka svarer utenfra" ;;
     *) bad "Lenka svarer IKKE utenfra. Appen kjorer, men journalisten naar den ikke."
        info "Kjor:  bash sjekk-server.sh" ;;
+  esac
+
+  # BEVISET. Alt annet her sier at NOE kjorer; dette sier at det som kjorer er
+  # koden vi nettopp hentet. «Foeler ikke updates kommer igjennom» er umulig aa
+  # svare paa uten denne sammenligningen - en deploy som stille bygget gammel
+  # kode ga gronne haker hele veien.
+  KJORER=$(printf '%s' "$SVAR" | grep -oE '"bygg":"[^"]*"' | cut -d'"' -f4)
+  VENTET=$(git rev-parse --short HEAD 2>/dev/null || echo "?")
+  case "$KJORER" in
+    "$VENTET"*) ok "Serveren kjorer commit $VENTET - oppdateringen er ute" ;;
+    "") warn "Appen svarte uten byggmerke (gammel versjon fra for 26.07.2026)."
+        info "Kjor denne kommandoen én gang til, saa er merket paa plass." ;;
+    *) bad "MISMATCH: nettleseren faar «$KJORER», men koden paa disk er «$VENTET»."
+       info "Containeren kjorer gammel kode. Prov:  bash deploy.sh" ;;
   esac
 
   # At appen lever beviser ikke at NETTLESEREN faar ny CSS. Det gjorde den ikke

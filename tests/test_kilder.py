@@ -85,7 +85,7 @@ def test_regnskapstallene_staar_i_grunnlaget():
         regnskap={"aar": "2024", "omsetning": 4125952.0, "resultat": -78790.0})])[0]
     assert "4 125 952" in sak.finding
     assert "-78 790" in sak.finding
-    assert "4 125 952 kr" == sak.metric_value
+    assert sak.metric_value == "4 125 952 kr"
 
 
 def test_uten_regnskap_staar_ferskheten_som_tallet():
@@ -177,3 +177,61 @@ def test_langt_trykk_loefter_kortet():
     css = (APP.parent / "static" / "style.css").read_text()
     assert ".lead.swipe-kort.loftet" in css
     assert "touch-action: none" in css
+
+
+# ── Deployen skal kunne bevises ─────────────────────────────────────────────
+
+
+def test_bygg_id_vises_og_svares(tmp_path, monkeypatch):
+    """Eieren 26.07.2026: «Føler ikke updates kommer igjennom.»
+
+    Han hadde grunn til å lure — ingenting sa hvilken kode som kjørte.
+    `__version__` sto på 0.1.0 gjennom alt arbeidet, så en deploy som stille
+    bygget gammel kode så nøyaktig ut som en vellykket: grønne haker, fungerende
+    lenke, ingen feilmelding. Bare endringen manglet.
+
+    Nå står byggmerket i bunnteksten OG i /health, og `oppdater.sh` sammenligner
+    dem med commit-en den nettopp hentet.
+    """
+    from app import storage
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "t.sqlite3"))
+    storage.save_scan({"cases": [], "plan": {}, "status": [], "summary": {},
+                       "ai_mode": "mal"})
+    klient = TestClient(m.app)
+
+    assert klient.get("/health").json()["bygg"] == m.BYGG
+    assert m.BYGG in klient.get("/").text
+
+
+def test_bygg_id_leses_fra_fila(tmp_path, monkeypatch):
+    monkeypatch.setattr(m, "BASE_DIR", tmp_path)
+    (tmp_path / "BUILD.txt").write_text("48ff6dd 2026-07-26 21:30 UTC\n")
+    assert m._bygg_id() == "48ff6dd 2026-07-26 21:30 UTC"
+
+
+def test_uten_byggmerke_lyver_vi_ikke(tmp_path, monkeypatch):
+    """En tom BUILD.txt skal gi «ukjent», ikke et tall som ser ekte ut."""
+    monkeypatch.setattr(m, "BASE_DIR", tmp_path)
+    assert m._bygg_id() == "ukjent"
+
+
+def test_deploy_skriver_merket_for_bygging():
+    """Rekkefølgen er hele poenget: skrives BUILD.txt etter `docker build`,
+    havner den aldri inni imaget, og containeren svarer «ukjent» for alltid."""
+    sh = (APP.parent / "deploy.sh").read_text()
+    # `sudo docker build`, ikke bare «docker build» — ordene står også i
+    # kommentaren som forklarer hvorfor rekkefølgen er som den er.
+    assert sh.index("> BUILD.txt") < sh.index("sudo docker build")
+
+
+def test_oppdater_sammenligner_bygg_med_commit():
+    sh = (APP.parent / "oppdater.sh").read_text()
+    assert '"bygg":"' in sh and "git rev-parse --short HEAD" in sh
+    assert "MISMATCH" in sh
+
+
+def test_byggmerket_er_ikke_i_git():
+    """Committes det, ser alle den commit-en JEG bygget — ikke den de kjører."""
+    assert "BUILD.txt" in (APP.parent / ".gitignore").read_text()

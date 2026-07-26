@@ -430,19 +430,29 @@ ENABLE_BRREG = os.getenv("CASE_RADAR_ENABLE_BRREG", "true").lower() == "true"
 
 # === KI-arbeidsflyt (kostnadskontroll: cap antall KI-kall per skann) ===
 ENABLE_AI = os.getenv("CASE_RADAR_ENABLE_AI", "true").lower() == "true"
-# Fire, ikke aatte (eierens beslutning 26.07.2026). Redaktoeren vurderer én sak
-# per kall, saa dette tallet er DIREKTE antall KI-kall mot minuttkvoten. Med
-# aatte traff skannet taket og journalisten fikk «4 av 4 kall feilet».
+# TRE saker per skann, med to vinkler hver. Eierens spoersmaal 26.07.2026 - «hva
+# om den tar bare 3 saker med 2 vinkler?» - og maalingen ga ham rett:
 #
-# Fire saker per trykk er ikke mindre verktoy - det er en annen rytme: han
+#   saker   analytiker   redaktoer   journalist       SUM   margin til 12 000
+#       4         1236        4036         6548     11820         180
+#       3         1236        3451         5726     10413        1587
+#       2         1236        2966         5003      9205        2795
+#
+# Marginen paa 180 var én lang SSB-tabelltittel unna aa sprekke. Med tre saker er
+# den ni ganger stoerre, og han faar fortsatt seks forslag til tittel per trykk.
+#
+# Aatte var det opprinnelige tallet. Da traff skannet taket og journalisten fikk
+# «4 av 4 kall feilet» med 429 fra Groq.
+#
+# Faerre saker per trykk er ikke mindre verktoy - det er en annen rytme: han
 # trykker «Skann naa» igjen, og fordi ekte KI-svar lagres per sak (storage.
-# ki_lagre) bruker neste skann hele budsjettet paa de NESTE fire. Koen toemmer
+# ki_lagre) bruker neste skann hele budsjettet paa de NESTE tre. Koen toemmer
 # seg, og hver sak faar ordentlige vinkler i stedet for at alle blir halve.
-EDITOR_CAP = int(os.getenv("CASE_RADAR_EDITOR_CAP", "4"))
-# Vinklene lages i ETT samlet kall for alle godkjente saker, saa dette tallet
-# koster ikke kall - bare tokens i det ene kallet. Det foelger EDITOR_CAP fordi
-# en sak uten redaktoerdom uansett ikke kommer hit.
-JOURNALIST_CAP = int(os.getenv("CASE_RADAR_JOURNALIST_CAP", "4"))
+EDITOR_CAP = int(os.getenv("CASE_RADAR_EDITOR_CAP", "3"))
+# Vinklene lages i ETT samlet kall for alle sakene, saa dette tallet koster ikke
+# kall - bare tokens i det ene kallet. Det foelger EDITOR_CAP fordi en sak uten
+# redaktoerdom uansett ikke kommer hit.
+JOURNALIST_CAP = int(os.getenv("CASE_RADAR_JOURNALIST_CAP", "3"))
 
 # Tokenbudsjett for ETT skann. Groqs gratis-nivaa gir 12 000 tokens i minuttet
 # (llama-3.3-70b-versatile, console.groq.com/docs/rate-limits, hentet 26.07.2026),

@@ -1642,3 +1642,11 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 @keyframes hint-inn { from { opacity: 0; transform: translate(-50%, 8px); }
                       to   { opacity: 1; transform: translate(-50%, 0); } }
 @media (prefers-reduced-motion: reduce) { .loft-hint { animation: none; } }
+
+/* Byggmerket i bunnteksten: hvilken commit som faktisk kjører. Det eneste
+   stedet man kan SE at en deploy nådde fram. */
+.bygg-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .85em; opacity: .75; padding: 1px 5px; border-radius: 5px;
+  background: rgba(127, 127, 127, .16);
+}

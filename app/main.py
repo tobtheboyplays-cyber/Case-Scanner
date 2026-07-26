@@ -108,6 +108,28 @@ def _css_versjon() -> str:
 
 CSS_V = _css_versjon()
 
+
+def _bygg_id() -> str:
+    """Hvilken commit som FAKTISK kjoerer, lest fra BUILD.txt.
+
+    Eieren 26.07.2026: «Foeler ikke updates kommer igjennom.» Han hadde grunn til
+    aa lure: ingenting paa sida sa hvilken kode som kjoerte. `__version__` sto paa
+    0.1.0 gjennom alt arbeidet, og en deploy som stille bygget gammel kode saa
+    noeyaktig ut som en vellykket.
+
+    `deploy.sh` skriver denne fila med commit-SHA og tidspunkt rett foer
+    docker build, saa den er stoept inn i imaget. Da kan tre ting sammenlignes,
+    og alle tre maa stemme: koden paa disk, containeren som kjoerer, og det
+    nettleseren viser.
+    """
+    try:
+        return (BASE_DIR / "BUILD.txt").read_text().strip().splitlines()[0][:40]
+    except (OSError, IndexError):
+        return "ukjent"
+
+
+BYGG = _bygg_id()
+
 # Lang max-age er trygt NETTOPP fordi URL-en endrer seg med innholdet. Uten
 # hashen over ville dette gjort problemet permanent i stedet for aa loese det.
 app.mount(
@@ -118,6 +140,7 @@ app.mount(
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # Global, saa ingen sidevisning kan glemme aa sende den med.
 templates.env.globals["css_v"] = CSS_V
+templates.env.globals["bygg"] = BYGG
 
 
 def kortkilde(navn: str) -> str:
@@ -909,7 +932,10 @@ def api_cases():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": __version__}
+    # `bygg` er det som gjoer deployen etterproevbar: oppdater.sh sammenligner
+    # den med commit-en den nettopp sjekket ut. Stemmer de ikke, kjoerer
+    # containeren gammel kode - og da skal deployen si det hoeyt.
+    return {"status": "ok", "version": __version__, "bygg": BYGG}
 
 
 # HTML-sidene har ikonet inline, men JSON-rutene har ingen <head> - da spor

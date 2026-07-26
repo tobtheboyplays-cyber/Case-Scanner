@@ -134,6 +134,10 @@ def test_ja_saker_prioriteres_naar_kvoten_ikke_rekker_alle(ki, monkeypatch):
     Merk at sak-0 og sak-1 har HØYEST score — uten prioriteringen ville de to
     vraket sakene tatt plassen fra de to redaktøren anbefalte."""
     falsk = ki(is_story={"sak-0": False, "sak-1": False, "sak-2": True, "sak-3": True})
+    # Begge takene pinnes her. Testen skal måle PRIORITERINGEN, ikke hva
+    # config-defaulten tilfeldigvis står på — den har endret seg tre ganger
+    # (8 → 4 → 3) etter hvor mye Groq-kvoten tåler.
+    monkeypatch.setattr(agents, "EDITOR_CAP", 4)
     monkeypatch.setattr(agents, "JOURNALIST_CAP", 2)
     saker = [sak(i) for i in range(4)]
     run_workflow(saker)

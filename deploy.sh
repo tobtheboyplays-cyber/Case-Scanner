@@ -168,6 +168,18 @@ fi
 
 # ── 3. Bygg ──────────────────────────────────────────────────────────────────
 say "3/6  Bygger image"
+
+# Byggmerket: hvilken commit dette imaget faktisk inneholder. Skrives FOER
+# docker build, saa den stoepes inn i imaget og foelger containeren.
+#
+# Uten den er det umulig aa svare paa «kom oppdateringen igjennom?». Appen viste
+# bare `__version__`, som sto paa 0.1.0 gjennom alt arbeidet - saa en deploy som
+# stille bygget gammel kode saa noeyaktig ut som en vellykket. Naa staar merket i
+# bunnteksten paa sida og i /health, og oppdater.sh sammenligner dem.
+BUILD_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "ukjent")
+printf '%s %s\n' "$BUILD_SHA" "$(date -u '+%Y-%m-%d %H:%M UTC')" > BUILD.txt
+ok "Byggmerke: $BUILD_SHA"
+
 sudo docker build -q -t case-radar . >/dev/null || { bad "Bygging feilet. Se feilen over."; exit 1; }
 ok "Image bygget"
 
