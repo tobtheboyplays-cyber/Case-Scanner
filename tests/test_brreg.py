@@ -45,6 +45,14 @@ def svar(monkeypatch):
     return sett
 
 
+@pytest.fixture(autouse=True)
+def uten_regnskap(monkeypatch):
+    """Regnskapsoppslaget er et EKSTRA HTTP-kall per hendelse. Nettverksvakten i
+    conftest stopper det (som den skal), så det stubbes av her — testene som
+    faktisk handler om regnskap overstyrer selv."""
+    monkeypatch.setattr(brreg, "_regnskap", lambda orgnr: None)
+
+
 I_DAG = date(2026, 7, 26)
 
 
@@ -161,3 +169,36 @@ def test_en_kommune_som_feiler_stopper_ikke_resten(monkeypatch):
     h, status = brreg.collect(i_dag=I_DAG)
     assert any("[FEIL]" in s for s in status), status
     assert any(x["navn"] == "Overlevde As" for x in h), "andre kommune ga ingenting"
+
+
+# ── Regnskapstall: det som gjør en konkurs til en sak ───────────────────────
+
+
+def test_regnskap_legges_paa_konkurser(svar, monkeypatch):
+    """«Firma X gikk konkurs» er en notis. «Firma X omsatte for 4,1 millioner og
+    gikk med underskudd året før» er noe en journalist kan ringe på."""
+    svar({"konkurs": [enhet(organisasjonsnummer="916029802", konkursdato="2026-07-17")]})
+    monkeypatch.setattr(brreg, "_regnskap", lambda o: {
+        "aar": "2024", "omsetning": 4125952.0, "resultat": -78790.0})
+    h, _ = brreg.collect(i_dag=I_DAG)
+    assert h[0]["regnskap"]["omsetning"] == 4125952.0
+
+
+def test_nye_foretak_slipper_regnskapskallet(svar, monkeypatch):
+    """Et foretak registrert for tre uker siden har ikke levert årsregnskap.
+    Å spørre er et bortkastet HTTP-kall per hendelse — og skanntid."""
+    kall = []
+    svar({"fraRegistreringsdatoEnhetsregisteret": [
+        enhet(registreringsdatoEnhetsregisteret="2026-07-20")]})
+    monkeypatch.setattr(brreg, "_regnskap", lambda o: kall.append(o) or None)
+    brreg.collect(i_dag=I_DAG)
+    assert kall == [], f"spurte om regnskap for nyregistrerte: {kall}"
+
+
+def test_manglende_regnskap_fjerner_ikke_hendelsen(svar, monkeypatch):
+    """Små og ferske foretak mangler ofte regnskap. Da skal hendelsen stå uten
+    tall — ikke forsvinne."""
+    svar({"konkurs": [enhet(konkursdato="2026-07-17")]})
+    monkeypatch.setattr(brreg, "_regnskap", lambda o: None)
+    h, _ = brreg.collect(i_dag=I_DAG)
+    assert len(h) == 1 and "regnskap" not in h[0]

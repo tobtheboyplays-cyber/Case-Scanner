@@ -40,6 +40,9 @@ from urllib.parse import urlencode
 from app.collectors.base import http_get
 
 API = "https://data.brreg.no/enhetsregisteret/api/enheter"
+# Aarsregnskap - samme aapne register, eget endepunkt. Ett kall per foretak,
+# saa det hentes KUN for de faa hendelsene som faktisk vises.
+REGNSKAP_API = "https://data.brreg.no/regnskapsregisteret/regnskap"
 
 # Kommunene journalisten dekker. Nummer, ikke navn - API-et vil ha nummer.
 KOMMUNER: dict[str, str] = {"1103": "Stavanger", "1108": "Sandnes"}
@@ -49,6 +52,10 @@ DAGER = 45
 
 # Tak per kommune per type, saa ett skann ikke drukner i smaaforetak.
 MAKS_PER_TYPE = 10
+
+# Hvor mange av de oeverste hendelsene vi henter regnskap for. Ett kall hver,
+# saa dette er direkte skanntid - og ingen leser tall paa hendelse nr. 20.
+MAKS_MED_REGNSKAP = 8
 
 # NACE-hovedgrupper der virksomheten er noe folk FAAR OEYE PAA i gata. Et
 # konsulentselskap som registreres er ikke en sak; en restaurant er det.
@@ -79,6 +86,42 @@ def _hent(params: dict) -> list[dict]:
     url = f"{API}?{urlencode(params)}"
     svar = http_get(url, timeout=25, headers={"Accept": "application/json"}).json()
     return (svar.get("_embedded") or {}).get("enheter") or []
+
+
+def _regnskap(orgnr: str) -> dict | None:
+    """Siste innsendte aarsregnskap: omsetning og resultat.
+
+    Dette er det som gjor en konkurs til en SAK i stedet for et navn. «Firma X
+    gikk konkurs» er en notis; «Firma X omsatte for 4,1 millioner og gikk med
+    underskudd aaret for det gikk konkurs» er noe en journalist kan ringe paa.
+
+    Aapent register, ingen noekkel. Fail-soft: mangler regnskapet - og det gjor
+    det ofte for smaa og ferske foretak - faar hendelsen staa uten tall i stedet
+    for aa forsvinne.
+    """
+    if not orgnr:
+        return None
+    try:
+        svar = http_get(
+            f"{REGNSKAP_API}/{orgnr}", timeout=20, headers={"Accept": "application/json"}
+        ).json()
+    except Exception:  # noqa: BLE001 - regnskap er en bonus, aldri et krav
+        return None
+
+    post = svar[0] if isinstance(svar, list) and svar else svar
+    if not isinstance(post, dict):
+        return None
+    res = post.get("resultatregnskapResultat") or {}
+    drift = res.get("driftsresultat") or {}
+    inn = (drift.get("driftsinntekter") or {}).get("sumDriftsinntekter")
+    aar = (post.get("regnskapsperiode") or {}).get("fraDato") or ""
+    if inn is None and res.get("aarsresultat") is None:
+        return None
+    return {
+        "aar": aar[:4],
+        "omsetning": inn,
+        "resultat": res.get("aarsresultat"),
+    }
 
 
 def _naering(enhet: dict) -> tuple[str, str]:
@@ -205,4 +248,18 @@ def collect(i_dag: date | None = None) -> tuple[list[dict], list[str]]:
         )
 
     hendelser.sort(key=lambda h: (-h["vekt"], h["dager_siden"]))
+
+    # Regnskap KUN for de som faktisk vises. Ett HTTP-kall per foretak, saa aa
+    # hente for alle 40 ville tredoblet skanntiden for tall ingen ser.
+    med_tall = 0
+    for h in hendelser[:MAKS_MED_REGNSKAP]:
+        if h["type"] == "nytt":
+            continue        # et ferskt foretak har ikke levert regnskap enda
+        tall = _regnskap(h["orgnr"])
+        if tall:
+            h["regnskap"] = tall
+            med_tall += 1
+    if med_tall:
+        status.append(f"Brønnøysund: hentet regnskapstall for {med_tall} foretak")
+
     return hendelser, status

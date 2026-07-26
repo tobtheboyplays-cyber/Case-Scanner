@@ -196,6 +196,21 @@
             <span>{{ h.dato }}</span>
           </div>
           {% if h.bransje %}<p class="hend-bransje">{{ h.bransje }}</p>{% endif %}
+          {# Regnskapstallet er det som gjor en konkurs til en sak i stedet for
+             et navn. «Gikk konkurs» er en notis; «omsatte for 4,1 mill og gikk
+             med underskudd aaret for» er noe man kan ringe paa. #}
+          {% if h.regnskap %}
+          <p class="hend-tall">
+            {% if h.regnskap.omsetning is not none %}
+              Omsetning {{ '{:,.0f}'.format(h.regnskap.omsetning)|replace(',', ' ') }} kr
+            {% endif %}
+            {% if h.regnskap.resultat is not none %}
+              · <span class="{{ 'tall-minus' if h.regnskap.resultat < 0 else 'tall-pluss' }}">resultat
+              {{ '{:,.0f}'.format(h.regnskap.resultat)|replace(',', ' ') }} kr</span>
+            {% endif %}
+            <span class="hend-aar">({{ h.regnskap.aar }})</span>
+          </p>
+          {% endif %}
         </div>
       </div>
     {% endfor %}
