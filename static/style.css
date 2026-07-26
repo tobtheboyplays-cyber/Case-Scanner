@@ -1303,3 +1303,31 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 /* Knappene skal stå på samme linje, ikke stables. */
 .day-lead .angle, .day-lead .plan-rediger { margin-right: 8px; }
 .day-lead .plan-rediger { display: inline-block; margin-top: 10px; }
+
+/* ── Toppknappene skal stå på én linje, like høye ────────────────────────── */
+/* «Skann nå», «Kalender» og «Lagret» hadde hver sin padding fra tre ulike
+   regelsett, pluss en margin-bottom på Lagret. Resultatet var tre knapper i
+   ulik høyde som ikke sto på linje. Én felles høyde, ett sted. */
+.top-actions {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; justify-content: flex-end;
+}
+.btn-scan, .btn-ghost, .btn-approved-link, .tema-meny > summary {
+  height: 44px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 0;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+/* Detaljelementet i seg selv skal ikke ha høyde - bare knappen inni. */
+.tema-meny { height: 44px; display: inline-block; }
+.skann-meny > summary { font-weight: 600; }
+/* Start-knappen nederst i menyen er full bredde - den er målet med hele boksen. */
+.skann-start { width: 100%; margin-top: 12px; }

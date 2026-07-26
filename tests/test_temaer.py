@@ -295,3 +295,45 @@ def test_emnekoden_leses_fra_alle_stier_ikke_bare_den_forste(klient):
     assert _hovedemner(rad) == {"in", "sk", "sv"}
     assert _hovedemner({}) == set()
     assert _hovedemner({"paths": [[], None]}) == set()
+
+
+# ── Skann og temavalg er samme handling ──────────────────────────────────────
+
+
+def test_skann_lagrer_temavalget_og_starter(klient, monkeypatch):
+    """Eieren ville ha «velg tema → skann» som én meny, ikke to knapper. Da må
+    /scan både lagre valget og starte jobben."""
+    import app.main as m
+
+    startet = []
+    monkeypatch.setattr(m.jobs, "start", lambda faser, arbeid: startet.append(1) or _Jobb())
+    monkeypatch.setattr(m.jobs, "vent", lambda jobb, t: None)
+
+    r = klient.post(
+        "/scan",
+        data={"meny": "1", "tema": ["helse", "kriminalitet"]},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert storage.valgte_temaer() == ["helse", "kriminalitet"]
+    assert startet, "skannet ble ikke startet"
+
+
+def test_skann_uten_meny_rorer_ikke_valget(klient, monkeypatch):
+    """Kø-knappen, cron og no-JS-veien starter skann UTEN å sende menyen.
+
+    Uten `meny`-flagget ville et tomt skjema sett ut som «ingen temaer huket av»
+    og stille nullstilt valget hans. Det er den typen feil ingen oppdager før
+    søket plutselig leter helt andre steder."""
+    import app.main as m
+
+    storage.sett_temaer(["helse"])
+    monkeypatch.setattr(m.jobs, "start", lambda faser, arbeid: _Jobb())
+    monkeypatch.setattr(m.jobs, "vent", lambda jobb, t: None)
+
+    klient.post("/scan", data={}, follow_redirects=False)
+    assert storage.valgte_temaer() == ["helse"], "skannet nullstilte temavalget"
+
+
+class _Jobb:
+    id = "test-jobb"

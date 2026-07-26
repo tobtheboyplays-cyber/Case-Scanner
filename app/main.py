@@ -305,9 +305,24 @@ SKANN_FASER: list[tuple[int, str, float]] = [
 
 
 @app.post("/scan")
-def scan(js: str = Form("")):
-    """Start et skann. Med JavaScript faar UI-et en jobb-id og viser skjermbilde
-    med framdrift; uten JS venter vi som foer og omdirigerer."""
+async def scan(request: Request):
+    """Lagre temavalget og start et skann - i den rekkefolgen.
+
+    Temavalg og skann er samme handling for journalisten: han aapner menyen,
+    huker av hva han leter etter, og trykker start. Foer laa de i hver sin knapp,
+    saa man kunne skanne uten aa ha sett paa temaene - og da var menyen pynt.
+
+    Skjemaet leses raatt fordi avkryssingsbokser sender samme feltnavn flere
+    ganger; `Form()` ville bare gitt oss den siste.
+
+    `meny=1` skiller «journalisten sendte inn menyen» fra «skannet ble startet et
+    annet sted» (kø-knappen, cron, uten JS). Uten det ville et skann uten meny
+    sett ut som «ingen temaer huket av» og stille nullstilt valget hans.
+    """
+    skjema = await request.form()
+    if str(skjema.get("meny") or ""):
+        sett_temaer([str(v) for v in skjema.getlist("tema")])
+    js = str(skjema.get("js") or "")
     jobb = jobs.start(SKANN_FASER, run_scan)
     if js:
         return JSONResponse({"jobb": jobb.id})

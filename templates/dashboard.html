@@ -23,15 +23,17 @@
   <div class="top-actions">
     <a class="btn-ghost" href="/kalender">🗓 Kalender</a>
     <a class="btn-approved-link" href="/godkjente">📁 Lagret{% if approved_count %} ({{ approved_count }}){% endif %}</a>
-    {# Temamenyen staar ved siden av knappen, ikke inni skjemaet: valget lagres
-       for seg og gjelder ogsaa naar skannet startes fra cron. #}
-    <details class="tema-meny">
-      <summary class="btn-ghost tema-knapp">
-        🎯 Temaer
+    {# Ett valg, én knapp. Foer laa temaene i én meny og «Skann naa» i en annen
+       knapp ved siden av, saa man kunne skanne uten aa ha sett paa temaene i det
+       hele tatt - og da var menyen bare pynt. Naa er de samme handling: aapne,
+       velg hva du leter etter, start. #}
+    <details class="tema-meny skann-meny">
+      <summary class="btn-scan tema-knapp">
+        🛰 Skann nå
         <span class="tema-tall">{{ valgte_temaer|length if valgte_temaer else 'alle' }}</span>
       </summary>
-      <form class="tema-boks" method="post" action="/temaer">
-        <input type="hidden" name="tilbake" value="/" />
+      <form class="tema-boks" method="post" action="/scan" data-skann>
+        <input type="hidden" name="meny" value="1" />
         <p class="tema-h">Hva skal skannet lete etter?</p>
         {# Gruppert, ikke én lang liste: 24 avkryssingsbokser i strekk er en vegg
            man ikke leser. Gruppene foelger SSBs egen inndeling, oversatt til ord
@@ -55,11 +57,10 @@
         <div class="tema-knapper">
           <button type="button" class="btn-small tema-alle">Velg alle</button>
           <button type="button" class="btn-small tema-ingen">Nullstill</button>
-          <button type="submit" class="btn-small">Lagre</button>
         </div>
+        <button type="submit" class="btn-scan skann-start">🛰 Start skann</button>
       </form>
     </details>
-    <form method="post" action="/scan" data-skann><button type="submit" class="btn-scan">🛰 Skann nå</button></form>
     <p class="last-scan">{% if scanned_at %}Sist skannet: {{ scanned_at }}
       {% if data and data.ai_mode %}· KI:
         {%- if data.ai_mode == 'llm' %} på
