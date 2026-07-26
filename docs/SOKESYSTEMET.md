@@ -89,19 +89,42 @@ statuslinje, ikke et krasj.
 ikke 15 % på et år. Søkesystemet er additivt: et fullt skann gir fortsatt 14–17 leads
 fra de andre kildene, og dette sporet legger på det som er genuint nytt.
 
-## Temavalget styrer sporet
+## Temavalget styrer søket
 
-Journalisten huker av temaer i menyen ved «Skann nå» (helse, lønn, fattigdom,
-barn og unge, alderdom, idrett, kriminalitet, næringsliv). Valget oversettes i
-`app/config.py` (`TEMAER`) til søkeord mot katalogen, og lagres i `meta`-tabellen.
-**Tomt valg = alle temaer** — en tom meny skal aldri gi et tomt skann.
+Journalisten huker av temaer i menyen ved «Skann nå». Det er **25 temaer i seks
+grupper** (Folk, Penger, Arbeid, Hverdag, Miljø, Annet), og de dekker
+**alle 23 hovedemner i SSBs katalog** — ingen del av statistikken er utilgjengelig.
+Valget lagres i `meta`-tabellen og oversettes i `app/config.py` (`TEMAER`) til
+tre forskjellige vokabularer. **Tomt valg = alle temaer** — en tom meny skal aldri
+gi et tomt skann.
+
+Temaet biter tre steder:
+
+| Felt | Hvor det virker |
+|---|---|
+| `sok` | søkeord mot katalogen — **fire per skann** når han har valgt noe, to ellers |
+| `koder` | SSBs egne emnekoder; løfter treff fra ferskhets- og katalogsporet |
+| `ssb_emner` | vekting av publiseringskalenderen (et *helt annet* SSB-vokabular) |
+
+### To feller i SSBs emnekoder
+
+1. **`?subjectCode=` ignoreres av API-et.** Verifisert 26.07.2026: kallet
+   returnerte alle 3 786 tabellene uansett. Filtreringen må gjøres på vår side.
+2. **En tabell ligger under flere stier, og riktig kode er ikke den første.**
+   Tabell 09413 (siktede personer) har stiene `in > …`, `sk > …` og `sv > …`.
+   Leste vi bare `paths[0]`, ville alle kriminalitetstabellene sett ut som
+   innvandringsstatistikk. `_hovedemner()` leser første ledd i *hver* sti.
+   Kodene er heller ikke til å gjette: `in` er **Innvandring**, inntekt er `if`,
+   og jord/skog/fiske er `js`.
 
 **Treffene fra temasporet legges FØRST i køen når han har valgt noe.** Det er
 ikke kosmetikk: målt 26.07.2026 ga «helse+kriminalitet» og «næringsliv» nøyaktig
 samme åtte tabeller uten den prioriteringen — søkeordene endret seg, men
-ferskhets- og katalogsporet fylte kvoten uansett. Etter fiksen er 5 av 8 tabeller
-forskjellige mellom de to valgene. De tre felles kommer fra ferskhetssporet, som
-skal slippe gjennom uansett tema.
+ferskhets- og katalogsporet fylte kvoten uansett.
+
+Målt etter fiksen (26.07.2026, ekte kall): «næringsliv» gir **6 av 8** probede
+tabeller fra temaet, og de åtte er helt andre enn dem «helse+kriminalitet» gir.
+Ferskhetssporet slipper fortsatt gjennom uansett tema — det er meningen.
 
 ## Justering
 

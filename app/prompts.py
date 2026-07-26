@@ -9,8 +9,8 @@ Flyten speiler en ekte redaksjon og gaar i denne rekkefolgen:
     3. JOURNALIST   foreslaar TRE ULIKE vinkler - bare tittel, kjerne og kilder.
                     Ingen artikkel skrives enda: det ville brent kvote paa saker som
                     aldri blir aapnet.
-    4. MENNESKET    (Mathias) velger én vinkel og ber om utkast. FOERST da skriver
-                    journalisten den ut i sin helhet, og saken lagres.
+    4. MENNESKET    (brukeren) velger én vinkel og ber om utkast. FOERST da skriver
+                    JOURNALIST-agenten den ut i sin helhet, og saken lagres.
 
 Promptene er samlet her slik at de er lette aa finjustere uten aa roere logikken.
 Felles for alle: svar KUN med gyldig JSON, ingen oppdiktede fakta, og norsk sprak.

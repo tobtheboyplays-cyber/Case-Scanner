@@ -10,7 +10,7 @@ artikkelen skrives på forespørsel.
 Dette er ikke bare UI — det er en arkitekturforbedring:
 
 - I dag skriver journalist-agenten **tre fulle artikler for hver godkjente sak**, ved
-  hvert skann. Det er tregt og brenner kvote på saker Mathias aldri åpner.
+  hvert skann. Det er tregt og brenner kvote på saker journalisten aldri åpner.
 - Bedre: journalisten leverer først tre **vinkel-overskrifter** (tittel + én setning +
   hvem som må ringes). Full artikkel skrives kun for den vinkelen han faktisk ber om.
 - Gevinst: raskere skann, mye lavere forbruk, og modellen kan bruke flere tokens på

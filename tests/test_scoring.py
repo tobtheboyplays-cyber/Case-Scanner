@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import timezone
-
 from app.collectors.base import now_utc
 from app.models import SignalItem
 from app.scoring import build_cases, tag_signal, tokenize

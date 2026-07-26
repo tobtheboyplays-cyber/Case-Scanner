@@ -529,6 +529,91 @@ def bor_probes(tabell_id: str, oppdatert: str, utforsket: dict[str, dict[str, st
     return bool(oppdatert) and oppdatert != kjent.get("oppdatert", "")
 
 
+# ── KI-resultater per sak (saa «trykk Skann igjen» tar de NESTE sakene) ──────
+# Uten denne ville et nytt skann brukt kvoten paa noeyaktig de samme topp-sakene
+# om igjen, og koen ville aldri toemt seg. Vi lagrer KUN ekte KI-svar - maler og
+# mislykte kall skal proeves paa nytt, ikke fryses fast.
+
+KI_CACHE_MAKS = 400
+
+
+def _ki_tabell(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ki_resultat (
+            key TEXT PRIMARY KEY,
+            editor TEXT NOT NULL DEFAULT '',
+            angles TEXT NOT NULL DEFAULT '',
+            laget TEXT NOT NULL
+        )
+        """
+    )
+
+
+def ki_hent(keys: list[str]) -> dict[str, dict]:
+    """{key: {"editor": {...} | None, "angles": [...] | None}} for de vi har fra foer."""
+    if not keys or not os.path.exists(DB_PATH):
+        return {}
+    conn = _connect()
+    try:
+        _ki_tabell(conn)
+        plass = ",".join("?" * len(keys))
+        rows = conn.execute(
+            f"SELECT key, editor, angles FROM ki_resultat WHERE key IN ({plass})", keys
+        ).fetchall()
+    finally:
+        conn.close()
+
+    ut: dict[str, dict] = {}
+    for key, editor, angles in rows:
+        post: dict = {}
+        for felt, raa in (("editor", editor), ("angles", angles)):
+            if not raa:
+                continue
+            try:
+                post[felt] = json.loads(raa)
+            except json.JSONDecodeError:
+                # En oedelagt rad skal koste ett nytt KI-kall, ikke hele skannet.
+                continue
+        if post:
+            ut[key] = post
+    return ut
+
+
+def ki_lagre(key: str, *, editor: dict | None = None, angles: list | None = None) -> None:
+    """Legg til det vi faktisk fikk. `None` lar det som ligger der staa.
+
+    Delvis lagring er hele poenget: fikk saken redaktoerdom men gikk tom for
+    budsjett foer vinklene, skal neste skann slippe aa betale for dommen paa nytt.
+    """
+    if editor is None and angles is None:
+        return
+    conn = _connect()
+    try:
+        _ki_tabell(conn)
+        conn.execute(
+            "INSERT OR IGNORE INTO ki_resultat (key, laget) VALUES (?, ?)", (key, _now())
+        )
+        if editor is not None:
+            conn.execute(
+                "UPDATE ki_resultat SET editor = ?, laget = ? WHERE key = ?",
+                (json.dumps(editor, ensure_ascii=False), _now(), key),
+            )
+        if angles is not None:
+            conn.execute(
+                "UPDATE ki_resultat SET angles = ?, laget = ? WHERE key = ?",
+                (json.dumps(angles, ensure_ascii=False), _now(), key),
+            )
+        conn.execute(
+            "DELETE FROM ki_resultat WHERE key NOT IN "
+            "(SELECT key FROM ki_resultat ORDER BY laget DESC LIMIT ?)",
+            (KI_CACHE_MAKS,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _meta_tabell(conn: sqlite3.Connection) -> None:
     """Enkel noekkel/verdi-tabell for markorer (hvor langt vi har lett i katalogen)."""
     conn.execute(

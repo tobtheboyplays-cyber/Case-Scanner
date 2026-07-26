@@ -194,6 +194,12 @@ def _anslaa_tokens(system: str, user: str, max_tokens: int) -> int:
     return (len(system) + len(user)) // 4 + max_tokens
 
 
+def anslaa_tokens(system: str, user: str, max_tokens: int) -> int:
+    """Samme anslag som kvotestyringen bruker - offentlig, slik at et skann kan
+    budsjettere FOER det ringer i stedet for aa oppdage taket underveis."""
+    return _anslaa_tokens(system, user, max_tokens)
+
+
 def _vent(sekunder: float, si: Callable[[str], None] | None, hvorfor: str) -> None:
     if sekunder <= 0:
         return

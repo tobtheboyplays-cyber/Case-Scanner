@@ -21,7 +21,7 @@ from fastapi.templating import Jinja2Templates
 from app import __version__, jobs, llm, verify
 from app.agents import run_workflow, write_draft
 from app.collectors import collect_all, coverage, ssb_kalender
-from app.config import ENABLE_AI, TEMAER
+from app.config import ENABLE_AI, TEMAER, temagrupper
 from app.models import Case
 from app.planner import build_plan
 from app.scoring import build_cases, finalize_scores
@@ -154,6 +154,20 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
         ai_regnskap = run_workflow(cases, si)
         ai_mode = ai_regnskap["mode"]
         n = f"{ai_regnskap['lyktes']}/{ai_regnskap['forsokt']}"
+        gjenbrukt = ai_regnskap.get("gjenbrukt", 0)
+        if gjenbrukt:
+            status.append(
+                f"KI-arbeidsflyt: {gjenbrukt} saker hadde ekte KI-svar fra før "
+                "(gjenbrukt, kostet ingen kvote)"
+            )
+        if ai_regnskap.get("i_ko"):
+            # Ikke en feil, og skal ikke se ut som en. Budsjettet er der nettopp
+            # for at skannet skal holde seg under kvotetaket - resten hentes ved
+            # neste trykk.
+            status.append(
+                f"KI-kø: {ai_regnskap['i_ko']} saker venter på neste skann "
+                "(budsjettet for dette skannet er brukt opp — trykk «Skann igjen»)"
+            )
         if ai_mode == "llm":
             status.append(f"KI-arbeidsflyt: ekte KI ({llm.provider_label()}) ✓ {n} kall")
         elif ai_mode == "llm-delvis":
@@ -179,7 +193,7 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
         kommende, _ = [], status.append(f"[FEIL] SSB-kalender: {exc}")
 
     # Nytt siden sist: samme kilder gir de samme funnene om igjen. Vi markerer hva
-    # som ikke er sett foer, skjuler det Mathias allerede har forkastet, og loefter
+    # som ikke er sett foer, skjuler det journalisten allerede har forkastet, og loefter
     # det nye oeverst - saa et nytt soek faktisk gir noe nytt.
     for_dette_skannet = [c.key for c in cases]
     tidligere = seen_map()
@@ -261,6 +275,7 @@ def dashboard(request: Request, apen: str = ""):
             "VINKEL_NAVN": VINKEL_NAVN,
             "approved_count": len(list_approved()),
             "TEMAER": TEMAER,
+            "temagrupper": temagrupper(),
             "valgte_temaer": valgte_temaer(),
         },
     )
@@ -494,7 +509,7 @@ def gjenopprett_sak(key: str, js: str = Form("")):
 def kalender(request: Request, ym: str = "", fane: str = "kalender"):
     """Redaksjonell kalender: maanedsrutenett med planlagte saker.
 
-    Ingen Google-innlogging, ingen oppsett - den bygger paa saker Mathias selv har
+    Ingen Google-innlogging, ingen oppsett - den bygger paa saker journalisten selv har
     godkjent. Saker uten dato vises som "uplanlagt" slik at de ikke forsvinner."""
     today = date.today()
     try:

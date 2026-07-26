@@ -34,7 +34,7 @@ import time
 from datetime import UTC, datetime
 
 from app.collectors.base import http_get
-from app.config import DEMOGRAPHIC_TOPICS, sokeord_for
+from app.config import DEMOGRAPHIC_TOPICS, emnekoder_for, sokeord_for
 from app.models import Case
 from app.storage import (
     bor_probes,
@@ -77,7 +77,12 @@ TEMA: list[str] = [
 ]
 
 FERSK_DAGER = 10          # hvor langt tilbake «nylig oppdatert» rekker
-TEMA_PER_SKANN = 2        # hvor mange soekeord vi bruker per skann
+TEMA_PER_SKANN = 2        # soekeord per skann naar journalisten IKKE har valgt tema
+# Har han valgt tema, leter vi bredere i det han faktisk ba om. Maalt 26.07.2026
+# med to soekeord fylte ferskhets- og katalogsporet 6 av 8 probeplasser, saa bare
+# 2 av 8 tabeller kom fra temaet - menyen bet for lite. SSB taaler 30 kall per
+# minutt, og et skann bruker rundt 21 med fire soekeord, saa dette er gratis.
+TEMA_PER_SKANN_VALGT = 4
 MAKS_KANDIDATER = 8       # hvor mange tabeller vi faktisk prober per skann
 KATALOG_SIDE = 30         # treff per katalogkall
 MAKS_METRIKKER = 5        # statistikkvariabler vi sjekker per tabell (ett datakall)
@@ -284,7 +289,8 @@ def _kandidater(status: list[str], temaer: list[str] | None = None) -> list[dict
     # Dette er stedet der et avkryssingsvalg i menyen faktisk endrer HVILKE
     # SSB-tabeller som blir funnet - ikke bare hva som vises etterpaa.
     ordbank = sokeord_for(temaer) or TEMA
-    for ord_ in neste_i_rotasjon("ssb_tema_markor", ordbank, TEMA_PER_SKANN):
+    per_skann = TEMA_PER_SKANN_VALGT if temaer else TEMA_PER_SKANN
+    for ord_ in neste_i_rotasjon("ssb_tema_markor", ordbank, per_skann):
         side = _side(f"ssb_side:{ord_}")
         try:
             rader, _ = _hent_katalog({"query": ord_, "pageNumber": side})
@@ -316,7 +322,13 @@ def _kandidater(status: list[str], temaer: list[str] | None = None) -> list[dict
         meta_set("ssb_katalog_side", str(side % max(sider, 1) + 1))
         status.append(f"SSB-soek: gikk gjennom katalogside {side} av {sider}")
 
+    # SSBs egne emnekoder loefter ogsaa treff fra ferskhets- og katalogsporet.
+    # Uten dette kunne en tabell om lovbrudd, publisert i gaar, havne bakerst
+    # selv om journalisten hadde huket av «kriminalitet» - fordi den kom inn via
+    # ferskhet og ikke via et soekeord.
+    koder = emnekoder_for(temaer)
     ut: list[dict] = []
+    kode_treff = 0
     for rad in funnet.values():
         if rad["id"] in ALLEREDE_DEKKET:
             continue
@@ -326,7 +338,18 @@ def _kandidater(status: list[str], temaer: list[str] | None = None) -> list[dict
         kommunenivaa = any(m in etikett for m in NIVAA_KOMMUNE)
         if NIVAA_FYLKE in etikett and not kommunenivaa:
             continue
-        ut.append({**rad, "_kommunenivaa": kommunenivaa})
+        via_kode = bool(koder & _hovedemner(rad))
+        kode_treff += via_kode
+        ut.append({
+            **rad,
+            "_kommunenivaa": kommunenivaa,
+            "_fra_tema": bool(rad.get("_fra_tema")) or via_kode,
+        })
+    if koder:
+        status.append(
+            f"SSB-soek: {kode_treff} av {len(ut)} tabeller ligger under de valgte "
+            f"emnene hos SSB ({', '.join(sorted(koder))})"
+        )
 
     # Rekkefolgen avgjor hvem som faar de dyre kallene (metadata + data), for vi
     # prober bare MAKS_KANDIDATER stykker.
@@ -345,6 +368,23 @@ def _kandidater(status: list[str], temaer: list[str] | None = None) -> list[dict
         )
     )
     return ut
+
+
+def _hovedemner(rad: dict) -> set[str]:
+    """SSBs hovedemnekoder for en katalogtabell (be, al, he, sk ...).
+
+    En tabell ligger under FLERE stier, og koden vi leter etter er ikke
+    noedvendigvis i den foerste. Verifisert live 26.07.2026: tabell 09413
+    (siktede personer) har stiene `in > in10 > ...`, `sk > sk02 > ...` og
+    `sv > sv12 > ...`. Leste vi bare `paths[0]`, ville alle kriminalitets-
+    tabellene sett ut som innvandringsstatistikk - og «kriminalitet» i menyen
+    ville stille mistet sine egne tabeller. Derfor: foerste ledd i HVER sti.
+    """
+    return {
+        sti[0]["id"]
+        for sti in (rad.get("paths") or [])
+        if sti and isinstance(sti[0], dict) and sti[0].get("id")
+    }
 
 
 def _synkende(tekst: str) -> tuple[int, ...]:

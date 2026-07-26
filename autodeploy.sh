@@ -8,6 +8,10 @@
 # ~/.case-radar-key, som ble lagret forste gang du deployet med noekkel.
 set -u
 
+# Klonen av det OFFENTLIGE repoet (Case-Scanner). Serveren henter derfra fordi
+# det gaar uten token - se docs/LENKA.md. Peker denne et annet sted enn den
+# katalogen serveren faktisk kjorer fra, deployer cronen fra ett sted mens alle
+# tror den deployer fra et annet.
 REPO_DIR="${CASE_RADAR_DIR:-$HOME/case-radar}"
 LOG="$HOME/.case-radar-autodeploy.log"
 LOCK="/tmp/case-radar-autodeploy.lock"

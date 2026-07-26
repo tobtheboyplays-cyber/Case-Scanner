@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import pytest
 from app import storage
-from app.config import TEMAER, sokeord_for, ssb_emner_for
+from app.config import (
+    TEMAER,
+    emnekoder_for,
+    sokeord_for,
+    ssb_emner_for,
+    temagrupper,
+)
 from app.main import app
 from fastapi.testclient import TestClient
 
@@ -20,21 +26,53 @@ def klient(tmp_path, monkeypatch):
     return TestClient(app)
 
 
-# ── De åtte temaene ─────────────────────────────────────────────────────────
+# ── Temasettet ──────────────────────────────────────────────────────────────
+# Eieren ba om «litt nitty gritty temaer som dekker alle skjemaene dine».
+# Fasiten er derfor ikke en liste jeg fant paa, men SSBs egen: de 20
+# hovedemnene i katalogen. Ingen av dem skal vaere utilgjengelige.
+
+# Utledet ved aa gaa gjennom alle 3 786 tabellene i katalogen 26.07.2026 og
+# samle foerste ledd i hver `paths`-sti. IKKE gjettet: «in» er Innvandring,
+# inntekt er «if», og jord/skog/fiske er «js».
+SSB_HOVEDEMNER = {
+    "al", "bb", "be", "bf", "ei", "he", "if", "in", "js", "kf", "nk", "nm",
+    "os", "pp", "sk", "sv", "ti", "tr", "ud", "ut", "va", "vf", "vt",
+}
 
 
-def test_alle_atte_temaene_finnes():
-    assert set(TEMAER) == {
-        "helse", "lønn", "fattigdom", "barn og unge",
-        "alderdom", "idrett", "kriminalitet", "næringsliv",
-    }
+def test_temaene_dekker_alle_ssbs_hovedemner():
+    dekket = {k for t in TEMAER.values() for k in t["koder"]}
+    mangler = SSB_HOVEDEMNER - dekket
+    assert not mangler, f"disse SSB-emnene er utilgjengelige for journalisten: {mangler}"
 
 
-def test_hvert_tema_har_sokeord_og_ssb_emner():
+def test_hvert_tema_har_sokeord_koder_og_ssb_emner():
     for navn, t in TEMAER.items():
         assert t["sok"], f"{navn} mangler søkeord — da styrer den ingenting"
+        assert t["koder"], f"{navn} mangler SSB-emnekoder"
         assert t["ssb_emner"], f"{navn} mangler SSB-emner"
         assert t["ikon"], f"{navn} mangler ikon"
+        assert t["gruppe"], f"{navn} mangler gruppe — da havner den utenfor menyen"
+
+
+def test_ingen_oppdiktede_emnekoder():
+    """En kode som ikke finnes hos SSB filtrerer bort alt, stille."""
+    for navn, t in TEMAER.items():
+        ukjente = set(t["koder"]) - SSB_HOVEDEMNER
+        assert not ukjente, f"{navn} viser til emnekoder SSB ikke har: {ukjente}"
+
+
+def test_gruppene_er_faa_nok_til_aa_lese():
+    grupper = temagrupper()
+    assert 3 <= len(grupper) <= 8, f"{len(grupper)} grupper er ikke en meny, det er en liste"
+    assert sum(len(v) for v in grupper.values()) == len(TEMAER)
+
+
+def test_emnekoder_folger_valget():
+    assert emnekoder_for(["helse", "kriminalitet"]) == {"he", "sk"}
+    # Tomt valg gir TOM mengde, ikke alle koder: kallerne leser tomt som
+    # «ikke filtrer», og det er noe annet enn «filtrer paa alt».
+    assert emnekoder_for([]) == set()
 
 
 # ── Tomt valg = alt, aldri ingenting ────────────────────────────────────────
@@ -49,7 +87,7 @@ def test_tomt_valg_gir_alle_sokeord():
 
 def test_valgte_temaer_gir_bare_sine_egne_sokeord():
     kun_helse = sokeord_for(["helse"])
-    assert "sykefravaer" in kun_helse
+    assert "fastlege" in kun_helse
     assert "konkurs" not in kun_helse, "næringsliv var ikke valgt"
     assert len(kun_helse) < len(sokeord_for([]))
 
@@ -97,11 +135,11 @@ def test_menyen_lagrer_flere_avkryssinger(klient):
     å lese skjemaet rått i stedet for å bruke Form()."""
     r = klient.post(
         "/temaer",
-        data={"tema": ["helse", "idrett"], "tilbake": "/"},
+        data={"tema": ["helse", "idrett og kultur"], "tilbake": "/"},
         follow_redirects=False,
     )
     assert r.status_code == 303
-    assert storage.valgte_temaer() == ["helse", "idrett"]
+    assert storage.valgte_temaer() == ["helse", "idrett og kultur"]
 
 
 def test_menyen_vises_med_valget_avhuket(klient):
@@ -214,3 +252,46 @@ def test_temasporet_prioriteres_naar_journalisten_har_valgt(klient, monkeypatch)
 
     uten_valg = [r["id"] for r in ssb_sok._kandidater([], [])]
     assert uten_valg[0] == "FERSK1", "uten valg vinner ferskhet, som før"
+
+
+def test_ssbs_emnekode_loefter_ogsaa_treff_fra_ferskhetssporet(klient, monkeypatch):
+    """Temavalget skal bite på ALLE tre sporene, ikke bare søkeord-sporet.
+
+    En tabell om lovbrudd som SSB oppdaterte i går kommer inn via ferskhet, ikke
+    via et søkeord. Har journalisten huket av «kriminalitet», skal den likevel
+    ligge foran en tilfeldig fersk tabell."""
+    from app.collectors import ssb_sok
+
+    sti = [{"id": "sk", "label": "Sosiale forhold og kriminalitet"}]
+
+    def falsk_katalog(params):
+        if "query" in params:
+            return [], 1
+        return [
+            {"id": "ANNET", "label": "Noe helt annet (K)",
+             "variableNames": ["region"], "updated": "2026-07-26"},
+            {"id": "KRIM", "label": "Anmeldte lovbrudd (K)",
+             "variableNames": ["region"], "updated": "2026-07-20",
+             "paths": [[{"id": "in", "label": "Innvandring"}], sti]},
+        ], 1
+
+    monkeypatch.setattr(ssb_sok, "_hent_katalog", falsk_katalog)
+    ut = [r["id"] for r in ssb_sok._kandidater([], ["kriminalitet"])]
+    assert ut[0] == "KRIM", f"emnekoden løftet ikke tabellen: {ut}"
+
+
+def test_emnekoden_leses_fra_alle_stier_ikke_bare_den_forste(klient):
+    """Verifisert live 26.07.2026: tabell 09413 ligger under `in`, `sk` OG `sv`.
+
+    Leste vi bare paths[0], ville alle kriminalitetstabellene sett ut som
+    innvandringsstatistikk — og «kriminalitet» mistet stille sine egne tabeller."""
+    from app.collectors.ssb_sok import _hovedemner
+
+    rad = {"paths": [
+        [{"id": "in", "label": "Innvandring og innvandrere"}],
+        [{"id": "sk", "label": "Sosiale forhold og kriminalitet"}],
+        [{"id": "sv", "label": "Svalbard"}],
+    ]}
+    assert _hovedemner(rad) == {"in", "sk", "sv"}
+    assert _hovedemner({}) == set()
+    assert _hovedemner({"paths": [[], None]}) == set()

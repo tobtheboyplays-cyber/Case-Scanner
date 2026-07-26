@@ -33,20 +33,28 @@
       <form class="tema-boks" method="post" action="/temaer">
         <input type="hidden" name="tilbake" value="/" />
         <p class="tema-h">Hva skal skannet lete etter?</p>
+        {# Gruppert, ikke én lang liste: 24 avkryssingsbokser i strekk er en vegg
+           man ikke leser. Gruppene foelger SSBs egen inndeling, oversatt til ord
+           en journalist bruker. #}
+        {% for gruppe, navn_liste in temagrupper.items() %}
+        <p class="tema-gruppe">{{ gruppe }}</p>
         <div class="tema-liste">
-          {% for navn, t in TEMAER.items() %}
+          {% for navn in navn_liste %}
           <label class="tema-valg">
             <input type="checkbox" name="tema" value="{{ navn }}"
                    {{ 'checked' if (not valgte_temaer) or navn in valgte_temaer }} />
-            <span class="tema-ikon" aria-hidden="true">{{ t.ikon }}</span>
+            <span class="tema-ikon" aria-hidden="true">{{ TEMAER[navn].ikon }}</span>
             <span class="tema-navn">{{ navn }}</span>
           </label>
           {% endfor %}
         </div>
-        <p class="tema-note">Temaene styrer hvilke SSB-tabeller søket leter i.
-          Befolknings- og flyttetallene hentes uansett.</p>
+        {% endfor %}
+        <p class="tema-note">Temaene styrer hvilke SSB-tabeller søket leter i —
+          både med søkeord og med SSBs egne emnekoder. Befolknings- og
+          flyttetallene hentes uansett.</p>
         <div class="tema-knapper">
           <button type="button" class="btn-small tema-alle">Velg alle</button>
+          <button type="button" class="btn-small tema-ingen">Nullstill</button>
           <button type="submit" class="btn-small">Lagre</button>
         </div>
       </form>
@@ -60,6 +68,24 @@
       {% else %}Ikke skannet ennå{% endif %}</p>
   </div>
 </header>
+
+{# KI-koen. Dette er IKKE en feil, og skal ikke se ut som en: skannet stopper
+   med vilje foer Groqs minuttkvote (12 000 tokens) er brukt opp, slik at det
+   aldri blir avvist midt i. Resten hentes ved neste trykk. #}
+{% if data and (data.ai_regnskap or {}).i_ko %}
+<section class="ki-ko">
+  <p class="ki-ko-h">⏳ {{ data.ai_regnskap.i_ko }} saker står i kø til neste skann</p>
+  <p class="ki-ko-b">
+    Skannet stoppet KI-en før den traff kvotetaket, så den aldri blir avvist.
+    Sakene merket <span class="ai-tag ai-ko">i kø</span> har foreløpig maler.
+    Trykk «Skann nå» igjen — de sakene som allerede har ekte vinkler koster
+    ingen kvote, så neste skann bruker hele budsjettet på køen.
+  </p>
+  <form method="post" action="/scan" data-skann>
+    <button type="submit" class="btn-small">🛰 Skann igjen for de neste</button>
+  </form>
+</section>
+{% endif %}
 
 {# Uten KI lager verktoyet vinklene fra faste maler. De er like hver gang og
    sier ingenting om nettopp dette tallet - «Hva betyr tallet i praksis for
@@ -248,7 +274,8 @@
           <details class="ai-editor">
             <summary>🧭 KI-redaktør: {{ '✅ Sak' if case.editor.is_story else '⛔ Ikke sak' }}
               {% if case.editor.confidence %}({{ case.editor.confidence }}%){% endif %}
-              {% if case.ai_mode == 'mal' %}<span class="ai-tag">demo</span>{% endif %}</summary>
+              {% if case.ai_mode == 'mal' %}<span class="ai-tag">demo</span>
+              {% elif case.ai_mode == 'ko' %}<span class="ai-tag ai-ko">i kø</span>{% endif %}</summary>
             <p><strong>{{ case.editor.headline }}</strong></p>
             <p class="ai-angle">{{ case.editor.angle }}</p>
             <p class="ai-verdict">💬 {{ case.editor.verdict }}</p>
@@ -288,7 +315,8 @@
                   <span class="angle-kind">{{ INNGANG_IKON.get(a.vinkel or a.inngang, '📄') }}
                     {{ VINKEL_NAVN.get(a.vinkel or a.inngang, 'Vinkel') }}</span>
                   {% if a.styrke %}<span class="angle-strength">{{ a.styrke }}</span>{% endif %}
-                  {% if a.mode == 'mal' %}<span class="ai-tag">demo</span>{% endif %}
+                  {% if a.mode == 'mal' %}<span class="ai-tag">demo</span>
+                  {% elif a.mode == 'ko' %}<span class="ai-tag ai-ko">i kø</span>{% endif %}
                 </span>
               </summary>
 
@@ -639,15 +667,20 @@
     }
   })();
 
-  /* «Velg alle» — én knapp i stedet for åtte trykk. Skjemaet virker uten
-     JavaScript også; dette er bare en snarvei. */
+  /* «Velg alle» / «Nullstill» — én knapp i stedet for 24 trykk. To separate
+     knapper, ikke én som veksler: med 24 bokser er det ikke lenger opplagt hva
+     en veksleknapp kommer til å gjøre. Skjemaet virker uten JavaScript også;
+     dette er bare en snarvei. */
+  function settAlle(knapp, verdi) {
+    knapp.closest('form').querySelectorAll('input[name="tema"]').forEach(
+      function (b) { b.checked = verdi; }
+    );
+  }
   document.querySelectorAll('.tema-alle').forEach(function (knapp) {
-    knapp.addEventListener('click', function () {
-      var bokser = knapp.closest('form').querySelectorAll('input[name="tema"]');
-      var alleAv = Array.prototype.every.call(bokser, function (b) { return b.checked; });
-      bokser.forEach(function (b) { b.checked = !alleAv; });
-      knapp.textContent = alleAv ? 'Velg alle' : 'Nullstill';
-    });
+    knapp.addEventListener('click', function () { settAlle(knapp, true); });
+  });
+  document.querySelectorAll('.tema-ingen').forEach(function (knapp) {
+    knapp.addEventListener('click', function () { settAlle(knapp, false); });
   });
 
   document.querySelectorAll('.chip').forEach(function (chip) {

@@ -77,16 +77,44 @@ elif [ "${KEY#gsk_}" != "$KEY" ]; then
         -H 'Content-Type: application/json' -H "Authorization: Bearer $KEY" \
         -d "{\"model\":\"${CASE_RADAR_GROQ_MODEL:-llama-3.3-70b-versatile}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":4}" \
         "https://api.groq.com/openai/v1/chat/completions" 2>/dev/null || echo 000)
-  if [ "$GQ" = "200" ]; then
-    ok "Groq-nøkkelen VIRKER (gratis)"
-    KEY_ARGS="-e GROQ_API_KEY=$KEY"
-    printf '%s' "$KEY" > "$KEYFILE" && chmod 600 "$KEYFILE"
-  else
-    bad "Groq avviste nøkkelen (HTTP $GQ):"
-    head -c 300 /tmp/cr_key.json 2>/dev/null; echo
-    echo "     Deployer i DEMO-modus. Ny nøkkel: https://console.groq.com/keys"
-    KEY_ARGS=""
-  fi
+  # Bare 401/403 betyr FEIL nøkkel. Alt annet som ikke er 200 betyr «vi fikk
+  # ikke bekreftet den nå» — og da skal nøkkelen BRUKES, ikke kastes.
+  #
+  # Dette var en ekte feil: testen behandlet alt ulikt 200 som avvist, så en 429
+  # (kvotetak — nøkkelen er gyldig, du er bare over grensen akkurat nå) fikk
+  # skriptet til å deploye i demo-modus og skrive «Groq avviste nøkkelen».
+  # Det var ikke sant. Groq godtok den og ba oss vente. Samme gjaldt timeout
+  # (000) og 5xx, der Groq er nede og nøkkelen er helt uskyldig.
+  #
+  # Appen er fail-soft og rapporterer KI-status ærlig ved hvert skann. Derfor er
+  # riktig retning å beholde nøkkelen og la appen si fra hvis den faktisk feiler
+  # — ikke å slå av KI-en i stillhet på grunn av et forbigående blaff.
+  case "$GQ" in
+    200)
+      ok "Groq-nøkkelen VIRKER (gratis)"
+      KEY_ARGS="-e GROQ_API_KEY=$KEY"
+      printf '%s' "$KEY" > "$KEYFILE" && chmod 600 "$KEYFILE"
+      ;;
+    401|403)
+      bad "Groq AVVISTE nøkkelen (HTTP $GQ) — den er feil eller trukket tilbake:"
+      head -c 300 /tmp/cr_key.json 2>/dev/null; echo
+      echo "     Deployer i DEMO-modus. Ny nøkkel: https://console.groq.com/keys"
+      KEY_ARGS=""
+      ;;
+    429)
+      warn "Groq svarte 429 (kvotetak) — nøkkelen er GYLDIG, du er bare over"
+      warn "grensen akkurat nå. Bruker den; appen venter selv på kvote."
+      KEY_ARGS="-e GROQ_API_KEY=$KEY"
+      printf '%s' "$KEY" > "$KEYFILE" && chmod 600 "$KEYFILE"
+      ;;
+    *)
+      warn "Fikk ikke bekreftet nøkkelen (HTTP $GQ — timeout eller Groq nede)."
+      warn "Det sier ingenting om nøkkelen, så vi bruker den. Appen viser ærlig"
+      warn "status etter første «Skann nå»."
+      KEY_ARGS="-e GROQ_API_KEY=$KEY"
+      printf '%s' "$KEY" > "$KEYFILE" && chmod 600 "$KEYFILE"
+      ;;
+  esac
   rm -f /tmp/cr_key.json
 elif [ "${KEY#sk-or-}" != "$KEY" ]; then
   ok "OpenRouter-nøkkel (gratis modeller)"
@@ -151,7 +179,7 @@ sudo docker run -d --name case-radar --restart unless-stopped \
   -p 8000:8000 $KEY_ARGS -v /opt/case-radar-data:/tmp case-radar >/dev/null \
   || { bad "Start feilet."; exit 1; }
 
-for i in $(seq 1 30); do
+for _ in $(seq 1 30); do
   HEALTH=$(curl -s -m 2 http://localhost:8000/health 2>/dev/null || true)
   case "$HEALTH" in *'"ok"'*) break ;; esac
   sleep 1
@@ -177,7 +205,38 @@ fi
 
 # ── 6. Lenka ─────────────────────────────────────────────────────────────────
 say "6/6  Lenka di"
-if [ "$USE_TUNNEL" = "1" ]; then
+
+# Er en FAST lenke satt opp (fast-lenke.sh), er den fasit. Da skal denne blokken
+# aldri rore tunnelen — heller ikke naar --tunnel sendes inn.
+#
+# Hvorfor det staar forst og overstyrer alt: --tunnel river tunnel-containeren og
+# lager en ny med NY tilfeldig adresse. Med en fast lenke i drift er det et
+# selvskudd — ett feiltrykk, og journalistens bokmerke er dodt. Den eneste maaten
+# aa bytte lenke paa skal vaere aa kjore fast-lenke.sh bevisst.
+TOKENFIL="$HOME/.case-radar-tunnel-token"
+if [ -r "$TOKENFIL" ]; then
+  VERT=$(cat "$HOME/.case-radar-tunnel-vert" 2>/dev/null || true)
+  if ! sudo docker inspect -f '{{.State.Running}}' case-radar-tunnel 2>/dev/null | grep -q true; then
+    warn "Den faste tunnelen kjorte ikke — starter den fra lagret token"
+    sudo docker rm -f case-radar-tunnel >/dev/null 2>&1
+    sudo docker run -d --name case-radar-tunnel --restart unless-stopped --network host \
+      cloudflare/cloudflared:latest tunnel --no-autoupdate run \
+      --token "$(cat "$TOKENFIL")" >/dev/null 2>&1 \
+      || bad "Klarte ikke starte den faste tunnelen. Se: sudo docker logs case-radar-tunnel"
+  fi
+  ok "Fast tunnel i drift — adressen er uendret"
+  [ "$FORCE_TUNNEL" = "1" ] && warn "--tunnel ignorert: det ville gitt ny adresse og drept lenka"
+  if [ -n "$VERT" ]; then
+    printf '\n\033[1;32m  ÅPNE PÅ MOBIL:  https://%s\033[0m\n\n' "$VERT"
+    SVAR=$(curl -s -m 10 "https://$VERT/health" 2>/dev/null || true)
+    case "$SVAR" in
+      *'"ok"'*) ok "Lenka svarer utenfra: $SVAR" ;;
+      *) bad "Lenka svarer ikke utenfra — kjor: bash sjekk-server.sh" ;;
+    esac
+  else
+    warn "Vertsnavnet er ikke lagret. Adressen staar i Cloudflare-panelet."
+  fi
+elif [ "$USE_TUNNEL" = "1" ]; then
   if ! command -v cloudflared >/dev/null 2>&1; then
     warn "Installerer cloudflared (gratis tunnel)…"
     ARCH=$(dpkg --print-architecture 2>/dev/null || echo amd64)
@@ -195,7 +254,7 @@ if [ "$USE_TUNNEL" = "1" ]; then
            > /tmp/case-radar-tunnel.log 2>&1 & }
   echo "  Venter på tunnel-adresse…"
   URL=""
-  for i in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     URL=$( { sudo docker logs case-radar-tunnel 2>&1; cat /tmp/case-radar-tunnel.log 2>/dev/null; } \
            | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1 )
     [ -n "$URL" ] && break
@@ -205,7 +264,8 @@ if [ "$USE_TUNNEL" = "1" ]; then
     ok "Tunnel oppe"
     printf '\n\033[1;32m  ÅPNE PÅ MOBIL:  %s\033[0m\n\n' "$URL"
     echo "  (https, funker på hvilken som helst mobil — ingen brannmur eller IP nødvendig)"
-    echo "  Adressen endres hvis tunnelen restartes. Vil du ha en fast lenke: bruk Render."
+    warn "Dette er en ENGANGSADRESSE: restarter serveren, får tunnelen et nytt"
+    warn "tilfeldig navn og lenka du har delt ut blir død. Fast lenke:  bash fast-lenke.sh"
   else
     bad "Fikk ikke tunnel-adresse. Sjekk: sudo docker logs case-radar-tunnel"
     exit 1
@@ -220,5 +280,10 @@ fi
 say "Status"
 echo "  Live-modus vises i appen etter «Skann nå» — den sier ærlig om KI-en er ekte,"
 echo "  og hvis den feiler får du grunnen (feil nøkkel / tom kvote / ukjent modell)."
-echo "  Logg:   sudo docker logs -f case-radar"
-echo "  Stopp:  sudo docker rm -f case-radar case-radar-tunnel"
+echo
+echo "  Merk: dette skriptet henter INGEN ny kode — det bygger det som ligger på"
+echo "  disken. Skal du rulle ut noe nytt, bruk:  bash oppdater.sh"
+echo
+echo "  Sjekk alt:  bash sjekk-server.sh"
+echo "  Logg:       sudo docker logs -f case-radar"
+echo "  Stopp:      sudo docker rm -f case-radar case-radar-tunnel"

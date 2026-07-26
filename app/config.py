@@ -1,6 +1,6 @@
 """Konfigurasjon: kilder, geografi- og demografi-nokkelord.
 
-Alt som er lett a tilpasse for Mathias samles her, slik at man kan justere
+Alt som er lett a tilpasse for journalisten samles her, slik at man kan justere
 kilder og tema uten a rore selve logikken.
 """
 
@@ -94,58 +94,194 @@ DEMOGRAPHIC_TOPICS: dict[str, list[str]] = {
 # (ssb_kalender.VIKTIGE_EMNER) og probe-etiketter. Ingen av dem var koblet.
 # TEMAER er brua: ETT valg i menyen oversettes til alle tre vokabularene.
 #
-#   sok        -> soekeord mot SSBs tabellkatalog. Dette er det som faktisk
-#                 styrer HVILKE tabeller skannet finner - hovedeffekten.
-#   ssb_emner  -> SSBs egne emneslugger, brukt til aa vekte publiseringskalenderen.
+#   gruppe     -> overskrift i menyen, saa 22 temaer ikke blir en vegg av tekst.
+#   sok        -> soekeord mot SSBs tabellkatalog. Sammen med `koder` er dette
+#                 det som styrer HVILKE tabeller skannet finner - hovedeffekten.
+#   koder      -> SSBs egne hovedemnekoder. Brukes til aa loefte katalogtreff
+#                 presist, i stedet for aa stole paa at et soekeord tilfeldigvis
+#                 traff. To ting maatte verifiseres mot det ekte API-et foer
+#                 dette virket, og begge er felle:
+#                   * API-et IGNORERER `subjectCode` som spoerreparameter -
+#                     verifisert 26.07.2026, den returnerte alle 3 786
+#                     tabellene - saa filtreringen maa gjoeres paa vaar side.
+#                   * En tabell ligger under FLERE stier, og riktig kode er
+#                     ikke noedvendigvis i den foerste. Se `_hovedemner()` i
+#                     ssb_sok.py.
+#                 Kodene under er hele settet, utledet ved aa gaa gjennom alle
+#                 3 786 tabellene i katalogen 26.07.2026 - 23 hovedemner.
+#                 Ikke gjett paa dem: «in» er Innvandring, ikke Inntekt (det er
+#                 «if»), og jord/skog/fiske er «js».
+#   ssb_emner  -> emneslugger i RSS-publiseringskalenderen. Et HELT annet
+#                 vokabular enn `koder`, selv om begge kommer fra SSB.
 #   demografi  -> hvilke DEMOGRAPHIC_TOPICS temaet dekker (til tagging/visning).
+#
+# Dekningen er bevisst komplett: alle 23 hovedemner i SSBs katalog er med, saa
+# ingen del av statistikken er utilgjengelig for journalisten. Emner uten lokal
+# relevans (Svalbard, utenriksoekonomi) ligger under «Annet» - de er sjelden
+# aktuelle, men de skal finnes naar de er det.
 TEMAER: dict[str, dict] = {
-    "helse": {
-        "ikon": "🩺",
-        "sok": ["sykefravaer", "fastlege", "pasienter", "helsetjenester", "psykisk helse"],
-        "ssb_emner": ["helse"],
-        "demografi": ["psykisk helse", "trening og livsstil"],
-    },
-    "lønn": {
-        "ikon": "💰",
-        "sok": ["inntekt", "lonn", "sysselsetting", "arbeidsledige", "uforetrygd"],
-        "ssb_emner": ["arbeid-og-lonn", "inntekt-og-forbruk"],
-        "demografi": ["jobb og okonomi"],
-    },
-    "fattigdom": {
-        "ikon": "🏚",
-        "sok": ["lavinntekt", "sosialhjelp", "gjeld", "husholdninger", "bostotte"],
-        "ssb_emner": ["inntekt-og-forbruk", "sosiale-forhold-og-kriminalitet"],
-        "demografi": ["jobb og okonomi", "bolig og leie"],
+    # ── Folk ────────────────────────────────────────────────────────────────
+    "befolkning": {
+        "gruppe": "Folk", "ikon": "👥",
+        "sok": ["folkemengde", "flytting", "fodte", "dode", "befolkningsframskriving"],
+        "koder": ["be"], "ssb_emner": ["befolkning"],
+        "demografi": ["bolig og leie"],
     },
     "barn og unge": {
-        "ikon": "🧒",
-        "sok": ["barnehage", "grunnskole", "elever", "fodte", "barnevern"],
-        "ssb_emner": ["utdanning", "befolkning"],
+        "gruppe": "Folk", "ikon": "🧒",
+        "sok": ["barnehage", "grunnskole", "elever", "barnevern", "fodte"],
+        "koder": ["ud", "be", "sk"], "ssb_emner": ["utdanning", "befolkning"],
         "demografi": ["studentliv"],
     },
     "alderdom": {
-        "ikon": "🧓",
+        "gruppe": "Folk", "ikon": "🧓",
         "sok": ["eldre", "pleie og omsorg", "sykehjem", "pensjon", "aleneboende"],
-        "ssb_emner": ["helse", "befolkning"],
+        "koder": ["he", "be", "os"], "ssb_emner": ["helse", "befolkning"],
         "demografi": ["psykisk helse"],
     },
-    "idrett": {
-        "ikon": "⚽",
-        "sok": ["idrett", "kultur", "fritidsaktivitet", "idrettsanlegg"],
-        "ssb_emner": ["kultur-og-fritid"],
-        "demografi": ["trening og livsstil", "uteliv og kultur"],
+    "innvandring": {
+        "gruppe": "Folk", "ikon": "🌍",
+        "sok": ["innvandrere", "innvandring", "flyktninger", "statsborgerskap"],
+        "koder": ["in"], "ssb_emner": ["innvandring-og-innvandrere", "befolkning"],
+        "demografi": [],
     },
-    "kriminalitet": {
-        "ikon": "🚓",
-        "sok": ["lovbrudd", "anmeldte", "straffereaksjoner", "ofre"],
-        "ssb_emner": ["sosiale-forhold-og-kriminalitet"],
-        "demografi": ["trygghet og kriminalitet"],
+    "familie og husholdning": {
+        "gruppe": "Folk", "ikon": "🏡",
+        "sok": ["husholdninger", "familier", "samboere", "skilsmisser", "aleneboende"],
+        "koder": ["be"], "ssb_emner": ["befolkning"],
+        "demografi": ["dating og relasjoner"],
+    },
+
+    # ── Penger ──────────────────────────────────────────────────────────────
+    "lønn": {
+        "gruppe": "Penger", "ikon": "💰",
+        "sok": ["lonn", "inntekt", "arsloenn", "loennsforskjeller"],
+        "koder": ["al", "if"], "ssb_emner": ["arbeid-og-lonn", "inntekt-og-forbruk"],
+        "demografi": ["jobb og okonomi"],
+    },
+    "fattigdom": {
+        "gruppe": "Penger", "ikon": "🏚",
+        "sok": ["lavinntekt", "sosialhjelp", "bostotte", "barnefattigdom"],
+        "koder": ["if", "sk"],
+        "ssb_emner": ["inntekt-og-forbruk", "sosiale-forhold-og-kriminalitet"],
+        "demografi": ["jobb og okonomi", "bolig og leie"],
+    },
+    "priser": {
+        "gruppe": "Penger", "ikon": "🏷",
+        "sok": ["konsumprisindeks", "matvarepriser", "byggekostnad", "drivstoff"],
+        "koder": ["pp"], "ssb_emner": ["priser-og-prisindekser"],
+        "demografi": ["jobb og okonomi"],
+    },
+    "gjeld og bank": {
+        "gruppe": "Penger", "ikon": "🏦",
+        "sok": ["gjeld", "utlaan", "renter", "husholdningenes gjeld", "betalingsanmerkninger"],
+        "koder": ["bf"], "ssb_emner": ["bank-og-finansmarked"],
+        "demografi": ["jobb og okonomi"],
+    },
+    "skatt og kommunekasse": {
+        "gruppe": "Penger", "ikon": "🏛",
+        "sok": ["skatt", "kommuneregnskap", "kostra", "offentlige utgifter"],
+        "koder": ["os", "nk"],
+        "ssb_emner": ["offentlig-sektor", "nasjonalregnskap-og-konjunkturer"],
+        "demografi": ["jobb og okonomi"],
+    },
+
+    # ── Arbeid ──────────────────────────────────────────────────────────────
+    "arbeid": {
+        "gruppe": "Arbeid", "ikon": "🧰",
+        "sok": ["sysselsetting", "arbeidsledige", "arbeidskraft", "sykefravaer", "deltid"],
+        "koder": ["al"], "ssb_emner": ["arbeid-og-lonn"],
+        "demografi": ["jobb og okonomi"],
     },
     "næringsliv": {
-        "ikon": "🏢",
-        "sok": ["konkurs", "foretak", "naering", "omsetning", "etablerere"],
-        "ssb_emner": ["virksomheter-foretak-og-regnskap", "energi-og-industri"],
+        "gruppe": "Arbeid", "ikon": "🏢",
+        "sok": ["konkurs", "foretak", "etablerere", "omsetning", "naering"],
+        "koder": ["vf"], "ssb_emner": ["virksomheter-foretak-og-regnskap"],
         "demografi": ["jobb og okonomi"],
+    },
+    "butikk og service": {
+        "gruppe": "Arbeid", "ikon": "🛒",
+        "sok": ["varehandel", "detaljhandel", "tjenesteyting", "overnatting", "servering"],
+        "koder": ["vt"], "ssb_emner": ["varehandel-og-tjenesteyting"],
+        "demografi": ["uteliv og kultur"],
+    },
+    "teknologi": {
+        "gruppe": "Arbeid", "ikon": "💻",
+        "sok": ["ikt", "internett", "digitalisering", "forskning og utvikling"],
+        "koder": ["ti"], "ssb_emner": ["teknologi-og-innovasjon"],
+        "demografi": ["gaming og digitalt"],
+    },
+
+    # ── Hverdag ─────────────────────────────────────────────────────────────
+    "bolig og bygg": {
+        "gruppe": "Hverdag", "ikon": "🏘",
+        "sok": ["byggeareal", "boligpriser", "leiemarked", "boligmasse", "igangsatte boliger"],
+        "koder": ["bb"], "ssb_emner": ["bygg-bolig-og-eiendom"],
+        "demografi": ["bolig og leie"],
+    },
+    "helse": {
+        "gruppe": "Hverdag", "ikon": "🩺",
+        "sok": ["fastlege", "pasienter", "helsetjenester", "psykisk helse", "legemidler"],
+        "koder": ["he"], "ssb_emner": ["helse"],
+        "demografi": ["psykisk helse", "trening og livsstil"],
+    },
+    "utdanning": {
+        "gruppe": "Hverdag", "ikon": "🎓",
+        "sok": ["videregaende", "studenter", "hoyere utdanning", "frafall", "laererer"],
+        "koder": ["ud"], "ssb_emner": ["utdanning"],
+        "demografi": ["studentliv"],
+    },
+    "kriminalitet": {
+        "gruppe": "Hverdag", "ikon": "🚓",
+        "sok": ["lovbrudd", "anmeldte", "straffereaksjoner", "ofre", "fengsling"],
+        "koder": ["sk"], "ssb_emner": ["sosiale-forhold-og-kriminalitet"],
+        "demografi": ["trygghet og kriminalitet"],
+    },
+    "idrett og kultur": {
+        "gruppe": "Hverdag", "ikon": "⚽",
+        "sok": ["idrett", "kultur", "fritidsaktivitet", "bibliotek", "frivillighet"],
+        "koder": ["kf"], "ssb_emner": ["kultur-og-fritid"],
+        "demografi": ["trening og livsstil", "uteliv og kultur"],
+    },
+
+    # ── Miljø og transport ──────────────────────────────────────────────────
+    "natur og miljø": {
+        "gruppe": "Miljø", "ikon": "🌱",
+        "sok": ["utslipp", "avfall", "klimagasser", "vann", "arealbruk"],
+        "koder": ["nm"], "ssb_emner": ["natur-og-miljo"],
+        "demografi": ["klima og miljo"],
+    },
+    "energi": {
+        "gruppe": "Miljø", "ikon": "⚡",
+        "sok": ["stromforbruk", "elektrisitet", "energibruk", "industri"],
+        "koder": ["ei"], "ssb_emner": ["energi-og-industri"],
+        "demografi": ["klima og miljo", "jobb og okonomi"],
+    },
+    "transport og reiseliv": {
+        "gruppe": "Miljø", "ikon": "🚌",
+        "sok": ["kollektivtransport", "bilpark", "elbil", "reiseliv", "trafikkulykker"],
+        "koder": ["tr"], "ssb_emner": ["transport-og-reiseliv"],
+        "demografi": ["klima og miljo"],
+    },
+
+    # ── Annet ───────────────────────────────────────────────────────────────
+    "jord og fiske": {
+        "gruppe": "Annet", "ikon": "🌾",
+        "sok": ["jordbruk", "skogbruk", "fiskeri", "akvakultur", "landbruk"],
+        "koder": ["js"], "ssb_emner": ["jord-skog-jakt-og-fiskeri"],
+        "demografi": [],
+    },
+    "valg og politikk": {
+        "gruppe": "Annet", "ikon": "🗳",
+        "sok": ["valg", "stortingsvalg", "kommunestyrevalg", "valgdeltakelse"],
+        "koder": ["va"], "ssb_emner": ["valg"],
+        "demografi": [],
+    },
+    "utenriks og Svalbard": {
+        "gruppe": "Annet", "ikon": "🧭",
+        "sok": ["utenrikshandel", "eksport", "import", "svalbard"],
+        "koder": ["ut", "sv"], "ssb_emner": ["utenriksokonomi", "svalbard"],
+        "demografi": [],
     },
 }
 
@@ -164,10 +300,27 @@ def sokeord_for(temaer: list[str] | None) -> list[str]:
     return ut
 
 
+def emnekoder_for(temaer: list[str] | None) -> set[str]:
+    """SSBs hovedemnekoder for de valgte temaene (be, al, he, sk ...).
+
+    Tomt valg gir en TOM mengde, ikke alle koder - kallerne tolker tomt som
+    «ikke filtrer», og det er en annen ting enn «filtrer paa alt»."""
+    valgte = [t for t in (temaer or []) if t in TEMAER]
+    return {k for navn in valgte for k in TEMAER[navn]["koder"]}
+
+
 def ssb_emner_for(temaer: list[str] | None) -> set[str]:
-    """SSB-emneslugger for de valgte temaene - til vekting av publiseringskalenderen."""
+    """RSS-emneslugger for de valgte temaene - til vekting av publiseringskalenderen."""
     valgte = [t for t in (temaer or []) if t in TEMAER] or list(TEMAER)
     return {e for navn in valgte for e in TEMAER[navn]["ssb_emner"]}
+
+
+def temagrupper() -> dict[str, list[str]]:
+    """{gruppe: [temanavn]} i den rekkefolgen de er definert - til menyen."""
+    ut: dict[str, list[str]] = {}
+    for navn, t in TEMAER.items():
+        ut.setdefault(t["gruppe"], []).append(navn)
+    return ut
 
 
 # Ord som ALDRI skal bli en "entitet" a klynge saker rundt (for generelle).
@@ -276,3 +429,14 @@ ENABLE_SSB = os.getenv("CASE_RADAR_ENABLE_SSB", "true").lower() == "true"
 ENABLE_AI = os.getenv("CASE_RADAR_ENABLE_AI", "true").lower() == "true"
 EDITOR_CAP = int(os.getenv("CASE_RADAR_EDITOR_CAP", "8"))       # redaktor vurderer topp N
 JOURNALIST_CAP = int(os.getenv("CASE_RADAR_JOURNALIST_CAP", "6"))  # utkast paa topp N godkjente
+
+# Tokenbudsjett for ETT skann. Groqs gratis-nivaa gir 12 000 tokens i minuttet
+# (llama-3.3-70b-versatile, console.groq.com/docs/rate-limits, hentet 26.07.2026),
+# og et fullt skann ville brukt rundt 37 000 - det var derfor 429-en traff
+# journalistens telefon. Naa stopper skannet naar budsjettet er brukt opp, og
+# resten legges i kø: trykker han «Skann igjen» tar neste skann de neste sakene.
+# Eierens egen loesning, og den er bedre enn aa vente lenge inne i ett skann.
+#
+# 9 000 og ikke 12 000: marginen gjor at to skann rett etter hverandre fortsatt
+# holder seg under taket, siden minuttvinduet ruller.
+KI_BUDSJETT_TOKENS = int(os.getenv("CASE_RADAR_KI_BUDSJETT", "9000"))
