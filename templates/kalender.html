@@ -234,9 +234,13 @@
               <h3>{{ draft.title or lead.title }}</h3>
               {% if draft.ingress %}<p class="day-lead-ingress">{{ draft.ingress }}</p>{% endif %}
 
-              <p class="span-badge">
-                {% if lead._start %}▶ {{ lead._start }}{% endif %}
-                {% if lead._deadline %} → ⚑ {{ lead._deadline }}{% endif %}
+              {# Én linje med det som betyr noe naar man planlegger: naar starter
+                 den, naar er fristen, hvor mye tid er satt av. Sto foer bare som
+                 start->deadline, mens timene laa gjemt nede i skjemaet. #}
+              <p class="dag-fakta">
+                {% if lead._start %}<span>▶ {{ lead._start }}</span>{% endif %}
+                {% if lead._deadline %}<span>⚑ {{ lead._deadline }}</span>{% endif %}
+                {% if lead._timer %}<span>⏱ {{ lead._timer|round(1) }} t</span>{% endif %}
               </p>
 
               {% if draft.body %}
@@ -282,6 +286,13 @@
               </details>
               {% endif %}
 
+              {# Skjemaet laa aapent paa HVER sak. Scrollet man ned for aa se hva
+                 man skulle gjore, moette man en vegg av datovelgere og
+                 nedtrekksmenyer i stedet for en lesbar liste. Planlegging er noe
+                 man gjor av og til; lesing er noe man gjor hver dag - saa den
+                 sjeldne handlingen legges bort, ikke den hyppige. #}
+              <details class="plan-rediger">
+                <summary>✏️ Endre plan</summary>
               <form class="day-form" method="post" action="/leads/{{ lead.key }}/plan">
                 <input type="hidden" name="tilbake" value="/kalender?ym={{ '%04d-%02d'|format(year, month) }}" />
                 <label class="fld">
@@ -307,6 +318,7 @@
                 </label>
                 <button type="submit" class="btn-small">Lagre</button>
               </form>
+              </details>
             </article>
             {% endif %}
           {% endfor %}

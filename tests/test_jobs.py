@@ -282,26 +282,6 @@ def test_identiske_titler_kastes_ogsaa_uten_faktum():
     assert len(ut) == 1
 
 
-def test_malvinklene_peker_paa_hvert_sitt_faktum():
-    """Ogsaa uten KI skal de tre ikke vaere tre varianter av samme setning."""
-    from datetime import datetime
-
-    from app.agents import _fallback_angles
-    from app.models import Case
-
-    case = Case(
-        key="k", title="T", score=1, geo="lokal", topics=[], angle="", why="",
-        signals=[], created_at=datetime.now(tz=UTC), kind="data",
-        finding="Godkjente boliger: 261 i 2026K2, mot 30 i 2025K2.",
-        metric_value="+770 %", metric_period="2026K2 mot 2025K2",
-        data_source="SSB tabell 05889",
-    )
-    a = _fallback_angles(case, {})
-    assert len({x["title"] for x in a}) == 3
-    assert len({x["headline_fact"] for x in a}) == 3
-    assert all("Hva betyr tallet i praksis" not in x["title"] for x in a)
-
-
 def test_kortkilde_beholder_tabellnummeret():
     """Det lange tabellnavnet sto tre steder i samme kort og tok to linjer hver
     gang. Vi korter det ned - men nummeret er det eneste presise, så det blir."""
@@ -599,16 +579,15 @@ def test_ki_som_leverer_samme_faktum_to_ganger_gir_to_vinkler(monkeypatch):
     assert len(agents.journalist_angles(_sak(), {})) == 2
 
 
-def test_uten_nokkel_faller_vi_til_maler_som_fortsatt_er_ulike(monkeypatch):
+def test_uten_ki_leverer_vi_ingen_vinkler(monkeypatch):
+    """Feiler KI-en, skal lista være TOM - ikke fylt med maler.
+
+    Regresjonsvakt på eierens beslutning: en mal kan ikke foreslå en vinkel, og
+    tre svake forslag ser ut som et valg uten å være det."""
     from app import agents
 
     monkeypatch.setattr(agents.llm, "complete_json", lambda *a, **k: None)
-    vinkler = agents.journalist_angles(_sak(), {})
-    assert all(v["mode"] == "mal" for v in vinkler)
-    assert len({v["title"] for v in vinkler}) == 3
-    assert len({v["headline_fact"] for v in vinkler}) == 3
-    # Malene skal peke på hva som må undersøkes, ikke påstå en årsak.
-    assert all("ødelegger" not in v["title"].lower() for v in vinkler)
+    assert agents.journalist_angles(_sak(), {}) == []
 
 
 def test_prompten_krever_tre_ulike_spor():
@@ -616,8 +595,26 @@ def test_prompten_krever_tre_ulike_spor():
 
     p = prompts.JOURNALIST_ANGLES_SYSTEM
     assert "SITT EGET faktum" in p
-    assert "hypotese, ikke paastand" in p.lower() or "hypotese" in p.lower()
+    assert "hypotese" in p.lower()
     assert "FORSLAG TIL TITTEL" in p
+
+
+def test_journalisten_maa_selge_inn_vinkelen():
+    """Eieren 26.07.2026: «journalistene trenger mer prompting og faktisk selge
+    inn de titlene de lager». Promptene var korrekte, men flate - de ba aldri
+    om et argument for hvorfor saken er verdt en dag."""
+    from app import prompts
+
+    p = prompts.JOURNALIST_ANGLES_SYSTEM
+    assert "pitch" in p, "ingen salgspitch etterspurt"
+    assert "IDEMOETE" in p, "journalisten vet ikke at han skal selge inn"
+    assert "aktive verb" in p, "ingen konkrete regler for skarpe titler"
+    # Vernet mot klikkagn må overleve at vi ber om skarpere titler.
+    assert "Ingen klikkagn" in p and "Aldri dikt opp" in p
+
+    e = prompts.EDITOR_SYSTEM
+    assert "leserverdi" in e, "redaktøren svarer ikke på hvem som bryr seg"
+    assert "tomme abstraksjoner" in e
 
 
 # ── Ting som vokser uten tak, og sider som blir for tunge ────────────────────

@@ -124,8 +124,11 @@ def test_saker_i_ko_merkes_ko_og_ikke_mal(ki, monkeypatch):
     i_ko = [c for c in saker if c.ai_mode == "ko"]
     assert i_ko, "ingen saker ble merket «ko»"
     for c in i_ko:
-        assert c.editor.get("mode") == "ko" or any(
-            a.get("mode") == "ko" for a in c.angles
+        # Enten ble redaktørdommen satt i kø, eller så ble vinklene det. Vinkler
+        # i kø er nå en TOM liste — maler ble fjernet, så det finnes ikke lenger
+        # noe «ko»-merket vinkelobjekt å se etter.
+        assert c.editor.get("mode") == "ko" or c.angles == [], (
+            f"{c.key} er merket «ko» men har verken kø-dom eller tom vinkelliste"
         )
 
 

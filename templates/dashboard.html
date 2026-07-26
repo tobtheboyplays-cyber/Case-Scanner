@@ -279,6 +279,9 @@
             <p><strong>{{ case.editor.headline }}</strong></p>
             <p class="ai-angle">{{ case.editor.angle }}</p>
             <p class="ai-verdict">💬 {{ case.editor.verdict }}</p>
+            {% if case.editor.leserverdi %}
+            <p class="ai-leserverdi">🎯 {{ case.editor.leserverdi }}</p>
+            {% endif %}
             {% if case.editor.forbehold %}<p class="angle-risk">⚠ {{ case.editor.forbehold }}</p>{% endif %}
           </details>
           {% endif %}
@@ -321,6 +324,10 @@
               </summary>
 
               {% if a.kort %}<p class="draft-ingress">{{ a.kort }}</p>{% endif %}
+              {# Salgspitchen er journalistens argument for hvorfor akkurat denne
+                 er verdt en dag. Uten den er valget mellom tre titler bare en
+                 smakssak. #}
+              {% if a.pitch %}<p class="angle-pitch">🎤 {{ a.pitch }}</p>{% endif %}
               {% if a.mangler %}<p class="angle-risk">🔍 Mangler data: {{ a.mangler }}</p>{% endif %}
 
               {% if a.body %}

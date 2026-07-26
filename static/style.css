@@ -1243,3 +1243,63 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .ki-delvis .ki-av-h { color: #cbe58a; }
 .ki-delvis .ki-av-b { color: #c3d0a8; }
 .ki-delvis .ai-tag { vertical-align: baseline; }
+
+/* Salgspitchen fra journalist-agenten, og redaktørens leserverdi. Begge er
+   ARGUMENTER, ikke fakta — de skal se ut som en stemme i rommet, ikke som tall.
+   Derfor egen farge og venstrestrek, tydelig adskilt fra funnet. */
+.angle-pitch, .ai-leserverdi {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: rgba(59, 130, 246, .07);
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #bcd3f0;
+}
+
+/* ── Kalenderens dagliste: lesbar først, redigering bak en knapp ─────────── */
+/* Skjemaet lå åpent på hver eneste sak. Scrollet man ned for å se hva man
+   skulle gjøre, møtte man datovelgere og nedtrekksmenyer i stedet for saker. */
+.dag-fakta {
+  display: flex; flex-wrap: wrap; gap: 6px 14px;
+  margin: 8px 0 10px; font-size: 12.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.plan-rediger { margin-top: 10px; }
+.plan-rediger > summary {
+  display: inline-block; cursor: pointer; list-style: none;
+  font-size: 12.5px; color: var(--muted);
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel2);
+}
+.plan-rediger > summary::-webkit-details-marker { display: none; }
+.plan-rediger > summary:hover { color: var(--text); border-color: var(--accent); }
+.plan-rediger[open] > summary { margin-bottom: 10px; color: var(--text); }
+/* Litt luft mellom sakene, så de leses som en liste og ikke som én blokk. */
+.day-lead + .day-lead { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.day-lead h3 { font-size: 15.5px; line-height: 1.35; margin: 6px 0 0; }
+.day-lead-ingress {
+  margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* «Åpne artikkelen» i kalenderen er én kort linje, men arvet .angle-boksen fra
+   radaren der sammendraget har tre linjer. Resultatet var en høy, tom boks som
+   så ut som et panel uten innhold. Her skal den se ut som det den er: en knapp,
+   søsteren til «Endre plan». */
+.day-lead .angle {
+  background: none; border: 0; border-radius: 0; padding: 0; margin: 10px 0 0;
+  display: inline-block;
+}
+.day-lead .angle > summary {
+  min-height: 0; display: inline-flex; gap: 8px;
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel2); font-size: 12.5px; color: var(--muted);
+}
+.day-lead .angle > summary:hover { color: var(--text); border-color: var(--accent); }
+.day-lead .angle > summary .angle-title { font-size: 12.5px; font-weight: 500; flex: none; }
+.day-lead .angle[open] > summary { margin-bottom: 10px; color: var(--text); }
+/* Knappene skal stå på samme linje, ikke stables. */
+.day-lead .angle, .day-lead .plan-rediger { margin-right: 8px; }
+.day-lead .plan-rediger { display: inline-block; margin-top: 10px; }

@@ -1,7 +1,14 @@
 """Redaksjonell KI-arbeidsflyt: analytiker -> redaktor -> journalist.
 
-Hver agent bruker Claude naar en API-nokkel finnes paa serveren, og faller ellers
-tilbake til malbasert tekst (tydelig merket) slik at appen + demoen virker uten nokkel.
+VINKLER LAGES KUN AV KI. Eierens beslutning 26.07.2026, og den er riktig: en mal
+kan ikke foreslaa en vinkel. Den kan bare omskrive tallet den allerede har faatt,
+og resultatet ble tre varianter av «hva betyr dette for Stavanger?». Tre svake
+forslag ser ut som et valg uten aa vaere det, og spiser plassen der de ekte skulle
+staatt. Uten KI leverer vi tom liste, og UI-et sier hvorfor.
+
+Redaktoerdommen har fortsatt en mekanisk reserve (`_editor_mal`), for den er en
+PORT - noe maa avgjore om saken slipper videre naar KI-en ikke svarer. Den er
+merket «mal» i UI-et og skal aldri se ut som en redaktoervurdering.
 """
 
 from __future__ import annotations
@@ -188,7 +195,14 @@ def journalist_angles(
 
     Bevisst lat: aa skrive tre fulle artikler for hver sak ved hvert skann brenner
     kvote paa saker som aldri blir aapnet, og gjor skannet tregt. Artikkelen skrives
-    av write_draft() naar journalisten faktisk ber om den."""
+    av write_draft() naar journalisten faktisk ber om den.
+
+    **Kun ekte KI-vinkler. Ingen maler.** Eierens beslutning 26.07.2026, og den er
+    riktig: en mal kan ikke foreslaa en vinkel. Den kan bare omskrive tallet den
+    allerede har faatt, og resultatet ble tre varianter av «hva betyr dette for
+    Stavanger?». Tre daarlige forslag er verre enn ingen - de ser ut som et valg,
+    men er det ikke, og de spiser plassen der de ekte vinklene skulle staatt.
+    Uten KI leverer vi tom liste, og UI-et sier hvorfor."""
     user = (
         f"{kildegrunnlag(case)}\n\n"
         f"REDAKTOERENS BESTILLING:\n"
@@ -200,7 +214,7 @@ def journalist_angles(
     if budsjett is not None and not budsjett.be_om(
         prompts.JOURNALIST_ANGLES_SYSTEM, user, 1400
     ):
-        return _fallback_angles(case, editor, modus="ko")
+        return []      # i koe - neste skann tar den
 
     result = llm.complete_json(
         prompts.JOURNALIST_ANGLES_SYSTEM, user, model=llm.MODEL_ANALYST, max_tokens=1400
@@ -214,7 +228,7 @@ def journalist_angles(
             for a in clean:
                 a["mode"] = "llm"
             return clean[:3]
-    return _fallback_angles(case, editor)
+    return []          # KI-en leverte ikke - da leverer vi ingenting
 
 
 def _nokkel(tekst: str) -> str:
@@ -288,86 +302,6 @@ def write_draft(case: Case, editor: dict, angle: dict) -> dict:
         "image_ideas": angle.get("image_ideas")
         or [{"motiv": "Case-person knyttet til temaet", "bildetekst": "Illustrasjonsfoto"}],
     }
-
-
-# Hva et tall betyr i praksis avhenger av HVA det handler om. Uten dette ble
-# alle tre malvinklene varianter av «hva betyr tallet for Stavanger?».
-TEMA_SPOR: dict[str, tuple[str, str]] = {
-    "bolig og leie": ("leiemarkedet", "Eiendom Norge, en utleiemegler og Leieboerforeningen"),
-    "studentliv": ("studentboligene", "SiS og Studentparlamentet ved UiS"),
-    "jobb og okonomi": ("arbeidsmarkedet", "NAV Rogaland og NHO"),
-    "psykisk helse": ("helsekoeen", "kommuneoverlegen og fastlegevakta"),
-    "trygghet og kriminalitet": ("politiets ressurser", "politistasjonssjefen"),
-    "uteliv og kultur": ("utelivet", "bransjeforeningen og kommunens naeringsavdeling"),
-    "klima og miljo": ("klimaregnskapet", "kommunens klimaraadgiver"),
-    "trening og livsstil": ("folkehelsa", "folkehelsekoordinatoren i kommunen"),
-    "gaming og digitalt": ("skjermbruk blant unge", "en forsker paa feltet"),
-    "dating og relasjoner": ("hvordan unge lever", "en samfunnsforsker"),
-}
-TEMA_STANDARD = ("hva kommunen maa planlegge for", "kommunedirektoeren")
-
-
-def _fallback_angles(case: Case, editor: dict, *, modus: str = "mal") -> list[dict]:
-    """Vinkelforslag naar KI-en er av. Tydelig merket «demo», men ikke tre
-    varianter av samme setning.
-
-    De tre hviler paa HVER SIN opplysning, saa valget mellom dem er ekte:
-      1. selve endringen  -> hva driver den?
-      2. sammenligningen  -> skiller stedet seg fra landet?
-      3. temaet           -> hva treffer den i praksis?
-
-    Merk hva disse IKKE gjor: de paastaar ingen aarsak. «Videospill oedelegger
-    unge gutter» er en hypotese, ikke et funn - og et verktoy som trykker den
-    som tittel setter journalisten i knipe. Malene peker paa hva som maa
-    UNDERSOEKES for aa finne aarsaken. Den ekte kreativiteten kommer fra
-    journalist-agenten naar en KI-noekkel er satt."""
-    sted = "Stavanger" if case.geo == "lokal" else "Norge"
-    kilder = [{"navn": case.data_source or "SSB", "hva": "tallet i saken", "url": case.data_url}]
-    tall = (case.metric_value or "").strip()
-    periode = (case.metric_period or "").strip()
-    emne, ringe = next(
-        (TEMA_SPOR[t] for t in case.topics if t in TEMA_SPOR), TEMA_STANDARD
-    )
-    endring = tall or "endringen"
-
-    maler = [
-        # 1) Aarsaken. Faktum: selve tallet.
-        ("uventet",
-         f"Ingen har forklart hvorfor {sted} fikk {endring}",
-         f"Ring {ringe} og faa dem til aa peke paa hva som driver tallet. "
-         f"Ikke ta imot «tilfeldig svingning» uten en begrunnelse.",
-         f"{case.title} ({periode})".strip() if periode else case.title),
-        # 2) Sammenligningen. Faktum: hvordan stedet ligger an mot andre.
-        ("motsetning",
-         f"{sted} mot resten av landet: hvem beveger seg mest?",
-         "Sett tallet ved siden av landet og nabokommunene i samme tabell. "
-         "Er avviket stort nok til aa vaere en sak i seg selv?",
-         case.finding or case.title),
-        # 3) Konsekvensen. Faktum: temaet tallet treffer.
-        ("konsekvens",
-         f"Hva {endring} betyr for {emne} i {sted}",
-         f"Regn endringen om til noe konkret: plasser, koe, kroner eller tid. "
-         f"Sjekk med {ringe} om de har planlagt for den.",
-         f"Tema: {', '.join(case.topics) or 'ikke tagget'} · kilde: "
-         f"{case.data_source or 'SSB'}"),
-    ]
-    risiko = (
-        "Denne saken sto i kø da skannet gikk tom for KI-kvote. Trykk «Skann "
-        "igjen» - neste skann lager ekte vinkler for den."
-        if modus == "ko"
-        else "Laget uten KI-nokkel. Dette er et utgangspunkt, ikke en "
-             "ferdig vinkel - journalisten maa finne saken selv."
-    )
-    return [
-        {
-            "mode": modus, "vinkel": vinkel, "title": tittel, "kort": kort,
-            "headline_fact": faktum,
-            "styrke": 45,
-            "risiko": risiko,
-            "mangler": "", "kilder": kilder,
-        }
-        for vinkel, tittel, kort, faktum in maler
-    ]
 
 
 # --- Orkestrering ------------------------------------------------------------
@@ -461,18 +395,22 @@ def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> 
             continue
 
         melde(f"Journalisten lager vinkler {nr} av {min(len(approved), JOURNALIST_CAP)}")
+        # Koen telles FOER kallet, saa vi kan skille «ikke forsoekt» fra «forsoekt
+        # og feilet». Begge gir tom vinkelliste, men de betyr helt forskjellige
+        # ting for journalisten: ko = trykk igjen, feilet = noe er galt.
+        ko_for = budsjett.i_ko
         c.angles = journalist_angles(c, c.editor, budsjett)
         if c.angles:
-            ekte = any(a.get("mode") == "llm" for a in c.angles)
-            i_ko = any(a.get("mode") == "ko" for a in c.angles)
-            # Saken merkes etter det SVAKESTE leddet: har den maler, skal den se
-            # ut som mal - ikke som KI fordi redaktoren tilfeldigvis kom gjennom.
-            c.ai_mode = "llm" if ekte else ("ko" if i_ko else "mal")
-            if ekte:
-                storage.ki_lagre(c.key, angles=c.angles)
-                tell(True)
-            elif not i_ko:
-                tell(False)
+            c.ai_mode = "llm"
+            storage.ki_lagre(c.key, angles=c.angles)
+            tell(True)
+        elif budsjett.i_ko > ko_for:
+            c.ai_mode = "ko"
+        else:
+            # Saken merkes etter det SVAKESTE leddet: uten vinkler er den ikke
+            # «KI» selv om redaktoren tilfeldigvis kom gjennom.
+            c.ai_mode = "mal"
+            tell(False)
 
     regnskap["i_ko"] = budsjett.i_ko
     if not has_key:
