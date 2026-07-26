@@ -112,11 +112,18 @@ def _css_versjon() -> str:
     md5 fordi det er kort og raskt. Ingen sikkerhetsrolle: dette skal skille to
     versjoner av en stilfil, ikke motstaa noen.
     """
-    try:
-        raa = (BASE_DIR / "static" / "style.css").read_bytes()
-    except OSError:
+    # Hasher ALLE stilfilene, ikke bare style.css. Da Tobias kom til fikk han en
+    # egen `tobias.css`, og med bare style.css i hashen ville en endring der
+    # aldri busta cachen - nøyaktig den fella denne funksjonen finnes for.
+    biter = b""
+    for navn in ("style.css", "tobias/tobias.css"):
+        try:
+            biter += (BASE_DIR / "static" / navn).read_bytes()
+        except OSError:
+            continue
+    if not biter:
         return "0"
-    return hashlib.md5(raa, usedforsecurity=False).hexdigest()[:8]
+    return hashlib.md5(biter, usedforsecurity=False).hexdigest()[:8]
 
 
 CSS_V = _css_versjon()

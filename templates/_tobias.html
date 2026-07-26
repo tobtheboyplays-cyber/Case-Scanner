@@ -1,0 +1,20 @@
+{# Tobias — et Easter Egg, ikke funksjonalitet.
+   Se static/tobias/ for hele komponenten, og konfig.js for aa slaa den av.
+
+   Hvorfor det ligger som en egen include: Case-radar har fire sider uten en
+   felles base-mal. Én fil, fire linjer - i stedet for at oppsettet driver fra
+   hverandre side for side.
+
+   ÆRLIG FORBEHOLD: dette er ikke en SPA. Hver navigasjon er en full sidelast,
+   saa Tobias starter paa nytt naar journalisten bytter side. Spec-ens punkt om
+   «state kan leve gjennom navigasjon» gjelder derfor ikke her - det ville
+   krevd at hele appen ble en SPA, og det er en langt stoerre endring enn et
+   Easter Egg forsvarer. #}
+<link rel="stylesheet" href="/static/tobias/tobias.css?v={{ css_v }}" />
+<script type="module">
+  /* Modulen lastes bare naar den skal brukes. Three.js er 670 kB, og
+     journalisten er paa mobilnett - se kommentaren i konfig.js. */
+  import("/static/tobias/tobias.js")
+    .then((m) => m.monterTobias())
+    .catch(() => { /* Et Easter Egg skal aldri velte sida. */ });
+</script>
