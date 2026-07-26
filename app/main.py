@@ -20,8 +20,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import __version__, jobs, llm, trend, verify
-from app.agents import run_workflow, write_draft
+from app import __version__, faner, jobs, llm, storage, trend, verify
+from app.agents import journalist_angles, run_workflow, write_draft
 from app.collectors import brreg, collect_all, coverage, ssb_kalender
 from app.config import (
     ENABLE_AI,
@@ -268,6 +268,37 @@ def _er_oppfolger(c: Case, artikkel: dict) -> bool:
         return False
     kreves = max(1, min(2, (len(sakens) + 1) // 2))
     return len(_ord(tittel) & sakens) >= kreves
+
+
+def _varsel(cases: list[Case], temaer: list[str], antall_nye: int) -> dict:
+    """{tittel, tekst} til pop-in-en, eller {} naar skannet gikk som det skal.
+
+    Tre utfall er verdt aa si fra om, og bare tre. Sier den fra om alt, blir den
+    stoey - og da er vi tilbake til statuslinja ingen leste.
+    """
+    if not cases:
+        return {
+            "tittel": "Søket ga ingen treff",
+            "tekst": (
+                "Ingen nye funn innenfor disse temaene. Prøv flere temaer."
+                if temaer else
+                "Kildene svarte, men hadde ingenting nytt. Prøv igjen senere."
+            ),
+        }
+    if any(c.uendret for c in cases):
+        return {
+            "tittel": "Ingenting har endret seg",
+            "tekst": (
+                f"Viser de {len(cases)} sterkeste funnene på nytt, merket «uendret». "
+                "SSB publiserer nye tall på faste datoer."
+            ),
+        }
+    if not antall_nye:
+        return {
+            "tittel": "Ingen nye saker",
+            "tekst": "Alt i lista har vært her før. Huk av flere temaer for å lete bredere.",
+        }
+    return {}
 
 
 def _hendelse_tittel(h: dict) -> str:
@@ -651,6 +682,16 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
         # oyeblikket ett kall lyktes, selv om ti feilet.
         "ai_feil": ai_regnskap.get("feil", ""),
         "ai_regnskap": ai_regnskap,
+        # Ett kort varsel som svipper inn ved siden av skjermen naar skannet ikke
+        # ga noe nytt. Eieren 26.07.2026: «ikke la en beskjed om at soeket ikke
+        # ble noe komme nederst der ingen ser det - dropp den helt. Legg heller
+        # inn en liten pop-in paa siden av skjermen.»
+        #
+        # Diagnosen hans er riktig: en statuslinje under tjue kort er en beskjed
+        # til ingen. Den som trenger aa vite at soeket kom tomt tilbake, trenger
+        # aa vite det MENS han ser paa skjermen. Statuslinjene blir staaende
+        # under «Kildestatus» - de er etterretteligheten, ikke beskjeden.
+        "varsel": _varsel(cases, temaer, antall_nye),
     }
     save_scan(payload)
     return payload
@@ -723,6 +764,11 @@ def dashboard(request: Request, apen: str = "", ferskt: str = ""):
             "TEMAER": TEMAER,
             "temagrupper": temagrupper(),
             "valgte_temaer": valgte_temaer(),
+            # Fanene for «Kommer snart». Bygges her og ikke i malen fordi
+            # gruppering, sortering og telling er logikk - se app/faner.py.
+            "faner": faner.bygg(
+                (data or {}).get("hendelser"), (data or {}).get("kommende")
+            ) if data else [],
         },
     )
 
@@ -823,6 +869,64 @@ def be_om_utkast(key: str, vinkel: int = Form(0), js: str = Form("")):
 
 def _apen_url(key: str, vinkel: int) -> str:
     return f"/?apen={quote(key)}%7C{vinkel}#sak-{key}"
+
+
+VINKEL_FASER: list[tuple[int, str, float]] = [
+    (5, "Henter kildegrunnlaget", 1.0),
+    (15, "Journalisten finner vinkler …", 12.0),
+]
+
+
+def _lag_vinkler(jobb: jobs.Jobb, key: str) -> dict:
+    """Vinkler for ÉN sak, paa forespoersel.
+
+    Eieren 26.07.2026, med skjermbilde: «Ingen vinkler. Fiks dette.»
+
+    Kortet sa «journalisten lager forslag for de hoeyest rangerte sakene ved
+    hvert skann», og det var sant - men ubrukelig. Groqs minuttak paa 12 000
+    tokens gjor at ett skann rekker TRE saker; et skann finner atten. Femten av
+    kortene sto altsaa uten en eneste tittel.
+
+    Aa heve taket er ikke en loesning - da ryker hele skannet paa en 429, og han
+    faar null i stedet for tre. Men taket gjelder per MINUTT, ikke per dag: det
+    er ingenting i veien for aa bruke ett kall til naar han faktisk peker paa en
+    sak. Det er ogsaa den billigste rekkefolgen - vi betaler bare for vinkler
+    noen vil ha.
+
+    Svaret lagres (storage.ki_lagre), saa saken beholder vinklene ved neste
+    skann i stedet for aa koste kvote om igjen.
+    """
+    with _SKANN_LAAS:
+        data = load_latest()
+        if not data:
+            raise RuntimeError("Ingen skann å jobbe fra — kjør et søk først.")
+        sak = next((c for c in data.get("cases", []) if c.get("key") == key), None)
+        if sak is None:
+            raise RuntimeError("Fant ikke saken i siste skann. Kjør søk på nytt.")
+
+        jobb.fase(1)
+        case = _case_from_dict(sak)
+        angles = journalist_angles(case, sak.get("editor") or {})
+        if not angles:
+            raise RuntimeError(
+                f"Journalisten leverte ingen vinkler. {llm.last_error() or ''}".strip()
+            )
+
+        sak["angles"] = angles
+        sak["ai_mode"] = "llm"
+        storage.ki_lagre(key, angles=angles)
+        save_scan(data)
+    return {"angles": len(angles)}
+
+
+@app.post("/leads/{key:path}/vinkler")
+def be_om_vinkler(key: str, js: str = Form("")):
+    """«Lag vinkler» paa et kort som ikke fikk noen under skannet."""
+    jobb = jobs.start(VINKEL_FASER, lambda j: _lag_vinkler(j, key))
+    if js:
+        return JSONResponse({"jobb": jobb.id})
+    jobs.vent(jobb, 90)
+    return RedirectResponse(url=f"/#sak-{key}", status_code=303)
 
 
 @app.get("/jobb/{jobb_id}")

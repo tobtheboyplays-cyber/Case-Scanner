@@ -1702,3 +1702,236 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
   font-size: .85em; opacity: .75; padding: 1px 5px; border-radius: 5px;
   background: rgba(127, 127, 127, .16);
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   v5 — opprydding etter eierens fire skjermbilder 26.07.2026
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── «Lag vinkler for denne» ─────────────────────────────────────────────────
+   Erstatter setningen «Ingen vinkler laget for denne ennå». Den var sann, men
+   ga ingen vei videre: Groqs minuttak rekker tre saker per skann, og et skann
+   finner atten. Nå er de femten andre ett trykk unna. */
+.be-om-vinkler { margin: 12px 0 0; display: flex; align-items: center;
+  gap: 12px; flex-wrap: wrap; }
+.btn-vinkler { background: transparent; color: var(--accent);
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: background .15s ease, border-color .15s ease; }
+.btn-vinkler:hover { background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-style: solid; }
+.btn-vinkler:active { transform: scale(.97); }
+.btn-vinkler[disabled] { opacity: .55; cursor: default; }
+.vinkler-hjelp { color: var(--muted); font-size: 12.5px; flex: 1 1 200px; }
+
+/* ── Faner i «Kommer snart» ──────────────────────────────────────────────────
+   Ett tema per fane, hver med sin farge og sitt ikon. Fargen står ALDRI alene —
+   ikonet og navnet sier det samme, så fanen er lesbar i gråtoner og for den som
+   ikke skiller rødt fra grønt.
+
+   Fanebyttet er skjulte radioknapper og `:checked ~`. Ingen JavaScript: panelet
+   virker uten JS, og valget overlever ikke en refresh — som er riktig her, for
+   førstevalget skal alltid være det han kan ringe på i dag. */
+/* «.faner» var allerede tatt av kalendersidens Kalender/Oppgaver-veksler,
+   som er `display: flex`. Panelet arvet den, og fanerad og innhold la seg ved
+   siden av hverandre som to kolonner - en tabell som saa ut som et uhell.
+   Nettlesertesten sa ALT GRONT, fordi den maalte oppfoersel og ikke utseende;
+   det var skjermbildet som avslorte det. Eget navn, ingen arv. */
+.temafaner { margin-top: 4px; }
+.fane-radio { position: absolute; opacity: 0; pointer-events: none; }
+/* Toppluft: prikken ligger paa top:-5px, og `overflow-x: auto` klipper
+   ogsaa loddrett. Med 4px padding ble varselet kappet av kanten. */
+.fane-rad { display: flex; gap: 8px; overflow-x: auto; padding: 11px 3px 12px;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.fane-rad::-webkit-scrollbar { display: none; }
+
+.fane { position: relative; display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  background: var(--panel); border: 1px solid var(--border);
+  color: var(--muted); font-size: 13.5px; font-weight: 600;
+  transition: background .15s ease, border-color .15s ease, color .15s ease; }
+.fane:hover { color: var(--text); }
+.fane-ikon { font-size: 15px; }
+.fane-tall { font-size: 11.5px; font-weight: 700; opacity: .75;
+  font-variant-numeric: tabular-nums; }
+
+/* Notifikasjonsprikken: bare på faner der noe FERSKT har kommet inn. Står den
+   på alle, slutter man å se den. */
+.fane-prikk { position: absolute; top: -5px; right: -3px; min-width: 18px;
+  height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red);
+  color: #fff; font-size: 10.5px; font-weight: 800; line-height: 18px;
+  text-align: center; box-shadow: 0 0 0 2px var(--bg); }
+
+/* Fargene per tema. `currentColor` gjør at kanten, prikken og radene inni
+   arver den samme fargen uten at hver av dem må navngis på nytt. */
+.fane-rod    { --tema: #e0574c; }
+.fane-gronn  { --tema: #37c46d; }
+.fane-blaa   { --tema: #3b82f6; }
+.fane-gul    { --tema: #e3b341; }
+.fane-lilla  { --tema: #a970ff; }
+.fane-turkis { --tema: #2dd4bf; }
+.fane-rosa   { --tema: #f472b6; }
+.fane-oransje{ --tema: #fb923c; }
+.fane-grå    { --tema: #8a97ab; }
+
+/* Innholdet: radioknappen staar rett foran blokka si, saa naboselektoren holder.
+   Ingen nth-of-type-stige, ingen JavaScript - og fanene virker uten JS. */
+.fane-innhold { display: none; border-left: 3px solid var(--tema);
+  padding-left: 14px; margin-left: 2px; }
+.fane-radio:checked + .fane-innhold { display: block; }
+
+/* Selve fanen som er valgt. Etiketten er ikke soesken med radioen (den ligger i
+   faneraden), saa vi spor containeren i stedet: «finnes det en avhuket radio med
+   denne id-en?». `:has()` finnes i Safari 15.4+ og alle nyere Chromium.
+
+   Faller `:has()` bort i en eldre nettleser, mister fanen bare
+   markeringsfargen - innholdsbyttet over virker fortsatt. */
+.temafaner:has(#fane-konkurser:checked)   [for="fane-konkurser"],
+.temafaner:has(#fane-nyapninger:checked)  [for="fane-nyapninger"],
+.temafaner:has(#fane-bolig-og-bygg:checked) [for="fane-bolig-og-bygg"],
+.temafaner:has(#fane-jobb-og-lonn:checked) [for="fane-jobb-og-lonn"],
+.temafaner:has(#fane-priser:checked)      [for="fane-priser"],
+.temafaner:has(#fane-befolkning:checked)  [for="fane-befolkning"],
+.temafaner:has(#fane-skole:checked)       [for="fane-skole"],
+.temafaner:has(#fane-helse:checked)       [for="fane-helse"],
+.temafaner:has(#fane-kriminalitet:checked) [for="fane-kriminalitet"],
+.temafaner:has(#fane-energi:checked)      [for="fane-energi"],
+.temafaner:has(#fane-transport:checked)   [for="fane-transport"],
+.temafaner:has(#fane-annet:checked)       [for="fane-annet"] {
+  color: #fff; border-color: var(--tema);
+  background: color-mix(in srgb, var(--tema) 22%, var(--panel));
+}
+
+/* Det ferskeste i hver fane får et hint av temafargen — samme signal som
+   prikken over fanen, men på raden det faktisk gjelder. */
+.hend-fersk, .komm-fersk {
+  background: color-mix(in srgb, var(--tema) 7%, transparent);
+  border-radius: 8px; margin-left: -8px; padding-left: 8px; }
+
+/* ── Skann-knappen ───────────────────────────────────────────────────────────
+   Eieren 26.07.2026: «gjør SØK-knappen finere og mer satisfying, kanskje litt
+   større og mer betydning.»
+
+   Den er hovedhandlingen i hele appen og så ut som en vanlig knapp. Nå er den
+   større, har et lysstrøk som går over ved hover, og synker tydelig ned ved
+   trykk. Skyggen bærer aksentfargen, så den løfter seg fra flaten i stedet for
+   å ligge klistret på den. */
+.btn-scan, .tema-meny > summary.btn-scan {
+  position: relative; overflow: hidden;
+  padding: 16px 30px; font-size: 17px; font-weight: 700; letter-spacing: .01em;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent2, #2f6bff) 0%, var(--accent) 55%, #6aa2ff 100%);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 45%, transparent),
+              inset 0 1px 0 #ffffff33;
+  transition: transform .12s cubic-bezier(.34, 1.56, .64, 1),
+              box-shadow .18s ease, filter .18s ease;
+}
+.btn-scan:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 38px color-mix(in srgb, var(--accent) 55%, transparent),
+              inset 0 1px 0 #ffffff44;
+}
+/* Lysstrøket. Rent dekorativt, derfor ::after og ingen markup. */
+.btn-scan::after {
+  content: ""; position: absolute; inset: 0 auto 0 -60%; width: 45%;
+  background: linear-gradient(90deg, transparent, #ffffff38, transparent);
+  transform: skewX(-20deg); transition: left .55s ease; pointer-events: none;
+}
+.btn-scan:hover::after { left: 115%; }
+/* Trykket skal KJENNES. 0.96 er nok til at fingeren merker det uten at knappen
+   hopper. */
+.btn-scan:active { transform: translateY(1px) scale(.96);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* Pulsen mens skannet går: knappen forteller selv at den jobber. */
+.btn-scan[data-jobber] { animation: skann-puls 1.6s ease-in-out infinite; }
+@keyframes skann-puls {
+  0%, 100% { box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 45%, transparent); }
+  50%      { box-shadow: 0 10px 40px color-mix(in srgb, var(--accent) 80%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-scan, .btn-scan::after { transition: none; animation: none; }
+  .btn-scan:hover { transform: none; }
+}
+
+/* ── Varsel som svipper inn fra siden ────────────────────────────────────────
+   Eieren 26.07.2026: «ikke la en beskjed om at søket ikke ble noe komme nederst
+   der ingen ser det — dropp den helt. Legg heller inn en liten pop-in på siden
+   av skjermen. Så svipper den inn igjen etter 5 sek.»
+
+   Han har rett i diagnosen: en statuslinje nederst i en liste på tjue kort er
+   en beskjed til ingen. Den som trenger å vite at søket kom tomt tilbake,
+   trenger å vite det MENS han står og ser på skjermen. */
+.varsel {
+  position: fixed; right: 18px; bottom: 26px; z-index: 60;
+  max-width: min(340px, calc(100vw - 36px));
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 14px 16px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  box-shadow: 0 14px 40px #0009;
+  transform: translateX(calc(100% + 28px));
+  transition: transform .38s cubic-bezier(.22, 1, .36, 1);
+}
+.varsel.inne { transform: translateX(0); }
+.varsel-ikon { font-size: 19px; line-height: 1.2; }
+.varsel-tittel { margin: 0; font-size: 14px; font-weight: 700; color: var(--text); }
+.varsel-tekst { margin: 3px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+.varsel-lukk { margin-left: auto; background: none; border: 0; color: var(--muted);
+  font-size: 17px; line-height: 1; cursor: pointer; padding: 2px 4px; }
+.varsel-lukk:hover { color: var(--text); }
+/* Nedtellingen: en tynn strek som tømmer seg, så det er synlig at den forsvinner
+   av seg selv og ikke fordi noe gikk galt. */
+.varsel-tid { position: absolute; left: 0; bottom: 0; height: 2px;
+  background: var(--accent); border-radius: 0 0 0 14px; width: 100%;
+  transform-origin: left; }
+.varsel.inne .varsel-tid { animation: varsel-teller 5s linear forwards; }
+@keyframes varsel-teller { to { transform: scaleX(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .varsel { transition: none; }
+  .varsel.inne .varsel-tid { animation: none; }
+}
+
+/* ── Kalenderen: én linje per sak ────────────────────────────────────────────
+   Eieren 26.07.2026: «Kalendersiden skal være slik. Men det under ser veldig
+   dårlig ut.» Rutenettet er urørt; lista under er kuttet til én rad per sak,
+   med kortet foldet inn bak den. */
+.day-lead { border: 1px solid var(--border); border-radius: 12px;
+  background: var(--panel); margin-bottom: 8px; overflow: hidden; }
+.day-lead > summary.dag-rad {
+  display: flex; align-items: center; gap: 10px; padding: 13px 14px;
+  cursor: pointer; list-style: none; }
+.day-lead > summary.dag-rad::-webkit-details-marker { display: none; }
+.day-lead > summary.dag-rad:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.day-lead[open] > summary.dag-rad { border-bottom: 1px solid var(--border); }
+.dag-rad-t { flex: 1 1 auto; font-weight: 600; font-size: 14.5px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dag-rad-m { color: var(--muted); font-size: 12px; white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+.dag-rad-fase { font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+/* Fasen er den minst presserende opplysningen; på en smal skjerm er tittelen og
+   fristen det som avgjør hva han gjør i dag. */
+@media (max-width: 460px) { .dag-rad-fase { display: none; } }
+.day-lead[open] .day-lead-ingress,
+.day-lead[open] .dag-fakta { padding: 0 14px; }
+.day-lead > *:not(summary) { margin-left: 0; }
+
+/* ── To rettelser nettlesertesten fant ───────────────────────────────────────
+   Begge er av typen som ser riktig ut i koden og er feil på skjermen. */
+
+/* 1) En eldre mobilregel låste ALLE knapper til 44 px høyde og `padding: 0 18px`
+      for å sikre et minste trykkmål. Den sto ETTER skann-knappen i fila og
+      overstyrte den, så «større og mer betydning» ble 44 px som alt annet.
+      Minstemålet er riktig for de andre knappene; hovedhandlingen skal være
+      større enn dem. */
+.btn-scan, .tema-meny > summary.btn-scan {
+  height: auto; min-height: 56px; padding: 16px 30px;
+}
+
+/* 2) `hidden` er et UA-satt `display: none` — og `.varsel { display: flex }`
+      slår det. Varselet ble derfor ALDRI borte: verken etter fem sekunder eller
+      ved neste sidelast. Det så helt riktig ut i JS-en; feilen lå i at CSS-en
+      vant over attributtet. */
+.varsel[hidden] { display: none; }

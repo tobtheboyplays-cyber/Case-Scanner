@@ -190,17 +190,13 @@
         <section class="panel day-panel" id="dag-{{ cell.iso }}">
           <div class="panel-head">
             <h2>{{ cell.day }}. {{ month_name }}</h2>
-            <span class="panel-sub">
-              {{ cell.leads|length }} sak{{ '' if cell.leads|length == 1 else 'er' }} ·
-              <strong class="{{ 'dag-over' if cell.overbooket else 'dag-ok' }}">
-                {{ cell.timer|round(1) }} av {{ kapasitet }} timer</strong>
-              {% if cell.overbooket %} — mer enn du rekker{% endif %}
-            </span>
-          </div>
-          {# Ett blikk: hvor full er dagen? Baren tar hensyn til at den kan gaa
-             over 100 % - da er det nettopp det som er poenget aa se. #}
-          <div class="dag-bar{{ ' dag-bar-over' if cell.overbooket }}">
-            <span style="width: {{ [ (cell.timer / kapasitet * 100) if kapasitet else 0, 100 ]|min|round|int }}%"></span>
+            {# Timeregnskapet «5.0 av 7.5 timer» og framdriftsbaren sto her.
+               Eieren 26.07.2026, med skjermbilde: «alt for rotete under
+               kalenderen.» Han har rett - tallet var et budsjett ingen hadde
+               satt bevisst, og baren fylte seg mot en kapasitet han aldri ble
+               spurt om. Timene ligger fortsatt paa hver sak for den som
+               planlegger; de skal bare ikke rope fra en overskrift. #}
+            <span class="panel-sub">{{ cell.leads|length }} sak{{ '' if cell.leads|length == 1 else 'er' }}</span>
           </div>
 
           {# Tak per dag. Med mange saker som gaar over lange spenn kan én dag
@@ -217,31 +213,45 @@
                artikkel + skjema fem ganger er samme sak fem ganger - ikke fem
                oppgaver. Midt i loepet holder det med én linje som sier at den
                er i arbeid; start- og deadline-dagen faar hele kortet. #}
-            {% set midt = not lead._is_start and not lead._is_deadline %}
-            {% if midt %}
-            <a class="dag-midt" href="#dag-{{ lead._start }}">
-              <span class="dot-stage stage-bg-{{ lead._stage or 'ide' }}" aria-hidden="true"></span>
-              <span class="dag-midt-t">{{ draft.title or lead.title }}</span>
-              <span class="dag-midt-m">{{ lead._timer|round(1) }} t · frist {{ lead._deadline or '—' }}</span>
-            </a>
-            {% else %}
-            <article class="day-lead">
-              <div class="day-lead-top">
-                <span class="pill pill-stage stage-bg-{{ lead._stage or 'ide' }}">{{ stage_labels[lead._stage or 'ide'] }}</span>
-                {% if lead._is_start %}<span class="tag">▶ start</span>{% endif %}
-                {% if lead._is_deadline %}<span class="tag tag-loc">⚑ deadline</span>{% endif %}
-                {% if lead.geo == 'lokal' %}<span class="tag tag-loc">Stavanger</span>{% endif %}
-              </div>
-              <h3>{{ draft.title or lead.title }}</h3>
-              {% if draft.ingress %}<p class="day-lead-ingress">{{ draft.ingress }}</p>{% endif %}
+            {# En sak som gaar fra 27. til 31. dukket foer opp paa FEM dager: én
+               gang med hele kortet, fire ganger som en gjentatt linje. Det var
+               det som gjorde sida uleselig - man scrollet forbi den samme saken
+               igjen og igjen og trodde det var fem saker.
 
-              {# Én linje med det som betyr noe naar man planlegger: naar starter
-                 den, naar er fristen, hvor mye tid er satt av. Sto foer bare som
-                 start->deadline, mens timene laa gjemt nede i skjemaet. #}
+               Naa staar hver sak ÉN gang, paa dagen den starter. Fristen staar
+               paa kortet, saa spennet er ikke tapt - det tar bare ikke plass
+               fire ganger. #}
+            {% if not lead._is_start and not lead._is_deadline %}
+            {% elif not lead._is_start and lead._is_deadline and lead._start %}
+            {% else %}
+            {# Eieren 26.07.2026: «Kalendersiden skal være slik. Men det under
+               ser veldig dårlig ut.»
+
+               Rutenettet øverst var greit; det UNDER var problemet. Hver sak sto
+               som et fullt kort med merkelapper, ingress, tre datolinjer, hele
+               artikkelen og et redigeringsskjema - alt utbrettet, alltid. Fire
+               planlagte saker ble til flere skjermlengder man måtte scrolle
+               forbi for å se hva som skjer i juli.
+
+               Nå er hver sak ÉN linje: fase, tittel, frist. Alt det andre ligger
+               bak samme linje - trykk, og kortet folder seg ut med artikkelen og
+               skjemaet. Ingenting er fjernet, det er bare ikke i veien lenger. #}
+            <details class="day-lead">
+              <summary class="dag-rad">
+                <span class="dot-stage stage-bg-{{ lead._stage or 'ide' }}" aria-hidden="true"></span>
+                <span class="dag-rad-t">{{ draft.title or lead.title }}</span>
+                <span class="dag-rad-m">
+                  {% if lead._deadline %}frist {{ lead._deadline }}{% else %}uten frist{% endif %}
+                </span>
+                <span class="dag-rad-fase">{{ stage_labels[lead._stage or 'ide'] }}</span>
+              </summary>
+
+              {% if draft.ingress %}<p class="day-lead-ingress">{{ draft.ingress }}</p>{% endif %}
               <p class="dag-fakta">
                 {% if lead._start %}<span>▶ {{ lead._start }}</span>{% endif %}
                 {% if lead._deadline %}<span>⚑ {{ lead._deadline }}</span>{% endif %}
                 {% if lead._timer %}<span>⏱ {{ lead._timer|round(1) }} t</span>{% endif %}
+                {% if lead.geo == 'lokal' %}<span>📍 Stavanger</span>{% endif %}
               </p>
 
               {% if draft.body %}
@@ -320,7 +330,7 @@
                 <button type="submit" class="btn-small">Lagre</button>
               </form>
               </details>
-            </article>
+            </details>
             {% endif %}
           {% endfor %}
         </section>

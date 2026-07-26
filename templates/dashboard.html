@@ -156,106 +156,110 @@
 
 <!-- KPI-rad -->
 
-<!-- Prioritering ligger foerst: det forste journalisten trenger er hvilken sak
-     han skal ta, ikke hvor mange leads som finnes. Hver rad hopper rett ned til
-     saken sin, saa lista fungerer som innholdsfortegnelse. -->
-{% if data and data.cases %}
-<section class="page" style="padding-bottom:0">
-  <section class="panel priority">
-    <div class="panel-head">
-      <h2>Ta denne først</h2>
-      <span class="panel-sub">Rangert etter originalitet, relevans og påvirkning — trykk for å hoppe ned</span>
-    </div>
-    {% set max_score = (data.cases | map(attribute='score') | max) if data.cases else 1 %}
-    {% for case in data.cases[:6] %}
-    <a class="prio-row" href="#sak-{{ case.key }}">
-      <span class="prio-rank">{{ loop.index }}</span>
-      <span class="prio-label" title="{{ case.title }}">{{ case.title }}
-        {% if case.er_ny %}<span class="ny-merke">NY</span>{% endif %}</span>
-      <span class="prio-track">
-        <span class="prio-fill cov-{{ case.coverage_status }}"
-              style="width: {{ ((case.score / max_score * 100) | round(0,'floor')) if max_score else 0 }}%"></span>
-      </span>
-      <span class="prio-score cov-text-{{ case.coverage_status }}">{{ case.score|round|int }}</span>
-    </a>
-    {% endfor %}
-    <div class="legend">
-      <span><span class="dot dot-green"></span> Uskrevet</span>
-      <span><span class="dot dot-amber"></span> Delvis dekket</span>
-      <span><span class="dot dot-red"></span> Allerede dekket</span>
-    </div>
-  </section>
-</section>
-{% endif %}
+{# «Ta denne først» sto her: en topp-6-liste med rangering og en fargestolpe
+   per sak. Eieren ba den bort 26.07.2026, og han har rett - den var en KOPI av
+   de seks øverste kortene rett under. På mobil betydde det at han måtte scrolle
+   forbi hele lista én gang for å komme til den samme lista igjen. Sorteringen
+   den beskrev er ikke borte; den ER rekkefølgen på kortene. #}
+
 
 
 <section class="page" style="padding-bottom:0">
-{% if data and (data.kommende or data.hendelser) %}
-  {# Sammenslaatt som standard. Panelet er nyttig, men det skal ikke staa mellom
-     journalisten og saksforslagene naar han aapner appen paa mobil. #}
-  <details class="panel forsprang">
+{% if faner %}
+  {# Panelet blandet to helt ulike ting under én overskrift: konkurser som HAR
+     skjedd, og SSB-tall som IKKE er sluppet. 52 rader der man måtte lese hver
+     enkelt for å vite hva slags sak det var.
+
+     Nå er det én fane per tema, hver med sin egen farge og sitt ikon — og en
+     prikk over fanen når det har kommet noe ferskt der. Fargen står aldri
+     alene: ikon og navn sier det samme.
+
+     Fanebyttet er ren CSS (skjulte radioknapper), så det virker uten JS og
+     overlever en refresh uten å måtte lagre noe. #}
+  <details class="panel forsprang" open>
     <summary>
-      <h2>⏳ Kommer snart ({{ data.kommende|length + (data.hendelser|length if data.hendelser else 0) }})</h2>
-      <span class="panel-sub">SSB-tall som ikke er sluppet, og hva som åpner og stenger i byen.</span>
+      <h2>⏳ Kommer snart</h2>
+      <span class="panel-sub">Hva som har skjedd i næringslivet, og hvilke tall som slippes.</span>
     </summary>
 
-    {# Naeringslivet foerst: en konkurs eller en nyaapning er en sak man kan
-       ringe paa I DAG, mens SSB-varslene er noe man forbereder seg paa. #}
-    {% if data.hendelser %}
-    <p class="komm-h">🏪 Åpner og stenger — siste 45 dager</p>
-    {% for h in data.hendelser[:8] %}
-      <div class="hend">
-        <span class="hend-ikon" aria-hidden="true">{{ {'konkurs':'💥','avvikling':'📉','nytt':'✨'}[h.type] }}</span>
-        <div class="hend-mid">
-          <a class="hend-navn" href="{{ h.lenke }}" target="_blank" rel="noopener">{{ h.navn }}</a>
-          <div class="hend-meta">
-            <span class="hend-type hend-{{ h.type }}">{{ {'konkurs':'Konkurs','avvikling':'Under avvikling','nytt':'Nytt foretak'}[h.type] }}</span>
-            <span>{{ h.kommune }}</span>
-            {% if h.publikum %}<span class="tag">{{ h.publikum }}</span>{% endif %}
-            {% if h.ansatte %}<span>{{ h.ansatte }} ansatte</span>{% endif %}
-            <span>{{ h.dato }}</span>
-          </div>
-          {% if h.bransje %}<p class="hend-bransje">{{ h.bransje }}</p>{% endif %}
-          {# Regnskapstallet er det som gjor en konkurs til en sak i stedet for
-             et navn. «Gikk konkurs» er en notis; «omsatte for 4,1 mill og gikk
-             med underskudd aaret for» er noe man kan ringe paa. #}
-          {% if h.regnskap %}
-          <p class="hend-tall">
-            {% if h.regnskap.omsetning is not none %}
-              Omsetning {{ '{:,.0f}'.format(h.regnskap.omsetning)|replace(',', ' ') }} kr
-            {% endif %}
-            {% if h.regnskap.resultat is not none %}
-              · <span class="{{ 'tall-minus' if h.regnskap.resultat < 0 else 'tall-pluss' }}">resultat
-              {{ '{:,.0f}'.format(h.regnskap.resultat)|replace(',', ' ') }} kr</span>
-            {% endif %}
-            <span class="hend-aar">({{ h.regnskap.aar }})</span>
-          </p>
-          {% endif %}
-        </div>
+    <div class="temafaner">
+      {# Radioknappen staar rett FORAN innholdet sitt, ikke inne i faneraden.
+         Det er hele trikset: da er de sosken, og `:checked + .fane-innhold`
+         treffer. Ligger radioen inni raden, er innholdet en onkel - og ingen
+         CSS-kombinator naar dit. Det var nettopp den feilen nettlesertesten
+         fanget: fanene fantes, men ingen av dem viste noe. #}
+      <div class="fane-rad" role="tablist">
+        {% for f in faner %}
+        <label class="fane fane-{{ f.farge }}" for="fane-{{ f.slug }}">
+          <span class="fane-ikon" aria-hidden="true">{{ f.ikon }}</span>
+          <span class="fane-navn">{{ f.navn }}</span>
+          <span class="fane-tall">{{ f.antall }}</span>
+          {% if f.nytt %}<span class="fane-prikk" title="{{ f.nytt }} ferske">{{ f.nytt }}</span>{% endif %}
+        </label>
+        {% endfor %}
       </div>
-    {% endfor %}
-    <p class="komm-note">Kilde: Brønnøysundregistrene. Et registrert foretak er
-      ikke det samme som en åpen dør — ring og sjekk før du skriver.</p>
-    {% endif %}
 
-    {% if data.kommende %}
-    <p class="komm-h">📊 SSB slipper disse kl. 08.00 — ring kilden før</p>
-    {% endif %}
-    {% for v in data.kommende[:5] %}
-      <div class="komm">
-        <div class="komm-when">{{ v.dager_til }}<span>dager</span></div>
-        <div class="komm-mid">
-          <a class="komm-title" href="{{ v.lenke }}" target="_blank" rel="noopener">{{ v.tittel }}</a>
-          <div class="komm-meta">
-            {% for c in v.kontakter[:1] %}
-              <span class="komm-contact">📞 {{ c.navn }}
-                {% if c.telefon %}<a href="tel:{{ c.telefon }}">{{ c.telefon }}</a>{% endif %}
-              </span>
-            {% endfor %}
+      {% for f in faner %}
+      <input type="radio" name="fane" id="fane-{{ f.slug }}" class="fane-radio"
+             {{ 'checked' if loop.first }} />
+      <div class="fane-innhold fane-{{ f.farge }}" id="innhold-{{ f.slug }}">
+        {% for e in f.elementer %}
+          {% if e.slag == 'hendelse' %}
+          <div class="hend{{ ' hend-fersk' if e.fersk }}">
+            <span class="hend-ikon" aria-hidden="true">{{ f.ikon }}</span>
+            <div class="hend-mid">
+              <a class="hend-navn" href="{{ e.lenke }}" target="_blank" rel="noopener">{{ e.navn }}</a>
+              <div class="hend-meta">
+                <span class="hend-type hend-{{ e.type }}">{{ {'konkurs':'Konkurs','avvikling':'Under avvikling','nytt':'Nytt foretak'}[e.type] }}</span>
+                <span>{{ e.kommune }}</span>
+                {% if e.publikum %}<span class="tag">{{ e.publikum }}</span>{% endif %}
+                {% if e.ansatte %}<span>{{ e.ansatte }} ansatte</span>{% endif %}
+                <span>{{ e.dato }}</span>
+              </div>
+              {% if e.bransje %}<p class="hend-bransje">{{ e.bransje }}</p>{% endif %}
+              {# Regnskapstallet er det som gjor en konkurs til en sak i stedet
+                 for et navn. «Gikk konkurs» er en notis; «omsatte for 4,1 mill
+                 og gikk med underskudd aaret for» er noe man kan ringe paa. #}
+              {% if e.regnskap %}
+              <p class="hend-tall">
+                {% if e.regnskap.omsetning is not none %}
+                  Omsetning {{ '{:,.0f}'.format(e.regnskap.omsetning)|replace(',', ' ') }} kr
+                {% endif %}
+                {% if e.regnskap.resultat is not none %}
+                  · <span class="{{ 'tall-minus' if e.regnskap.resultat < 0 else 'tall-pluss' }}">resultat
+                  {{ '{:,.0f}'.format(e.regnskap.resultat)|replace(',', ' ') }} kr</span>
+                {% endif %}
+                <span class="hend-aar">({{ e.regnskap.aar }})</span>
+              </p>
+              {% endif %}
+            </div>
           </div>
-        </div>
+          {% else %}
+          <div class="komm{{ ' komm-fersk' if e.fersk }}">
+            <div class="komm-when">{{ e.dager_til }}<span>dager</span></div>
+            <div class="komm-mid">
+              <a class="komm-title" href="{{ e.lenke }}" target="_blank" rel="noopener">{{ e.tittel }}</a>
+              <div class="komm-meta">
+                {% for c in e.kontakter[:1] %}
+                  <span class="komm-contact">📞 {{ c.navn }}
+                    {% if c.telefon %}<a href="tel:{{ c.telefon }}">{{ c.telefon }}</a>{% endif %}
+                  </span>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
+        {% if f.antall > f.elementer|length %}
+        <p class="komm-note">Viser {{ f.elementer|length }} av {{ f.antall }} — de ferskeste først.</p>
+        {% endif %}
+        {% if f.slug in ('konkurser', 'nyapninger') %}
+        <p class="komm-note">Kilde: Brønnøysundregistrene. Et registrert foretak er
+          ikke det samme som en åpen dør — ring og sjekk før du skriver.</p>
+        {% endif %}
       </div>
-    {% endfor %}
+      {% endfor %}
+    </div>
   </details>
 {% endif %}
 </section>
@@ -363,9 +367,18 @@
           <p class="gate-block">⚠ Tynt grunnlag — sjekk dette selv først:
             {{ case.editor.gate_mangler|join(' · ') }}</p>
           {% endif %}
+          {# Her sto det bare «Ingen vinkler laget for denne ennå». Sant, men
+             ubrukelig: Groqs minuttak rekker TRE saker per skann, og et skann
+             finner atten. Femten kort sto uten en eneste tittel og uten vei
+             videre. Taket gjelder per MINUTT - ingenting er i veien for ett
+             kall til når han faktisk peker på en sak. #}
           {% if not case.angles %}
-          <p class="ingen-vinkler">Ingen vinkler laget for denne ennå — journalisten
-            lager forslag for de høyest rangerte sakene ved hvert skann.</p>
+          <form method="post" action="/leads/{{ case.key }}/vinkler"
+                class="be-om-vinkler" data-vinkler data-key="{{ case.key }}">
+            <button class="btn-vinkler" type="submit">💡 Lag vinkler for denne</button>
+            <span class="vinkler-hjelp">Journalisten rekker tre saker per skann —
+              trykk her, så tar han denne nå.</span>
+          </form>
           {% endif %}
           {% if case.angles %}
           <div class="angles">
@@ -534,42 +547,16 @@
     <p class="see-all">Viser {{ data.cases|length }} leads fra siste skann</p>
   </main>
 
-  <!-- Planlegger -->
+  {# Planlegger-panelet sto her: «Kalender: ikke konfigurert», en oppfordring
+     om å legge credentials.json i mappa, og «Forslag til uka» der hvert forslag
+     var den samme malsetningen med ulik tittel foran. Eieren 26.07.2026, med
+     skjermbilde: «dropp hele greia her.»
+
+     Han har rett. Google Calendar er ikke koblet til og kommer ikke til å bli
+     det, så halve panelet var en instruksjon til en utvikler. Den andre halvdelen
+     var maler som ga seg ut for å være råd. Planleggingen som FAKTISK virker -
+     godkjenn sak, sett dato, se den i kalenderen - er urørt. #}
   <aside class="sidebar">
-    <section class="panel">
-      <div class="panel-head"><h2>📅 Planlegger</h2></div>
-
-      <div class="cal-block">
-        <p class="cal-status-line">Kalender:
-          {% if data.plan.calendar_status == 'koblet_til' %}<span class="green">koblet til</span>
-          {% elif data.plan.calendar_status == 'trenger_innlogging' %}<span class="amber">trenger innlogging</span>
-          {% else %}<span class="muted">ikke konfigurert</span>{% endif %}
-        </p>
-        {% if data.plan.calendar_events %}
-          {% for ev in data.plan.calendar_events %}
-          <div class="cal-row"><span class="cal-day">{{ ev.start }}</span><span>{{ ev.summary }}</span></div>
-          {% endfor %}
-        {% else %}
-          <p class="cal-note">{{ data.plan.calendar_note }}</p>
-        {% endif %}
-      </div>
-
-      <h3 class="side-h">Forslag til uka</h3>
-      <ul class="todo">
-        {% for sug in data.plan.suggestions %}
-        <li class="prio-{{ sug.priority }}">
-          <span class="todo-box"></span>
-          <div>
-            <strong>{{ sug.title }}</strong>
-            <p>{{ sug.action }}</p>
-          </div>
-        </li>
-        {% else %}
-        <li class="muted">Ingen forslag ennå — kjør et skann.</li>
-        {% endfor %}
-      </ul>
-    </section>
-
     <section class="panel status">
       <details>
         <summary>Kildestatus (siste skann)</summary>
@@ -656,6 +643,22 @@
    dette igjen»-boks - han vet at han blir lei den etter tjuende sak. Valget
    lagres lokalt i nettleseren, ikke paa serveren: det er en preferanse for
    HANS telefon, ikke en innstilling verktoyet skal huske for alle. #}
+{# Pop-in ved siden av skjermen. Vises ÉN gang per skann - nøkkelen er
+   skanntidspunktet, så en refresh ikke gjentar beskjeden han allerede har lest.
+   `role="status"` gjør at skjermlesere leser den uten å avbryte. #}
+{% if data and data.varsel and data.varsel.tittel %}
+<div class="varsel" id="varsel" role="status" aria-live="polite"
+     data-skann="{{ data.created_at }}" hidden>
+  <span class="varsel-ikon" aria-hidden="true">🔍</span>
+  <div>
+    <p class="varsel-tittel">{{ data.varsel.tittel }}</p>
+    <p class="varsel-tekst">{{ data.varsel.tekst }}</p>
+  </div>
+  <button class="varsel-lukk" type="button" aria-label="Lukk">×</button>
+  <span class="varsel-tid" aria-hidden="true"></span>
+</div>
+{% endif %}
+
 <p id="loft-hint" class="loft-hint" hidden role="status">
   Flytt opp eller ned for å endre rekkefølgen · dra til venstre for å fjerne
 </p>
@@ -1278,6 +1281,79 @@
       meny.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   });
+  /* ── Pop-in-varselet ───────────────────────────────────────────────────────
+     Svipper inn fra hoyre, staar i fem sekunder, svipper ut igjen. Vises ÉN
+     gang per skann: uten noekkelen hadde hver refresh gjentatt en beskjed han
+     allerede hadde lest, og da blir den like lett aa overse som statuslinja
+     den erstattet. */
+  (function () {
+    var v = document.getElementById('varsel');
+    if (!v) return;
+    var NOKKEL = 'caseradar-varsel-sett';
+    if (localStorage.getItem(NOKKEL) === v.dataset.skann) return;
+
+    var timer = null;
+    function ut() {
+      clearTimeout(timer);
+      v.classList.remove('inne');
+      /* Vent til utsvipet er ferdig for vi skjuler den, ellers forsvinner den
+         momentant i stedet for aa gli ut. */
+      setTimeout(function () { v.hidden = true; }, 420);
+    }
+
+    v.hidden = false;
+    /* To rammer for klassen settes: settes den i samme ramme som `hidden`
+       fjernes, har nettleseren ingen starttilstand aa animere fra, og kortet
+       bare dukker opp. */
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { v.classList.add('inne'); });
+    });
+    localStorage.setItem(NOKKEL, v.dataset.skann || '');
+    timer = setTimeout(ut, 5000);
+    v.querySelector('.varsel-lukk').addEventListener('click', ut);
+  })();
+
+  /* ── «Lag vinkler for denne» ───────────────────────────────────────────────
+     Samme framdriftspanel som utkast bruker. Uten JS poster skjemaet vanlig og
+     venter - siden virker fortsatt, den blir bare staaende i ti sekunder. */
+  document.querySelectorAll('[data-vinkler]').forEach(function (skjema) {
+    skjema.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var knapp = skjema.querySelector('button');
+      knapp.disabled = true;
+      knapp.textContent = '💡 Journalisten tenker …';
+
+      var d = new FormData();
+      d.append('js', '1');
+      fetch(skjema.action, { method: 'POST', body: d })
+        .then(function (r) { return r.json(); })
+        .then(function (svar) { folgJobb(svar.jobb, knapp); })
+        .catch(function () {
+          knapp.disabled = false;
+          knapp.textContent = '💡 Prøv igjen';
+        });
+    });
+  });
+
+  function folgJobb(id, knapp) {
+    var stopp = setInterval(function () {
+      fetch('/jobb/' + id)
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j.status === 'kjorer') return;
+          clearInterval(stopp);
+          if (j.status === 'ferdig') {
+            location.reload();
+          } else {
+            knapp.disabled = false;
+            /* Grunnen skal staa PAA knappen. En feil som bare havner i konsollen
+               er en feil journalisten aldri faar vite om. */
+            knapp.textContent = '💡 ' + (j.feil || 'Prøv igjen');
+          }
+        })
+        .catch(function () { clearInterval(stopp); knapp.disabled = false; });
+    }, 1200);
+  }
 </script>
 </body>
 </html>
