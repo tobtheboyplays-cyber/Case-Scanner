@@ -39,14 +39,20 @@ from app.storage import (
     list_approved,
     load_latest,
     mark_seen,
-    sette_verdier,
     oppgaver,
+    publisert_antall,
+    publisert_legg_til,
+    publisert_liste,
+    publisert_slett,
     reject_lead,
+    rekkefolge_map,
     save_scan,
     seen_map,
     set_plan,
     sett_dagskapasitet,
+    sett_rekkefolge,
     sett_temaer,
+    sette_verdier,
     timer_per_dag,
     valgte_temaer,
 )
@@ -319,10 +325,19 @@ def dashboard(request: Request, apen: str = "", ferskt: str = ""):
     # Kopi, ikke mutasjon: `data` er det lagrede skannet, og det skal ikke endres
     # av at noen aapner forsiden.
     if data and data.get("cases"):
-        data = {**data, "cases": [
+        synlige = [
             c for c in data["cases"]
             if beslutninger.get(c.get("key")) != "rejected"
-        ]}
+        ]
+        # Har han dratt sakene i en egen rekkefolge, er DEN fasiten. Saker uten
+        # plass (nye siden sist han sorterte) legger seg bakerst i sin egen
+        # rangering i stedet for aa sprette opp foerst og velte sorteringen hans.
+        plasser = rekkefolge_map()
+        if plasser:
+            synlige.sort(
+                key=lambda c: (plasser.get(c.get("key"), len(plasser) + 1_000),)
+            )
+        data = {**data, "cases": synlige}
 
     scanned_at = None
     if data and data.get("created_at"):
@@ -340,6 +355,7 @@ def dashboard(request: Request, apen: str = "", ferskt: str = ""):
             "INNGANG_IKON": INNGANG_IKON,
             "VINKEL_NAVN": VINKEL_NAVN,
             "approved_count": len(list_approved()),
+            "publisert_antall": publisert_antall(),
             "TEMAER": TEMAER,
             "temagrupper": temagrupper(),
             "valgte_temaer": valgte_temaer(),
@@ -544,10 +560,63 @@ def endre_kapasitet(timer: str = Form(""), tilbake: str = Form("/kalender")):
     return RedirectResponse(url=tilbake or "/kalender", status_code=303)
 
 
+@app.post("/rekkefolge")
+async def lagre_rekkefolge(request: Request):
+    """Rekkefolgen journalisten dro sakene i. Sendes som JSON fra dashbordet.
+
+    Lagres med én gang, uten redirect: han skal ikke maatte trykke «lagre» etter
+    aa ha flyttet et kort. Feiler den, staar rekkefolgen fortsatt riktig paa
+    skjermen - men neste refresh viser sannheten, og det er riktigere enn aa
+    late som."""
+    data = await request.json()
+    keys = data.get("keys") if isinstance(data, dict) else None
+    if not isinstance(keys, list):
+        return JSONResponse({"ok": False, "feil": "keys mangler"}, status_code=400)
+    sett_rekkefolge([str(k) for k in keys[:200]])
+    return JSONResponse({"ok": True})
+
+
 @app.post("/leads/{key:path}/reject")
 def reject(key: str):
     reject_lead(key)
     return RedirectResponse(url="/", status_code=303)
+
+
+# --- Publiserte saker --------------------------------------------------------
+# Eieren 26.07.2026: «Jeg vil at han skal kunne lagre det han legger ut ... slik
+# at det blir lagret og han vet hvem som kom ut herfra.»
+#
+# Egen side, og bevisst plassert som en fjerde likestilt fane: radaren er hva som
+# KAN bli en sak, «Lagret» er utkastene, kalenderen er naar de skal gjores - og
+# dette er fasiten paa hva som faktisk kom paa trykk. Legges den inn under
+# «Lagret» blander den utkast og publisert, og da svarer den ikke lenger paa
+# spoersmaalet den finnes for.
+
+
+@app.get("/publisert", response_class=HTMLResponse)
+def publisert(request: Request, feil: str = ""):
+    return templates.TemplateResponse(
+        request=request,
+        name="publisert.html",
+        context={"saker": publisert_liste(), "feil": feil, "version": __version__},
+    )
+
+
+@app.post("/publisert")
+def publisert_ny(
+    url: str = Form(""), tittel: str = Form(""), notat: str = Form("")
+):
+    ok, grunn = publisert_legg_til(url, tittel, notat)
+    # Feilen foelger med i URL-en i stedet for aa forsvinne i en redirect. En
+    # lenke som stille ikke ble lagret er verre enn ingen lagring i det hele tatt.
+    maal = "/publisert" if ok else f"/publisert?feil={quote(grunn)}"
+    return RedirectResponse(url=maal, status_code=303)
+
+
+@app.post("/publisert/{rad_id}/slett")
+def publisert_fjern(rad_id: int):
+    publisert_slett(rad_id)
+    return RedirectResponse(url="/publisert", status_code=303)
 
 
 @app.get("/godkjente", response_class=HTMLResponse)
@@ -564,6 +633,7 @@ def godkjente(request: Request, arkiv: int = 0):
             "leads": [pynt(x) for x in list_approved(arkiverte=bool(arkiv))],
             "viser_arkiv": bool(arkiv),
             "antall_arkiverte": len(list_approved(arkiverte=True)),
+            "publisert_antall": publisert_antall(),
             "version": __version__,
         },
     )
@@ -656,6 +726,7 @@ def kalender(request: Request, ym: str = "", fane: str = "kalender"):
         name="kalender.html",
         context={
             "weeks": weeks,
+            "publisert_antall": publisert_antall(),
             "year": year,
             "month": month,
             "month_name": MONTHS_NO[month - 1],

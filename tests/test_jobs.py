@@ -544,9 +544,15 @@ def _sak():
     )
 
 
-def test_journalisten_gir_tre_ulike_vinkler_nar_ki_svarer(monkeypatch):
-    """Med nøkkel skal vinklene komme fra modellen - tre ulike spor, ikke tre
-    omskrivninger av tallet."""
+def test_journalisten_gir_to_ulike_vinkler_nar_ki_svarer(monkeypatch):
+    """Med nøkkel skal vinklene komme fra modellen — to ulike spor, ikke to
+    omskrivninger av tallet.
+
+    TO og ikke tre er eierens valg 26.07.2026, tatt på et målt grunnlag: de tre
+    KI-kallene i ett skann kom på 15 586 tokens mot Groqs minuttak på 12 000, og
+    journalisten sto sist i køen. Den tredje vinkelen kostet rundt 600 tokens —
+    nok til at ingen titler kom i det hele tatt. Svarer modellen med tre, tar vi
+    de to første."""
     from app import agents
 
     svar = {"angles": [
@@ -560,10 +566,10 @@ def test_journalisten_gir_tre_ulike_vinkler_nar_ki_svarer(monkeypatch):
     monkeypatch.setattr(agents.llm, "complete_json", lambda *a, **k: svar)
 
     vinkler = agents.journalist_angles(_sak(), {})
-    assert len(vinkler) == 3
+    assert len(vinkler) == 2, "taket på to slo ikke inn"
     assert all(v["mode"] == "llm" for v in vinkler), "skal være merket som ekte KI"
-    assert len({v["title"] for v in vinkler}) == 3
-    assert len({v["headline_fact"] for v in vinkler}) == 3
+    assert len({v["title"] for v in vinkler}) == 2
+    assert len({v["headline_fact"] for v in vinkler}) == 2
 
 
 def test_ki_som_leverer_samme_faktum_to_ganger_gir_to_vinkler(monkeypatch):
@@ -614,13 +620,13 @@ def test_journalisten_maa_selge_inn_vinkelen():
 
     e = prompts.EDITOR_SYSTEM
     assert "leserverdi" in e, "redaktøren svarer ikke på hvem som bryr seg"
-    # «Unngå tomme abstraksjoner» var et råd modellen kunne tolke som den ville,
-    # og den leverte flate arbeidstitler likevel. Etter 26.07.2026 er det en
-    # navngitt forbudsliste — «Fokus på ...», «Setter søkelys på ...» — pluss tre
-    # harde krav hver tittel må oppfylle.
-    assert "FORBUDTE AAPNINGER" in e
-    assert "Setter soekelys paa" in e
-    assert "TRE KRAV TIL EN TITTEL" in e
+    # Redaktøren har KORTVERSJONEN av tittelreglene. Han skriver bare en
+    # arbeidstittel journalisten uansett erstatter, og den fulle regelblokka
+    # kostet ham 587 tokens per skann av et minuttak på 12 000 — tokens som
+    # journalisten trengte for å levere titlene i det hele tatt.
+    assert "SKARPT:" in e and "FLATT:" in e, "ingen konkret målestokk for titler"
+    assert "aktivt verb" in e
+    assert "Setter soekelys paa" in e, "forbudslista falt ut"
 
 
 # ── Ting som vokser uten tak, og sider som blir for tunge ────────────────────

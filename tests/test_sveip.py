@@ -87,3 +87,68 @@ def test_sveipen_bruker_pointer_events_ikke_bare_touch():
     # loddrette scrollingen mens vi tar den vannrette.
     css = Path(__file__).resolve().parents[1].joinpath("static/style.css").read_text()
     assert "touch-action: pan-y" in css
+
+
+# ── Rekkefølgen han drar sakene i ───────────────────────────────────────────
+
+
+def test_egen_rekkefolge_overlever_refresh(klient):
+    """Eieren 26.07.2026: «Skal krympe og følge hånden smooth, så kan du bytte
+    rekkefølgen.» En rekkefølge som bare lever i DOM-en er den samme stille
+    løgnen som sveipede saker som kom tilbake."""
+    r = klient.post("/rekkefolge", json={"keys": [BORT, BLIR]})
+    assert r.json() == {"ok": True}
+
+    html = klient.get("/").text
+    assert html.index("Denne sveipes bort") < html.index("Denne skal stå")
+
+    klient.post("/rekkefolge", json={"keys": [BLIR, BORT]})
+    html = klient.get("/").text
+    assert html.index("Denne skal stå") < html.index("Denne sveipes bort")
+
+
+def test_nye_saker_velter_ikke_sorteringen_hans(klient):
+    """En sak som dukker opp etter at han sorterte har ingen plass. Sprettet den
+    øverst, ville hvert nytt skann ødelagt jobben han nettopp gjorde."""
+    klient.post("/rekkefolge", json={"keys": [BORT, BLIR]})
+    storage.save_scan({
+        "cases": [_sak(BLIR, "Denne skal stå"), _sak(BORT, "Denne sveipes bort"),
+                  _sak("ny", "Helt fersk sak")],
+        "plan": {}, "status": [], "summary": {}, "ai_mode": "mal",
+    })
+    html = klient.get("/").text
+    assert html.index("Denne sveipes bort") < html.index("Helt fersk sak")
+    assert html.index("Denne skal stå") < html.index("Helt fersk sak")
+
+
+def test_soppel_i_rekkefolgen_avvises(klient):
+    assert klient.post("/rekkefolge", json={"keys": "ikke en liste"}).status_code == 400
+    assert storage.rekkefolge_map() == {}
+
+
+def test_sveipen_slipper_kortet_naar_det_flyttes_i_lista():
+    """setPointerCapture var det opplagte valget, men en DOM-flytting slipper
+    fangsten — og da nådde verken flere pointermove eller pointerup kortet.
+    Målt i Chromium: kortet byttet plass én gang og ble så liggende, og
+    rekkefølgen ble aldri lagret fordi slipp() aldri kjørte."""
+    from pathlib import Path
+
+    js = Path(__file__).resolve().parents[1].joinpath("templates/dashboard.html").read_text()
+    # Ordet står i kommentaren som forklarer hvorfor — det er selve KALLET som
+    # ikke skal tilbake.
+    assert ".setPointerCapture(" not in js, "fangsten er tilbake — den bryter flyttingen"
+    assert "document.addEventListener('pointermove'" in js
+    assert "document.addEventListener('pointerup'" in js
+
+
+def test_innfadingen_laaser_ikke_transformen():
+    """`animation: ... both` beholder sluttilstanden `transform: none` for alltid,
+    og en fylt CSS-animasjon slår inline style. Med `both` flyttet kortet seg
+    ALDRI, uansett hvor langt man dro — verifisert i Chromium 26.07.2026."""
+    from pathlib import Path
+
+    css = Path(__file__).resolve().parents[1].joinpath("static/style.css").read_text()
+    for linje in css.splitlines():
+        if "animation:" in linje and ("rise" in linje or "flyt-opp" in linje):
+            assert "both" not in linje, f"«both» låser transformen: {linje.strip()}"
+            assert "backwards" in linje, linje.strip()

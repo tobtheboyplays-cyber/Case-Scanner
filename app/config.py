@@ -457,3 +457,14 @@ JOURNALIST_CAP = int(os.getenv("CASE_RADAR_JOURNALIST_CAP", "4"))
 # 9 000 og ikke 12 000: marginen gjor at to skann rett etter hverandre fortsatt
 # holder seg under taket, siden minuttvinduet ruller.
 KI_BUDSJETT_TOKENS = int(os.getenv("CASE_RADAR_KI_BUDSJETT", "9000"))
+
+# Holdt av til journalisten - analytikeren og redaktoeren faar ikke roere det.
+#
+# Maalt 26.07.2026, og det forklarte hvorfor eieren ikke saa forslagstitler:
+# analytiker 2 524 + redaktoer 5 055 + journalist 8 007 = 15 586 tokens i samme
+# minutt, mot Groqs tak paa 12 000. Journalisten sto SIST i koen, saa det var
+# alltid vinklene som ble strupet - selve poenget med verktoyet.
+#
+# Reserven snur prioriteringen: rangeringen og dommen kan gjerne staa over til
+# neste trykk, vinklene skal ikke.
+KI_RESERVE_JOURNALIST = int(os.getenv("CASE_RADAR_KI_RESERVE", "3500"))

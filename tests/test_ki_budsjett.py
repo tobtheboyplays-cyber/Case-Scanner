@@ -114,23 +114,41 @@ def test_skannet_stopper_for_kvotetaket(ki, monkeypatch):
     assert ki.kall <= 3, f"{ki.kall} kall - samlekallene slo ikke inn"
 
 
-def test_saker_i_ko_merkes_ko_og_ikke_mal(ki, monkeypatch):
-    """«mal» og «kø» betyr helt forskjellige ting for journalisten: mal = dette
-    er alt du får, kø = trykk igjen. Blandes de, ser verktøyet ødelagt ut når
-    det faktisk gjør jobben sin."""
+def test_journalisten_gaar_foran_redaktoren_nar_kvoten_er_knapp(ki, monkeypatch):
+    """Reserven, og hvorfor den finnes.
+
+    Målt 26.07.2026: analytiker 2 524 + redaktør 5 055 + journalist 8 007 =
+    15 586 tokens i samme minutt mot Groqs tak på 12 000. Journalisten sto SIST,
+    så det var alltid vinklene som ble strupet — og eieren satt med saker uten en
+    eneste forslagstittel. Det er selve poenget med verktøyet som forsvant.
+
+    Nå er en andel holdt av til journalisten. Blir det trangt, er det RANGERINGEN
+    og DOMMEN som havner i kø; titlene kommer uansett. Dommen merkes «ko» slik at
+    UI-et sier «trykk igjen» og ikke «dette er alt du får»."""
     monkeypatch.setattr(agents, "KI_BUDSJETT_TOKENS", 2500)
     saker = lag_saker(10)
-    run_workflow(saker)
+    regnskap = run_workflow(saker)
 
-    i_ko = [c for c in saker if c.ai_mode == "ko"]
-    assert i_ko, "ingen saker ble merket «ko»"
-    for c in i_ko:
-        # Enten ble redaktørdommen satt i kø, eller så ble vinklene det. Vinkler
-        # i kø er nå en TOM liste — maler ble fjernet, så det finnes ikke lenger
-        # noe «ko»-merket vinkelobjekt å se etter.
-        assert c.editor.get("mode") == "ko" or c.angles == [], (
-            f"{c.key} er merket «ko» men har verken kø-dom eller tom vinkelliste"
-        )
+    assert regnskap["i_ko"] > 0, "budsjettet var ikke knapt — testen måler ingenting"
+
+    med_vinkler = [c for c in saker if c.angles]
+    assert med_vinkler, "journalisten ble strupet selv med reserve — det var feilen"
+
+    dommer_i_ko = [c for c in saker if c.editor.get("mode") == "ko"]
+    assert dommer_i_ko, "ingenting havnet i kø — da er ikke reserven det som virket"
+    for c in dommer_i_ko:
+        # «mal» og «kø» betyr helt forskjellige ting: mal = dette er alt du får,
+        # kø = trykk igjen. Blandes de, ser verktøyet ødelagt ut når det gjør
+        # jobben sin.
+        assert c.editor["mode"] != "mal"
+
+
+def test_reserven_kan_aldri_ta_mer_enn_halve_budsjettet():
+    """En reserve større enn potten ville satt analytikeren og redaktøren i kø fra
+    første kall — det er ikke en prioritering, det er en avslått KI."""
+    b = Budsjett(2000, reservert=9999)
+    assert b.reservert == 1000
+    assert b.be_om("s", "u", 10) is True, "det første kallet ble sperret av reserven"
 
 
 # ── Det som gjør «trykk igjen» meningsfullt ──────────────────────────────────

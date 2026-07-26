@@ -12,6 +12,7 @@ import sqlite3
 from calendar import monthrange
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 from app.config import DB_PATH
 
@@ -79,6 +80,43 @@ def _connect() -> sqlite3.Connection:
     # om den ble forkastet.
     if "fullfort_at" not in cols:
         conn.execute("ALTER TABLE approved ADD COLUMN fullfort_at TEXT")
+    # Publiserte saker: lenka til det som faktisk kom paa trykk.
+    #
+    # Eieren 26.07.2026: «Jeg vil at han skal kunne lagre det han legger ut ...
+    # slik at det blir lagret og han vet hvem som kom ut herfra.» Radaren og
+    # «Lagret» handler om saker som KAN bli noe; dette er fasiten paa hva som
+    # faktisk ble det. Det er den eneste maaten aa se om verktoyet er verdt tiden.
+    #
+    # UNIQUE paa en NORMALISERT noekkel, ikke paa url-en selv: «aftenbladet.no/i/x»
+    # og «https://www.aftenbladet.no/i/x/» er samme artikkel, og en fasit som
+    # foerer opp den samme saken to ganger er ikke en fasit. Selve url-en lagres
+    # slik han limte den inn, saa lenka fortsatt virker.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS publisert (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT NOT NULL,
+            nokkel TEXT NOT NULL UNIQUE,
+            tittel TEXT NOT NULL DEFAULT '',
+            notat TEXT NOT NULL DEFAULT '',
+            lagt_inn TEXT NOT NULL
+        )
+        """
+    )
+    # Rekkefolgen journalisten selv har dratt sakene i.
+    #
+    # Eieren 26.07.2026: «Skal krympe og folge haanden smooth, saa kan du bytte
+    # rekkefolgen.» Lagres, ikke bare flyttes i DOM-en: en rekkefolge som
+    # forsvinner ved refresh er den samme stille loegnen som sveipede saker som
+    # kom tilbake - han tror han har ryddet, og finner rotet igjen.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS rekkefolge (
+            key TEXT PRIMARY KEY,
+            plass INTEGER NOT NULL
+        )
+        """
+    )
     conn.commit()
     return conn
 
@@ -722,5 +760,157 @@ def decisions_map() -> dict[str, str]:
     try:
         rows = conn.execute("SELECT key, status FROM decisions").fetchall()
         return {k: s for k, s in rows}
+    finally:
+        conn.close()
+
+
+# --- Publiserte saker --------------------------------------------------------
+# Fasiten: hva som faktisk kom paa trykk. Alt annet i appen handler om saker som
+# KAN bli noe; her staar de som ble det.
+
+# Bare http/https. En «javascript:»-lenke lagret her og rendret som <a href> er
+# et hull vi ikke trenger aa ha - siden har ingen innlogging.
+LOVLIGE_SKJEMA = ("http://", "https://")
+MAKS_PUBLISERT_FELT = 500
+
+
+def _vask_url(url: str) -> str:
+    """Returner en trygg URL, eller tom streng hvis den ikke kan brukes."""
+    url = (url or "").strip()
+    if not url:
+        return ""
+    # «aftenbladet.no/sak» er det folk limer inn naar de kopierer halvveis.
+    if not url.lower().startswith(("http://", "https://", "javascript:", "data:")):
+        url = "https://" + url
+    if not url.lower().startswith(LOVLIGE_SKJEMA):
+        return ""
+
+    # Verten maa faktisk se ut som en vert. Uten denne sjekken ble «ikke en lenke
+    # i det hele tatt» til «https://ikke en lenke i det hele tatt» og lagret som
+    # en publisert sak - soppel i den ene lista i appen som skal vaere en fasit.
+    try:
+        vert = urlparse(url).netloc
+    except ValueError:
+        return ""
+    if " " in vert or "." not in vert.strip("."):
+        return ""
+    return url[:MAKS_PUBLISERT_FELT]
+
+
+def _url_nokkel(url: str) -> str:
+    """Samme artikkel skal gi samme noekkel uansett www, skjema og skraastrek."""
+    try:
+        d = urlparse(url)
+    except ValueError:
+        return url.lower()
+    vert = (d.netloc or "").lower()
+    if vert.startswith("www."):
+        vert = vert[4:]
+    sti = (d.path or "").rstrip("/").lower()
+    return f"{vert}{sti}?{d.query}" if d.query else f"{vert}{sti}"
+
+
+def publisert_legg_til(url: str, tittel: str = "", notat: str = "") -> tuple[bool, str]:
+    """Lagre en publisert artikkel. Returnerer (ok, grunn-hvis-ikke)."""
+    ren = _vask_url(url)
+    if not ren:
+        return False, "Det ser ikke ut som en nettadresse. Lim inn hele lenka til saken."
+    conn = _connect()
+    try:
+        conn.execute(
+            "INSERT INTO publisert (url, nokkel, tittel, notat, lagt_inn) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                ren,
+                _url_nokkel(ren),
+                (tittel or "").strip()[:MAKS_PUBLISERT_FELT],
+                (notat or "").strip()[:MAKS_PUBLISERT_FELT],
+                datetime.now(UTC).isoformat(),
+            ),
+        )
+        conn.commit()
+        return True, ""
+    except sqlite3.IntegrityError:
+        # UNIQUE paa noekkelen. Aa legge inn samme sak to ganger er en tabbe, ikke en
+        # feil - si det rolig og gaa videre.
+        return False, "Den lenka ligger allerede inne."
+    finally:
+        conn.close()
+
+
+def publisert_liste() -> list[dict]:
+    """Nyeste foerst."""
+    if not os.path.exists(DB_PATH):
+        return []
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, url, tittel, notat, lagt_inn FROM publisert "
+            "ORDER BY lagt_inn DESC, id DESC"
+        ).fetchall()
+    finally:
+        conn.close()
+    return [
+        {"id": r[0], "url": r[1], "tittel": r[2], "notat": r[3], "lagt_inn": r[4],
+         "domene": _domene(r[1])}
+        for r in rows
+    ]
+
+
+def _domene(url: str) -> str:
+    """«aftenbladet.no» fra en full lenke - kort nok til aa staa som merkelapp."""
+    try:
+        vert = urlparse(url).netloc
+    except ValueError:
+        return ""
+    return vert[4:] if vert.startswith("www.") else vert
+
+
+def publisert_slett(rad_id: int) -> None:
+    conn = _connect()
+    try:
+        conn.execute("DELETE FROM publisert WHERE id = ?", (rad_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def publisert_antall() -> int:
+    if not os.path.exists(DB_PATH):
+        return 0
+    conn = _connect()
+    try:
+        return int(conn.execute("SELECT COUNT(*) FROM publisert").fetchone()[0])
+    finally:
+        conn.close()
+
+
+# --- Rekkefolge journalisten har dratt sakene i ------------------------------
+
+
+def sett_rekkefolge(keys: list[str]) -> None:
+    """Erstatt hele rekkefolgen med den lista UI-et sendte.
+
+    Hele lista, ikke ett kort: rekkefolge er relativ, og aa lagre «sak X er nr.
+    3» uten de andre gir en tabell som motsier seg selv saa fort noe fjernes.
+    """
+    conn = _connect()
+    try:
+        conn.execute("DELETE FROM rekkefolge")
+        conn.executemany(
+            "INSERT OR REPLACE INTO rekkefolge (key, plass) VALUES (?, ?)",
+            [(k, i) for i, k in enumerate(keys) if k],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def rekkefolge_map() -> dict[str, int]:
+    if not os.path.exists(DB_PATH):
+        return {}
+    conn = _connect()
+    try:
+        return {k: p for k, p in conn.execute("SELECT key, plass FROM rekkefolge")}
     finally:
         conn.close()

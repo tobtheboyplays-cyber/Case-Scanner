@@ -22,6 +22,7 @@
   </div>
   <div class="top-actions">
     <a class="btn-ghost" href="/kalender">🗓 Kalender</a>
+    <a class="btn-ghost" href="/publisert">📰 Publisert{% if publisert_antall %} ({{ publisert_antall }}){% endif %}</a>
     <a class="btn-approved-link" href="/godkjente">📁 Lagret{% if approved_count %} ({{ approved_count }}){% endif %}</a>
     {# Ett valg, én knapp. Foer laa temaene i én meny og «Skann naa» i en annen
        knapp ved siden av, saa man kunne skanne uten aa ha sett paa temaene i det
@@ -316,47 +317,11 @@
           {% for tp in case.topics[:2] %}<span class="tag">{{ tp }}</span>{% endfor %}
         </div>
 
-        <div class="lead-grid">
-          {# Kilden staar allerede oeverst i kortet, og dekningen som merkelapp.
-             Foer sto begge tre ganger i samme kort - det var det som gjorde
-             kortene lange og rotete uten aa gi ny informasjon. #}
-          <div class="vinkel">
-            <p class="vinkel-h">Hva du bør sjekke</p>
-            <p class="vinkel-t">{{ case.angle }}</p>
-            {% if not case.data_url and case.sources %}
-              <a class="kilde" href="{{ case.sources[0].url }}" target="_blank" rel="noopener">Kilde: {{ case.sources[0].source }} ↗</a>
-            {% endif %}
-            {% if case.coverage_examples %}
-              <p class="alt-dekning">Skrevet av {{ case.coverage_examples[0].source }}
-                ({{ case.coverage_examples[0].date }})</p>
-            {% endif %}
-          </div>
-        </div>
-
         {# Vinklene laa foer inne i «har redaktoeren vurdert saken?». Bare de 8
            hoyest rangerte gaar til redaktoeren, saa resten viste ingen vinkler i
            det hele tatt - det saa ut som en feil. Naa vises vinklene naar de
            finnes, og staar det ingen, sier vi hvorfor. #}
         <div class="ai-block">
-          {% if case.editor %}
-          <details class="ai-editor">
-            {# Dommen er et RAAD, ikke en sperre - vinklene kommer uansett (eierens
-               beslutning 26.07.2026). «Ikke sak» leste seg som at saken var stengt;
-               «skeptisk» sier det den faktisk er: redaktoeren ville ikke prioritert
-               den, men du kan fortsatt be om utkast. #}
-            <summary>🧭 KI-redaktør: {{ '✅ Anbefaler' if case.editor.is_story else '🤨 Skeptisk' }}
-              {% if case.editor.confidence %}({{ case.editor.confidence }}%){% endif %}
-              {% if case.ai_mode == 'mal' %}<span class="ai-tag">demo</span>
-              {% elif case.ai_mode == 'ko' %}<span class="ai-tag ai-ko">i kø</span>{% endif %}</summary>
-            <p><strong>{{ case.editor.headline }}</strong></p>
-            <p class="ai-angle">{{ case.editor.angle }}</p>
-            <p class="ai-verdict">💬 {{ case.editor.verdict }}</p>
-            {% if case.editor.leserverdi %}
-            <p class="ai-leserverdi">🎯 {{ case.editor.leserverdi }}</p>
-            {% endif %}
-            {% if case.editor.forbehold %}<p class="angle-risk">⚠ {{ case.editor.forbehold }}</p>{% endif %}
-          </details>
-          {% endif %}
           {# Grunnlagssjekken stopper ikke lenger vinklene - den advarer. Foer sto
              det «⛔ For tynt grunnlag til å skrive», og da fikk saken verken
              titler eller utkastknapp. Nå får du titlene, men vet hva som mangler
@@ -372,7 +337,8 @@
           {% if case.angles %}
           <div class="angles">
             <p class="angles-h">{{ case.angles|length }} forslag til tittel — hver bygger på
-              sitt eget faktum. Velg én og be om utkast.</p>
+              sitt eget faktum. Velg én og be om utkast, så ser du hvordan saken
+              kunne sett ut.</p>
             {% for a in case.angles %}
             {# Etter «Be om utkast» kommer vi tilbake hit med ?apen=<key>|<nr>.
                Uten den var utkastet skrevet, men slaatt sammen og usynlig. #}
@@ -479,6 +445,38 @@
             {% endfor %}
           </div>
           {% endif %}
+          {# Rekkefolgen eieren ba om 26.07.2026: «Husk naa foerst faktaen eller
+             tallene du har funnet. Saa 2 forslags titler, saa velger han en, spor
+             om utkast fra den tittelen slik han ser hvordan det kunne sett ut.»
+             Redaktoerdommen og sjekklista er BAKGRUNN - de sto foer mellom tallet
+             og titlene og dyttet det viktigste nedover i kortet. #}
+          <details class="ai-bakgrunn">
+            <summary>Bakgrunn: redaktørens vurdering og hva du bør sjekke</summary>
+            {% if case.editor %}
+            <p class="ai-dom">🧭 KI-redaktør:
+              {{ '✅ Anbefaler' if case.editor.is_story else '🤨 Skeptisk' }}
+              {% if case.editor.confidence %}({{ case.editor.confidence }}%){% endif %}
+              {% if case.ai_mode == 'mal' %}<span class="ai-tag">demo</span>
+              {% elif case.ai_mode == 'ko' %}<span class="ai-tag ai-ko">i kø</span>{% endif %}</p>
+            <p><strong>{{ case.editor.headline }}</strong></p>
+            <p class="ai-angle">{{ case.editor.angle }}</p>
+            <p class="ai-verdict">💬 {{ case.editor.verdict }}</p>
+            {% if case.editor.leserverdi %}
+            <p class="ai-leserverdi">🎯 {{ case.editor.leserverdi }}</p>
+            {% endif %}
+            {% if case.editor.forbehold %}<p class="angle-risk">⚠ {{ case.editor.forbehold }}</p>{% endif %}
+            {% endif %}
+            <p class="vinkel-h">Hva du bør sjekke</p>
+            <p class="vinkel-t">{{ case.angle }}</p>
+            {% if not case.data_url and case.sources %}
+              <a class="kilde" href="{{ case.sources[0].url }}" target="_blank" rel="noopener">Kilde: {{ case.sources[0].source }} ↗</a>
+            {% endif %}
+            {% if case.coverage_examples %}
+              <p class="alt-dekning">Skrevet av {{ case.coverage_examples[0].source }}
+                ({{ case.coverage_examples[0].date }})</p>
+            {% endif %}
+          </details>
+
           <div class="ai-actions">
             {% set dec = decisions.get(case.key) %}
             {% if dec == 'approved' %}
@@ -837,23 +835,120 @@
       try { return localStorage.getItem(NOKKEL) === '1'; } catch (e) { return false; }
     }
 
-    function fjern(kort) {
+    var rolig = window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    /* Nummerering er ikke pynt: fjerner du sak 2, skal de neste hete 2, 3, 4 -
+       ikke 1, 3, 4. Et hull i rekka leser seg som at noe gikk galt. */
+    function nummerer() {
+      var n = 1;
+      document.querySelectorAll('.lead.swipe-kort').forEach(function (k) {
+        var el = k.querySelector('.lead-num');
+        if (el) { el.textContent = n; }
+        n += 1;
+      });
+    }
+
+    /* Rekkefolgen han dro sakene i skal overleve en refresh. Gjor den ikke det,
+       er det den samme stille logna som sveipede saker som kom tilbake: han tror
+       han har ryddet, og finner rotet igjen. */
+    var lagre_timer = null;
+    function lagreRekkefolge() {
+      nummerer();
+      // Samle opp: drar man tre kort etter hverandre, skal det bli ETT kall.
+      clearTimeout(lagre_timer);
+      lagre_timer = setTimeout(function () {
+        var keys = [];
+        document.querySelectorAll('.lead.swipe-kort').forEach(function (k) {
+          if (k.dataset.key) { keys.push(k.dataset.key); }
+        });
+        fetch('/rekkefolge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keys: keys })
+        }).catch(function () { /* neste refresh viser sannheten */ });
+      }, 400);
+    }
+
+    /* Fase 2: plassen lukker seg. Uten dette rykker kortene under rett opp i det
+       kortet fjernes fra DOM-en, og hele lista hopper. Det var det som gjorde at
+       slettingen føltes hakkete selv om selve kastet var glatt. */
+    function krympBort(kort, naar_ferdig) {
+      var h = kort.offsetHeight;
+      kort.style.height = h + 'px';
+      kort.style.overflow = 'hidden';
+      void kort.offsetHeight;                 /* tvinger reflow, ellers hopper den */
+      kort.classList.add('krymper');
+      kort.style.height = '0px';
+      kort.style.marginBottom = '0px';
+      kort.style.paddingTop = '0px';
+      kort.style.paddingBottom = '0px';
+      kort.style.borderWidth = '0px';
+      kort.style.opacity = '0';
+      setTimeout(function () {
+        kort.remove();
+        nummerer();
+        if (naar_ferdig) { naar_ferdig(); }
+      }, rolig ? 20 : 300);
+    }
+
+    /* Fase 1: kastet. Eieren: «Slett-animasjonen være smooth slik man kaster ut
+       saken. Den krymper, så kaster du den ut av skjermen.»
+
+       Avstanden regnes ut fra kortets egen posisjon i stedet for en fast
+       prosent - da klarer det alltid å komme HELT ut av skjermkanten, uansett
+       hvor bredt kortet er eller hvor langt det alt er dratt. Farten fra
+       fingeren bestemmer varigheten, så et hardt kast går fort og et forsiktig
+       drag glir. Det er den detaljen som gjør at det føles som et kast og ikke
+       som en animasjon som spilles av. */
+    function kastUt(kort, fart, naar_ferdig) {
+      if (rolig) { krympBort(kort, naar_ferdig); return; }
+      // Avstanden maa regnes fra kortets LAYOUT-posisjon, ikke fra
+      // getBoundingClientRect(): den inkluderer transformen kortet alt har fra
+      // draget, og da ble avstanden regnet to ganger for kort. Maalt i Chromium
+      // 26.07.2026 stoppet kortet paa x=-236 med hoyre kant fortsatt inne paa
+      // skjermen. Skjermbredde + kortbredde klarer kanten uansett hvor langt
+      // det alt er dratt.
+      var ut = -(window.innerWidth + kort.offsetWidth);
+      var ms = Math.max(240, Math.min(520, Math.abs(ut) / Math.max(1.4, fart * 1.6 || 1.6)));
+      kort.classList.remove('drar');
+      kort.style.transition =
+        'transform ' + ms + 'ms cubic-bezier(.22,.61,.3,1), opacity '
+        + Math.round(ms * 0.8) + 'ms ease-out';
+      kort.style.transform = 'translateX(' + ut + 'px) rotate(-15deg) scale(.74)';
+      kort.style.opacity = '0';
+      // Plassen begynner å lukke seg FØR kortet er helt ute. Venter vi til det
+      // er ferdig, blir det et tydelig opphold der ingenting skjer.
+      setTimeout(function () { krympBort(kort, naar_ferdig); }, Math.round(ms * 0.55));
+    }
+
+    function fjern(kort, fart) {
       var key = kort.dataset.key;
-      kort.classList.add('sveipet-bort');
-      setTimeout(function () { kort.remove(); }, 240);
+      // Hvor kortet skal tilbake HVIS serveren ikke tok imot. Må leses nå, mens
+      // naboene fortsatt står der.
+      var mor = kort.parentNode, etter = kort.nextSibling;
+      var kom_fram = true;
+
       var d = new FormData();
       d.append('tilbake', '/');
       fetch('/leads/' + encodeURIComponent(key) + '/reject', { method: 'POST', body: d })
-        .catch(function () {
-          // Kom den ikke fram, skal saken tilbake. Alternativet er at han tror
-          // den er ryddet bort og ser den igjen ved neste skann.
-          kort.classList.remove('sveipet-bort');
-          kort.style.transform = '';
-        });
+        .then(function (r) { kom_fram = r.ok; })
+        .catch(function () { kom_fram = false; });
+
+      kastUt(kort, fart, function () {
+        lagreRekkefolge();
+        // Kom den ikke fram, skal saken tilbake. Et kort som forsvant uten å bli
+        // lagret er en løgn om hva som skjedde - han ville sett den igjen ved
+        // neste skann og trodd verktøyet mistet det han gjorde.
+        if (kom_fram) { return; }
+        kort.removeAttribute('style');
+        kort.classList.remove('krymper', 'sveipet-bort', 'mot-venstre');
+        if (mor) { mor.insertBefore(kort, etter); nummerer(); }
+      });
     }
 
-    function spor(kort) {
-      if (sporIkke()) { fjern(kort); return; }
+    function spor(kort, fart) {
+      if (sporIkke()) { fjern(kort, fart); return; }
       venter = kort;
       var t = kort.querySelector('.lead-title');
       dialog.querySelector('.fjern-tittel').textContent = t ? t.textContent.trim() : '';
@@ -865,22 +960,22 @@
     function lukk() { dialog.hidden = true; venter = null; }
 
     dialog.querySelector('.fjern-avbryt').addEventListener('click', function () {
-      if (venter) { venter.style.transform = ''; }
+      if (venter) { venter.style.transform = ''; venter.style.opacity = ''; }
       lukk();
     });
     dialog.querySelector('.fjern-ja').addEventListener('click', function () {
       if (dialog.querySelector('#fjern-ikke-spor').checked) {
         try { localStorage.setItem(NOKKEL, '1'); } catch (e) { /* privat modus */ }
       }
-      if (venter) { fjern(venter); }
+      if (venter) { fjern(venter, 1.1); }
       lukk();
     });
     dialog.addEventListener('click', function (e) {
-      if (e.target === dialog) { if (venter) { venter.style.transform = ''; } lukk(); }
+      if (e.target === dialog) { if (venter) { venter.style.transform = ''; venter.style.opacity = ''; } lukk(); }
     });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && !dialog.hidden) {
-        if (venter) { venter.style.transform = ''; }
+        if (venter) { venter.style.transform = ''; venter.style.opacity = ''; }
         lukk();
       }
     });
@@ -888,8 +983,17 @@
     document.querySelectorAll('.lead.swipe-kort').forEach(function (kort) {
       var x0 = null, y0 = null, dx = 0, drar = false, laast = false;
       var TERSKEL = 90;
+      // Fart i piksler per millisekund. Et raskt kast skal fly ut fort selv om
+      // det ikke rakk å passere terskelen - det er slik en sveip føles i appene
+      // han er vant til.
+      var sist_x = 0, sist_t = 0, fart = 0, dy = 0, flyttet_i_lista = false;
+      var FLIKK = 0.55;
 
-      function start(x, y) { x0 = x; y0 = y; dx = 0; drar = true; laast = false; }
+      function start(x, y) {
+        x0 = x; y0 = y; dx = 0; dy = 0; drar = true; laast = false;
+        sist_x = x; sist_t = (window.performance ? performance.now() : Date.now());
+        fart = 0; flyttet_i_lista = false;
+      }
       function flytt(x, y, ev) {
         if (!drar) { return; }
         var ddx = x - x0, ddy = y - y0;
@@ -900,24 +1004,84 @@
           if (Math.abs(ddx) > 10) {
             laast = true;
             kort.classList.add('drar');
-            // Fanger pekeren, slik at sveipen fortsetter selv om markøren
-            // forlater kortet på vei ut mot venstre.
-            if (ev.pointerId !== undefined && kort.setPointerCapture) {
-              try { kort.setPointerCapture(ev.pointerId); } catch (e) { /* ingen fangst */ }
-            }
           } else { return; }
         }
         dx = Math.min(0, ddx);            /* bare venstre - hoyre betyr ingenting her */
-        kort.style.transform = 'translateX(' + dx + 'px) rotate(' + (dx / 34) + 'deg)';
+        dy = ddy;
+
+        var na = (window.performance ? performance.now() : Date.now());
+        var dt = na - sist_t;
+        if (dt > 0) {
+          // Bare fart MOT VENSTRE teller. Eieren: «når den når topp fart til
+          // venstre og slipper den, så er det at den skal kastes.» En rask
+          // bevegelse tilbake mot høyre er en angring, ikke et kast.
+          var vv = (sist_x - x) / dt;
+          fart = 0.7 * fart + 0.3 * Math.max(0, vv);
+          sist_x = x; sist_t = na;
+        }
+
+        // Kortet KRYMPER og følger hånden. Det er krympingen som gjør at det
+        // leser som noe man har PLUKKET OPP - og et kort man har i hånden kan
+        // man både kaste og flytte. Skalaen faller mot 0,88.
+        var vei = Math.min(1, Math.abs(dx) / 260);
+        var skala = 1 - 0.12 * vei;
+        kort.style.transform =
+          'translateX(' + dx + 'px) translateY(' + dy + 'px) rotate('
+          + (dx / 34) + 'deg) scale(' + skala + ')';
+        kort.style.opacity = String(1 - 0.45 * vei);
         kort.classList.toggle('mot-venstre', dx < -30);
+
+        // Flytting i lista: kortet i hånden bytter plass med naboen det er dratt
+        // forbi. Vi flytter selve elementet, så resten glir på plass av seg selv
+        // - og nullstiller dy mot den nye posisjonen, ellers hopper kortet.
+        var flyttet = flyttForbiNabo();
+        if (flyttet) { y0 += flyttet; dy = y - y0; }
+
         if (ev.cancelable) { ev.preventDefault(); }
+      }
+
+      /* Bytt plass med naboen over eller under hvis kortet er dratt mer enn
+         halvveis forbi den. Returnerer hvor mange piksler kortets egen
+         hvileposisjon flyttet seg, så draget kan justeres mot den. */
+      function flyttForbiNabo() {
+        if (Math.abs(dy) < 24) { return 0; }
+        var mor = kort.parentNode;
+        if (!mor) { return 0; }
+        var foer = kort.getBoundingClientRect().top - dy;
+
+        if (dy < 0) {
+          var over = kort.previousElementSibling;
+          while (over && !over.classList.contains('swipe-kort')) {
+            over = over.previousElementSibling;
+          }
+          if (!over) { return 0; }
+          var ho = over.getBoundingClientRect().height;
+          if (-dy < ho / 2) { return 0; }
+          mor.insertBefore(kort, over);
+        } else {
+          var under = kort.nextElementSibling;
+          while (under && !under.classList.contains('swipe-kort')) {
+            under = under.nextElementSibling;
+          }
+          if (!under) { return 0; }
+          var hu = under.getBoundingClientRect().height;
+          if (dy < hu / 2) { return 0; }
+          mor.insertBefore(kort, under.nextElementSibling);
+        }
+        flyttet_i_lista = true;
+        return kort.getBoundingClientRect().top - dy - foer;
       }
       function slipp() {
         if (!drar && !laast) { return; }
         drar = false;
         kort.classList.remove('drar', 'mot-venstre');
-        if (dx < -TERSKEL) { spor(kort); return; }
+        // Enten dratt langt nok, ELLER sluppet i full fart mot venstre. Uten
+        // flikken må man dra hele veien hver gang, og da blir rydding tregt.
+        if (dx < -TERSKEL || (dx < -40 && fart > FLIKK)) { spor(kort, fart); return; }
+        // Ikke et kast: kortet legger seg ned der det nå står i lista.
         kort.style.transform = '';
+        kort.style.opacity = '';
+        if (flyttet_i_lista) { lagreRekkefolge(); flyttet_i_lista = false; }
       }
 
       /* Pointer-events, ikke touch-events. Med bare touchstart/touchmove gjorde
@@ -925,17 +1089,31 @@
          26.07.2026. Journalisten er på telefon, men eieren tester på laptop, og
          en funksjon som er usynlig der ser ut som en feil. Pointer dekker mus,
          touch og penn i én kodesti; `touch-action: pan-y` i CSS-en sørger for at
-         nettleseren fortsatt eier den loddrette scrollingen. */
+         nettleseren fortsatt eier den loddrette scrollingen.
+
+         Lytterne for BEVEGELSE og SLIPP ligger på `document`, ikke på kortet.
+         setPointerCapture var det opplagte valget, men det virker ikke her: å
+         flytte kortet i lista er en DOM-flytting, og en DOM-flytting slipper
+         pointer-fangsten. Da nådde verken flere pointermove eller pointerup
+         kortet - målt i Chromium 26.07.2026 byttet kortet plass én gang og ble
+         så liggende, og rekkefølgen ble aldri lagret fordi slipp() aldri kjørte. */
+      function pekerFlytt(e) { flytt(e.clientX, e.clientY, e); }
+      function pekerSlipp() {
+        document.removeEventListener('pointermove', pekerFlytt);
+        document.removeEventListener('pointerup', pekerSlipp);
+        document.removeEventListener('pointercancel', pekerSlipp);
+        slipp();
+      }
       kort.addEventListener('pointerdown', function (e) {
         if (e.button) { return; }                    /* bare venstre musetast */
         // En sveip skal aldri starte oppå noe man kan trykke på - ellers blir
         // «Lag utkast» og lenkene til kildene vanskelige å treffe.
         if (e.target.closest('a, button, input, label, summary, form')) { return; }
         start(e.clientX, e.clientY);
+        document.addEventListener('pointermove', pekerFlytt, { passive: false });
+        document.addEventListener('pointerup', pekerSlipp);
+        document.addEventListener('pointercancel', pekerSlipp);
       });
-      kort.addEventListener('pointermove', function (e) { flytt(e.clientX, e.clientY, e); });
-      kort.addEventListener('pointerup', slipp);
-      kort.addEventListener('pointercancel', slipp);
       // Etter en sveip ligger det an til et klikk på det som var under fingeren.
       // Uten dette åpner/lukker en sveip tilfeldige detaljer på veien.
       kort.addEventListener('click', function (e) {

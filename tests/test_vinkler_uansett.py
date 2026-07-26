@@ -112,7 +112,7 @@ def test_saker_redaktoren_sier_nei_til_faar_likevel_vinkler(ki):
     for c in saker:
         assert c.editor.get("is_story") is False, "testen måler ikke det den tror"
         assert c.angles, f"{c.key} fikk ingen vinkler selv om redaktøren bare var skeptisk"
-        assert len(c.angles) >= 2, "minst to overskrifter per sak var kravet"
+        assert len(c.angles) == 2, "to overskrifter per sak var kravet"
 
 
 def test_journalisten_faar_vite_at_redaktoren_sa_nei(ki):
@@ -181,17 +181,28 @@ def test_fullt_grunnlag_gir_ingen_falsk_advarsel(ki):
 # ── Titlene: reglene som skal gi noe man faktisk stopper for ────────────────
 
 
-def test_tittelreglene_staar_i_alle_promptene():
-    """Reglene ligger i _FELLES nettopp for at ingen agent skal kunne levere en
-    tittel uten dem. Faller de ut av én prompt, blir det den agenten som lager
-    «Økning i antall arbeidsledige»."""
+def test_tittelreglene_naar_agentene_som_skriver_titler():
+    """Faller reglene ut av én prompt, blir det den agenten som lager «Økning i
+    antall arbeidsledige».
+
+    Journalisten får hele blokka — han er den som faktisk leverer titlene.
+    Redaktøren får kortversjonen: han skriver bare en arbeidstittel journalisten
+    uansett erstatter, og de 440 tokenene vi sparer der er nettopp det som gjorde
+    at journalistkallet fikk plass under Groqs minuttak."""
     from app import prompts
 
-    for p in (prompts.EDITOR_SYSTEM, prompts.JOURNALIST_ANGLES_SYSTEM,
-              prompts.JOURNALIST_BATCH_SYSTEM, prompts.EDITOR_BATCH_SYSTEM):
+    for p in (prompts.JOURNALIST_ANGLES_SYSTEM, prompts.JOURNALIST_BATCH_SYSTEM):
         assert "TRE KRAV TIL EN TITTEL" in p
         assert "FORBUDTE AAPNINGER" in p
         assert "TEST TITTELEN SELV" in p
+
+    for p in (prompts.EDITOR_SYSTEM, prompts.EDITOR_BATCH_SYSTEM):
+        assert "SKARPT:" in p and "aktivt verb" in p
+        assert "Setter soekelys paa" in p
+
+    # Analytikeren skriver ingen tittel og skal ikke betale for reglene.
+    assert "FORBUDTE AAPNINGER" not in prompts.ANALYST_SYSTEM
+    assert "SKARPT:" not in prompts.ANALYST_SYSTEM
 
 
 def test_siden_viser_titler_og_utkastknapp_paa_en_vraket_sak(tmp_path, monkeypatch):
@@ -245,4 +256,5 @@ def test_batchprompten_krever_vinkler_ogsaa_paa_nei_saker():
     from app import prompts
 
     assert "ogsaa de redaktoeren sa NEI til" in prompts.JOURNALIST_BATCH_SYSTEM
+    assert "Noeyaktig TO overskrifter" in prompts.JOURNALIST_BATCH_SYSTEM
     assert "SVAKHETER I GRUNNLAGET" in prompts.JOURNALIST_BATCH_SYSTEM

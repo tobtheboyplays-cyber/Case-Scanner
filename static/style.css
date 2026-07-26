@@ -314,8 +314,15 @@ summary:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 1
 .empty-inline p { margin: 4px 0; }
 
 /* Rolig innfade - ingen bevegelse for de som har skrudd det av */
+/* `backwards`, IKKE `both`. Med `both` beholder animasjonen sluttilstanden sin
+   for alltid - og sluttilstanden er `transform: none`. En kjorende eller fylt
+   CSS-animasjon slaar inline style, saa transformen sveipen setter i JS ble
+   overstyrt permanent: kortet flyttet seg ALDRI, uansett hvor langt man dro.
+   Verifisert i Chromium 26.07.2026 - inline transform sa translateX(-468px)
+   mens den brukte verdien sto paa matrix(1,0,0,1,0,0).
+   `backwards` gir samme innfade, men slipper elementet naar den er ferdig. */
 @media (prefers-reduced-motion: no-preference) {
-  .panel, .lead, .kpi { animation: rise .32s ease both; }
+  .panel, .lead, .kpi { animation: rise .32s ease backwards; }
   @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 }
 
@@ -1454,7 +1461,10 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 /* Trappet forsinkelse, så de lander etter hverandre i stedet for samtidig —
    det er den bevegelsen som leser som «resultatene kommer inn». */
 .ferskt .prio-row, .ferskt .lead, .ferskt .hend {
-  animation: flyt-opp .5s cubic-bezier(.2, .8, .3, 1) both;
+  /* `backwards` av samme grunn som `rise` over: `both` ville laast
+     `transform: none` paa kortene og gjort sveipen usynlig etter et ferskt
+     skann - altsaa nettopp naar han bruker den mest. */
+  animation: flyt-opp .5s cubic-bezier(.2, .8, .3, 1) backwards;
 }
 @keyframes flyt-opp {
   from { opacity: 0; transform: translateY(22px); }
@@ -1494,7 +1504,21 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
   opacity: 0; transition: opacity .15s ease; pointer-events: none;
 }
 .lead.mot-venstre .swipe-merke { opacity: 1; }
-.lead.sveipet-bort { transform: translateX(-115%) rotate(-9deg) !important; opacity: 0; }
+/* Kastet og krympingen styres fra JS, fordi avstanden må regnes ut fra kortets
+   egen posisjon for å garantert komme HELT ut av skjermkanten. Her ligger bare
+   overgangen plassen lukker seg med. Eieren 26.07.2026: «Slett-animasjonen være
+   smooth slik man kaster ut saken. Den krymper, så kaster du den ut av
+   skjermen.» */
+.lead.swipe-kort.krymper {
+  transition: height 300ms cubic-bezier(.4, 0, .2, 1),
+              margin 300ms cubic-bezier(.4, 0, .2, 1),
+              padding 300ms cubic-bezier(.4, 0, .2, 1),
+              border-width 300ms cubic-bezier(.4, 0, .2, 1),
+              opacity 220ms ease-out;
+  pointer-events: none;
+}
+/* Beholdt for bakoverkompatibilitet med lagrede sider; JS bruker den ikke mer. */
+.lead.sveipet-bort { transform: translateX(-115%) rotate(-9deg); opacity: 0; }
 
 /* Bekreftelsen. Eieren ba om «sikker?» MED en «ikke spør igjen»-boks. */
 .fjern-dialog {
@@ -1525,5 +1549,72 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
   background: var(--red); border-color: var(--red); color: #fff; font-weight: 600;
 }
 @media (prefers-reduced-motion: reduce) {
-  .fjern-dialog, .lead.swipe-kort { animation: none; transition: none; }
+  .fjern-dialog, .lead.swipe-kort { animation: none; }
+  /* Plassen skal fortsatt lukke seg, men raskt og uten kast. */
+  .lead.swipe-kort.krymper { transition: height 1ms linear; }
 }
+
+/* Bakgrunn nederst i kortet: redaktørdommen og sjekklista.
+   Eieren 26.07.2026: «Husk nå først faktaen eller tallene du har funnet. Så
+   forslags titler, så velger han en og spør om utkast fra den tittelen.»
+   Begge sto før MELLOM tallet og titlene og dyttet det viktigste nedover. */
+.ai-bakgrunn { margin-top: 10px; }
+.ai-bakgrunn > summary {
+  cursor: pointer; list-style: none; font-size: 12.5px; color: var(--muted);
+  padding: 8px 0; min-height: 34px; display: flex; align-items: center; gap: 6px;
+}
+.ai-bakgrunn > summary::-webkit-details-marker { display: none; }
+.ai-bakgrunn > summary::before { content: '▸'; transition: transform .15s ease; }
+.ai-bakgrunn[open] > summary::before { transform: rotate(90deg); }
+.ai-bakgrunn > summary:hover { color: var(--text); }
+.ai-bakgrunn > *:not(summary) { font-size: 13px; line-height: 1.5; margin: 6px 0; }
+.ai-bakgrunn .ai-dom { font-weight: 600; color: var(--text); }
+@media (prefers-reduced-motion: reduce) {
+  .ai-bakgrunn > summary::before { transition: none; }
+}
+
+/* ── Publiserte saker ─────────────────────────────────────────────────────── */
+/* Eieren 26.07.2026: «Jeg vil at han skal kunne lagre det han legger ut. Så en
+   helt ny side ... der det er en tom side, står legg til, så kommer opp Legg
+   inn URL.» Derfor: knapp først, feltet etterpå — ikke et skjema som møter deg. */
+.pub-legg { margin: 4px 0 18px; }
+.pub-legg > summary {
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; list-style: none; min-height: 44px; padding: 0 20px;
+}
+.pub-legg > summary::-webkit-details-marker { display: none; }
+.pub-legg[open] > summary { margin-bottom: 12px; }
+.pub-form {
+  display: grid; gap: 6px; max-width: 560px; padding: 16px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+}
+.pub-label { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+.pub-valgfri { opacity: .7; }
+.pub-input {
+  min-height: 44px; padding: 10px 12px; font-size: 15px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+}
+.pub-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pub-form .btn-primary { margin-top: 12px; min-height: 44px; }
+.pub-feil {
+  margin: 0 0 14px; padding: 10px 14px; border-radius: 10px; font-size: 13.5px;
+  background: rgba(224, 87, 76, .14); color: var(--red);
+  border: 1px solid rgba(224, 87, 76, .4);
+}
+.pub-teller { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
+.pub-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.pub-rad {
+  display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+}
+.pub-tekst { flex: 1; min-width: 0; }
+.pub-tittel {
+  color: var(--text); font-weight: 600; font-size: 15px; line-height: 1.35;
+  text-decoration: none; overflow-wrap: anywhere;
+}
+.pub-tittel:hover { color: var(--accent); }
+.pub-meta { display: flex; gap: 10px; margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.pub-domene { color: var(--accent); }
+.pub-notat { margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.pub-slett .btn-small { min-width: 40px; min-height: 40px; }

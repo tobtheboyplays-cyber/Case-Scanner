@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Publisert · Case-radar</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%A1%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">📰</span>
+    <div>
+      <h1>Publisert</h1>
+      {# Hele poenget med sida, sagt i én linje: dette er fasiten paa hva
+         verktoyet faktisk har gitt. Radaren og «Lagret» er saker som KAN bli
+         noe; her staar de som ble det. #}
+      <p class="tagline">Sakene som kom på trykk — lim inn lenka så vet du hva
+        radaren faktisk ga deg</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <a class="btn-ghost" href="/">← Radar</a>
+    <a class="btn-ghost" href="/godkjente">📁 Lagret</a>
+    <a class="btn-ghost" href="/kalender">🗓 Kalender</a>
+  </div>
+</header>
+
+<main class="maincol" style="padding: 12px 32px 40px;">
+  {% if feil %}
+  <p class="pub-feil" role="alert">⚠ {{ feil }}</p>
+  {% endif %}
+
+  {# Skjemaet ligger i en <details> som er lukket til vanlig. Eieren ba om «en
+     tom side der det står Legg til, så kommer opp Legg inn URL» - altsaa én
+     knapp foerst, feltet etterpaa. Er lista tom, staar det aapent, for da er det
+     ingenting annet aa gjore paa sida. #}
+  <details class="pub-legg" {% if not saker %}open{% endif %}>
+    <summary class="btn-primary pub-legg-knapp">+ Legg til</summary>
+    <form method="post" action="/publisert" class="pub-form">
+      <label class="pub-label" for="pub-url">Lim inn URL</label>
+      {# type="text", IKKE type="url". Nettleseren blokkerer «aftenbladet.no/i/x»
+         med type="url" fordi skjemaet mangler - og det er nettopp det man limer
+         inn når man kopierer halvveis. Verifisert i Chromium 26.07.2026: skjemaet
+         ble aldri sendt, og siden så uendret ut. Serveren legger på https:// selv
+         og sier tydelig ifra hvis det ikke er en adresse i det hele tatt. #}
+      <input class="pub-input" id="pub-url" name="url" type="text" required
+             inputmode="url" autocomplete="off" spellcheck="false"
+             placeholder="aftenbladet.no/i/... eller hele lenka" />
+      <label class="pub-label" for="pub-tittel">Tittel <span class="pub-valgfri">(valgfritt)</span></label>
+      <input class="pub-input" id="pub-tittel" name="tittel" type="text"
+             placeholder="Slik den står på trykk" />
+      <label class="pub-label" for="pub-notat">Notat <span class="pub-valgfri">(valgfritt)</span></label>
+      <input class="pub-input" id="pub-notat" name="notat" type="text"
+             placeholder="F.eks. hvilket funn fra radaren den kom av" />
+      <button class="btn-primary" type="submit">Lagre saken</button>
+    </form>
+  </details>
+
+  {% if not saker %}
+    <section class="empty">
+      <h2>Ingen publiserte saker ennå</h2>
+      <p>Når du har fått en sak på trykk, lim inn lenka her. Da bygger du opp en
+        liste over hva Case-radar faktisk har gitt deg.</p>
+    </section>
+  {% else %}
+    <p class="pub-teller">{{ saker|length }} sak{{ 'er' if saker|length != 1 }} publisert</p>
+    <ul class="pub-liste">
+      {% for s in saker %}
+      <li class="pub-rad">
+        <div class="pub-tekst">
+          <a class="pub-tittel" href="{{ s.url }}" target="_blank" rel="noopener">
+            {{ s.tittel or s.url }} ↗</a>
+          <p class="pub-meta">
+            <span class="pub-domene">{{ s.domene }}</span>
+            <span class="pub-dato">{{ s.lagt_inn[:10] }}</span>
+          </p>
+          {% if s.notat %}<p class="pub-notat">{{ s.notat }}</p>{% endif %}
+        </div>
+        <form method="post" action="/publisert/{{ s.id }}/slett" class="pub-slett">
+          <button class="btn-small" type="submit" aria-label="Fjern denne">✕</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</main>
+</body>
+</html>

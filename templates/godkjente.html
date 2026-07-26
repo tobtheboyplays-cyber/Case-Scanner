@@ -23,6 +23,7 @@
   <div class="top-actions">
     <a class="btn-ghost" href="/">← Radar</a>
     <a class="btn-ghost" href="/kalender">🗓 Kalender</a>
+    <a class="btn-ghost" href="/publisert">📰 Publisert{% if publisert_antall %} ({{ publisert_antall }}){% endif %}</a>
     {% if viser_arkiv %}
       <a class="btn-ghost" href="/godkjente">📁 Lagrede</a>
     {% elif antall_arkiverte %}

@@ -17,7 +17,12 @@ import json
 from collections.abc import Callable
 
 from app import llm, prompts, storage, verify
-from app.config import EDITOR_CAP, JOURNALIST_CAP, KI_BUDSJETT_TOKENS
+from app.config import (
+    EDITOR_CAP,
+    JOURNALIST_CAP,
+    KI_BUDSJETT_TOKENS,
+    KI_RESERVE_JOURNALIST,
+)
 from app.models import Case
 
 
@@ -34,20 +39,36 @@ class Budsjett:
     noekkel - da er alt maler uansett, og «kø» ville vaert en loegn).
     """
 
-    def __init__(self, tokens: int) -> None:
+    def __init__(self, tokens: int, reservert: int = 0) -> None:
         self.start = max(0, tokens)
         self.igjen = self.start
         self.i_ko = 0
+        # Holdt av til journalisten. Se `be_om(..., er_journalisten=True)`.
+        #
+        # Aldri mer enn HALVE budsjettet: en reserve stoerre enn potten ville satt
+        # analytikeren og redaktoeren i koe fra foerste kall, og da er det ikke
+        # lenger en prioritering - det er en avslaatt KI. Settes budsjettet lavt i
+        # en miljoevariabel, skal reserven krympe med det.
+        self.reservert = min(max(0, reservert), self.start // 2)
 
     @property
     def aktivt(self) -> bool:
         return self.start > 0
 
-    def be_om(self, system: str, user: str, max_tokens: int) -> bool:
-        """Er det plass til dette kallet? Trekker fra hvis ja, teller kø hvis nei."""
+    def be_om(
+        self, system: str, user: str, max_tokens: int, *, er_journalisten: bool = False
+    ) -> bool:
+        """Er det plass til dette kallet? Trekker fra hvis ja, teller kø hvis nei.
+
+        `er_journalisten` gir tilgang til reserven. Uten den kunne analytikeren og
+        redaktoeren spise hele budsjettet foer vinklene skulle lages - og det var
+        noeyaktig det som skjedde: eieren fikk saker uten en eneste forslagstittel.
+        Vinklene er hele poenget med verktoyet; rangeringen er det ikke.
+        """
         if not self.aktivt:
             return True
-        if self.igjen <= 0:
+        gulv = 0 if er_journalisten else self.reservert
+        if self.igjen - gulv <= 0:
             self.i_ko += 1
             return False
         # Foerste kall slipper alltid gjennom selv om anslaget er stoerre enn
@@ -120,9 +141,9 @@ def analyst_pick(cases: list[Case], budsjett: Budsjett | None = None) -> dict[st
     ]
     user = "Funn:\n" + json.dumps(payload, ensure_ascii=False)
     result = None
-    if budsjett is None or budsjett.be_om(prompts.ANALYST_SYSTEM, user, 1200):
+    if budsjett is None or budsjett.be_om(prompts.ANALYST_SYSTEM, user, 450):
         result = llm.complete_json(
-            prompts.ANALYST_SYSTEM, user, model=llm.MODEL_ANALYST, max_tokens=1200
+            prompts.ANALYST_SYSTEM, user, model=llm.MODEL_ANALYST, max_tokens=450
         )
     # `isinstance`-vakten er ikke pynt: _extract_json kan returnere en LISTE hvis
     # modellen svarer med `[...]`, og da ville `result.get` kastet AttributeError
@@ -172,7 +193,9 @@ def editor_judge_batch(
         + f"\n\nVurder ALLE {len(saker)} funnene over, hver for seg. "
         "Bruk sakens id noeyaktig som den staar etter «=== SAK »."
     )
-    tak = max(1000, 500 * len(saker))
+    # Redaktoerdommen er sju korte felt per sak - rundt 200 tokens. 350 er
+    # fortsatt romslig, og de 150 vi sparer per sak gaar til journalisten.
+    tak = max(700, 300 * len(saker))
 
     if budsjett is not None and not budsjett.be_om(prompts.EDITOR_BATCH_SYSTEM, user, tak):
         return {}, True          # ikke forsoekt - koe, ikke feil
@@ -297,12 +320,14 @@ def journalist_angles_batch(
         + f"\n\nLever vinkler for ALLE {len(saker)} sakene over. "
         "Bruk sakens id noeyaktig som den staar etter «=== SAK »."
     )
-    # Rundt 900 tokens per sak til svaret, med et gulv saa én sak ikke blir
-    # kvalt av et for lite tak.
-    tak = max(1600, 900 * len(saker))
+    # Taket teller MED i tokenanslaget, saa et rundhaandet tak koster kvote selv
+    # naar modellen svarer kort. Maalt paa ekte svar: en vinkel med tittel, pitch,
+    # kilder og risiko lander rundt 130 tokens, saa TO vinkler per sak er ~270.
+    # 450 gir god margin; 900 var ren luft vi betalte for i hvert eneste skann.
+    tak = max(1000, 450 * len(saker))
 
     if budsjett is not None and not budsjett.be_om(
-        prompts.JOURNALIST_BATCH_SYSTEM, user, tak
+        prompts.JOURNALIST_BATCH_SYSTEM, user, tak, er_journalisten=True
     ):
         return {}, True          # ikke forsoekt - koe, ikke feil
 
@@ -328,14 +353,16 @@ def journalist_angles_batch(
         if rene:
             for a in rene:
                 a["mode"] = "llm"
-            ut[key] = rene[:3]
+            # TO forslag, ikke tre. Eierens beslutning 26.07.2026: tallet foerst,
+            # to skarpe titler, saa velger han én og ber om utkast fra den.
+            ut[key] = rene[:2]
     return ut, True
 
 
 def journalist_angles(
     case: Case, editor: dict, budsjett: Budsjett | None = None
 ) -> list[dict]:
-    """Tre KORTE vinkelforslag - ingen artikkel enda.
+    """To KORTE vinkelforslag - ingen artikkel enda.
 
     Bevisst lat: aa skrive tre fulle artikler for hver sak ved hvert skann brenner
     kvote paa saker som aldri blir aapnet, og gjor skannet tregt. Artikkelen skrives
@@ -353,7 +380,7 @@ def journalist_angles(
         f"  Arbeidstittel: {editor.get('headline', case.title)}\n"
         f"  Oppdrag: {editor.get('angle', case.angle)}\n"
         f"  Forbehold aa ta hensyn til: {editor.get('forbehold', '-')}\n\n"
-        "Foreslaa tre ulike vinkler. Ikke skriv artikkelen."
+        "Foreslaa to ulike vinkler. Ikke skriv artikkelen."
     )
     if budsjett is not None and not budsjett.be_om(
         prompts.JOURNALIST_ANGLES_SYSTEM, user, 1400
@@ -371,7 +398,7 @@ def journalist_angles(
         if clean:
             for a in clean:
                 a["mode"] = "llm"
-            return clean[:3]
+            return clean[:2]
     return []          # KI-en leverte ikke - da leverer vi ingenting
 
 
@@ -475,7 +502,10 @@ def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> 
     # Budsjettet gjelder bare naar det FINNES en noekkel. Uten noekkel er alt
     # maler uansett, og da ville «i kø» vaert en loegn - det staar ingenting i
     # kø, det finnes bare ikke noen KI.
-    budsjett = Budsjett(KI_BUDSJETT_TOKENS if has_key else 0)
+    budsjett = Budsjett(
+        KI_BUDSJETT_TOKENS if has_key else 0,
+        reservert=KI_RESERVE_JOURNALIST if has_key else 0,
+    )
     hurtiglager = storage.ki_hent([c.key for c in cases]) if has_key else {}
 
     def tell(fikk_llm: bool) -> None:
