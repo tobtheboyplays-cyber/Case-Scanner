@@ -1618,3 +1618,27 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .pub-domene { color: var(--accent); }
 .pub-notat { margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
 .pub-slett .btn-small { min-width: 40px; min-height: 40px; }
+
+/* Løftet kort: plukket opp med et langt trykk, klart til å flyttes.
+   `touch-action: none` er det avgjørende — uten den eier nettleseren den
+   loddrette bevegelsen, og vertikale pointermove blir aldri levert til oss.
+   Den kan bare settes mens fingeren står stille, altså fra et langt trykk. */
+.lead.swipe-kort.loftet {
+  touch-action: none;
+  z-index: 5;
+  box-shadow: 0 14px 38px rgba(0, 0, 0, .5);
+  cursor: grabbing;
+}
+.loft-hint {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  z-index: 70; max-width: min(420px, calc(100vw - 32px));
+  margin: 0; padding: 11px 18px; border-radius: 22px;
+  background: var(--panel); border: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  font-size: 13px; color: var(--text); text-align: center; line-height: 1.4;
+  animation: hint-inn .18s ease both;
+}
+.loft-hint[hidden] { display: none; }
+@keyframes hint-inn { from { opacity: 0; transform: translate(-50%, 8px); }
+                      to   { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) { .loft-hint { animation: none; } }

@@ -1,16 +1,17 @@
-"""Rekkefolgen på forsiden: egne funn før gjenbruk.
+"""Rekkefølgen på forsiden: primærkilder først.
 
-Bakgrunn, meldt av eieren 26.07.2026: «Nå bruker den plutselig Aftenposten og
-Bergens Tidende som kilder, og den ga fram like mange saker som før.»
+Eieren meldte det to ganger. Først 26.07.2026: «Nå bruker den plutselig
+Aftenposten og Bergens Tidende som kilder.» Da demoterte jeg dem bare. Så, samme
+dag: «Alt slikt dropper vi. Den skal bruke kilder som kan LAGE artikler, ikke
+artikler for å lage artikler. De skal være først.»
 
-Han hadde rett, og årsaken var mekanisk. `schibsted.py` lager nøkkelen av
-artikkeloverskriften, og RSS-feeder bytter overskrifter hele tiden — så hver
-gjenbrukssak var teknisk «aldri sett før» ved hvert eneste skann. Med `er_ny`
-som primær sorteringsnøkkel la de seg dermed øverst hver gang, og SSB-funnene
-sank så snart de var sett én gang.
+Den andre meldingen er den som gjelder: avis-RSS er slettet som lead-kilde, ikke
+skrudd av. Det som er igjen er råstoff ingen har skrevet ut ennå — SSB-tall og
+Brønnøysund-hendelser — og de rangerer likt på toppen. Google Trends er et
+signal om hva folk søker på, og ligger under.
 
-Det er verktøyets forsprang som forsvant: originale tall ingen har skrevet om,
-byttet ut med nasjonale overskrifter som allerede er publisert.
+Avisartikler brukes fortsatt ett sted: dekningssjekken, som svarer «har noen
+allerede skrevet dette?». Det er å bruke dem som fasit, ikke som råstoff.
 """
 
 from __future__ import annotations
@@ -52,35 +53,21 @@ def scan(tmp_path, monkeypatch):
     return kjor
 
 
-def test_ssb_funn_ligger_foran_gjenbruk_fra_soesteraviser(scan):
-    """Kjernen. Et SSB-funn slår en Aftenposten-sak selv om avissaken scorer
-    høyere — den er allerede publisert, og da er den ikke journalistens sak."""
+def test_primaerkilder_ligger_foran_grasrot(scan):
+    """Kjernen. Et SSB-tall og et konkursvedtak er råstoff ingen har skrevet ut;
+    et Google Trends-søk er et signal om hva folk lurer på. Råstoffet først —
+    også når signalet scorer høyere."""
     rekkefolge = scan([
-        sak("schibsted:Aftenposten:Noe stort", "schibsted", 99.0),
-        sak("schibsted:Bergens Tidende:Noe annet", "schibsted", 98.0),
-        sak("ssb:12345", "data", 20.0),
+        sak("trend:noe-folk-soker-paa", "grasrot", 99.0),
+        sak("brreg:konkurs:921456875", "hendelse", 20.0),
+        sak("ssb:12345", "data", 18.0),
     ])
-    assert rekkefolge[0] == "ssb:12345", f"gjenbruk kom først: {rekkefolge}"
+    assert rekkefolge[0] in ("brreg:konkurs:921456875", "ssb:12345"), rekkefolge
+    assert rekkefolge[-1] == "trend:noe-folk-soker-paa", rekkefolge
 
 
-def test_gjenbrukssaker_regnes_aldri_som_nye(scan):
-    """Selve feilen. Nøkkelen deres er laget av overskriften, så de er «aldri
-    sett før» ved hvert skann. Hadde de fått ny-løftet, ville de ligget øverst
-    for alltid — uansett hvor mange ganger han trykket søk."""
-    import app.main as m
-
-    scan([sak("ssb:1", "data", 10.0, verdi="+1 %")])
-
-    # Andre skann: SSB-saken har NYTT tall (ellers skjules den som uendret), og
-    # Schibsted-saken har fersk overskrift.
-    andre = scan([
-        sak("ssb:1", "data", 10.0, verdi="+9 %"),
-        sak("schibsted:Aftenposten:Helt fersk overskrift", "schibsted", 90.0),
-    ])
-    lagret = {c["key"]: c for c in m.load_latest()["cases"]}
-    assert lagret["schibsted:Aftenposten:Helt fersk overskrift"]["er_ny"] is False, \
-        "gjenbrukssaken ble merket NY — da tar RSS-churn over forsiden"
-    assert andre[0] == "ssb:1", f"SSB-funnet mistet førsteplassen: {andre}"
+# Selve kilderegelen - at avis-RSS ikke finnes som lead-kilde i det hele tatt -
+# voktes i tests/test_kilder.py. Her handler det bare om rekkefølgen.
 
 
 def test_uendret_tall_kommer_ikke_tilbake(scan):

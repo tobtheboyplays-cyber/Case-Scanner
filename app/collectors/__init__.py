@@ -18,7 +18,6 @@ from collections.abc import Callable
 from app.collectors import (
     google_trends,
     reddit,
-    schibsted,
     ssb,
     ssb_flytting,
     ssb_kalender,
@@ -76,14 +75,20 @@ def collect_all(
     except Exception as exc:  # noqa: BLE001
         status.append(f"[FEIL] SSB-soek: {exc}")
 
-    # 1c) Schibsted-soesteraviser - gjenbruks-leads (Case-objekter)
-    meld("Schibsted-søsteraviser")
-    try:
-        cases, notes = schibsted.collect()
-        ssb_cases.extend(cases)
-        status.extend(notes)
-    except Exception as exc:  # noqa: BLE001
-        status.append(f"[FEIL] Schibsted: {exc}")
+    # Her laa det EN GANG en kollektor som hentet saker fra Aftenposten, Bergens
+    # Tidende og E24 og gjorde dem til leads. Den er slettet, ikke skrudd av.
+    #
+    # Eieren 26.07.2026: «Den skal bruke kilder som kan LAGE artikler, ikke
+    # artikler for aa lage artikler.» En avissak er noen andres ferdige jobb; en
+    # SSB-tabell og et konkursvedtak er raastoff ingen har skrevet ut enda.
+    #
+    # Det kostet ogsaa mer enn plass: redaktoer og journalist rekker fire saker
+    # per skann, og hver gjenbrukte avissak stjal en av de fire plassene fra et
+    # ekte funn.
+    #
+    # Avisartikler brukes fortsatt ETT sted - i dekningssjekken (coverage.py),
+    # som svarer «har noen allerede skrevet dette?». Det er aa bruke dem som
+    # fasit, ikke som raastoff, og det er riktig bruk.
 
     # 2) Grasrot-signaler (klynges i scoring). Reddit er av som standard - se
     # config.ENABLE_REDDIT for hvorfor.

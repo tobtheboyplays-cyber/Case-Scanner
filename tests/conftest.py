@@ -27,7 +27,7 @@ def isolert_database(tmp_path, monkeypatch):
 # Kollektorer som gjør HTTP-kall. Hver av dem gjør `from ...base import http_get`,
 # så navnet må patches i DERES modul — å patche base-modulen treffer ikke.
 _NETTKOLLEKTORER = (
-    "brreg", "coverage", "news_rss", "reddit", "schibsted",
+    "brreg", "coverage", "news_rss", "reddit",
     "ssb", "ssb_flytting", "ssb_kalender", "ssb_sok",
 )
 

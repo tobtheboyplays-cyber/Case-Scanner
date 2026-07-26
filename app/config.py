@@ -412,15 +412,12 @@ COVERAGE_LOOKBACK_DAYS = 90      # ~3 maaneder: "har noen skrevet dette nylig?"
 COVERAGE_YELLOW_MIN = 1          # 1-3 ferske treff => delvis dekket (gul)
 COVERAGE_RED_MIN = 4             # >=4 ferske treff => allerede dekket (rod)
 
-# === Schibsted-soesteraviser: idé-tyveri + sjekk at Aftenbladet ikke har skrevet ===
-# Aftenbladet er Schibsted. Vi henter saker fra soesteraviser (ikke Stavanger) og
-# ser om temaet kan gjenbrukes lokalt - forutsatt at Aftenbladet ikke har dekket det.
-ENABLE_SCHIBSTED = os.getenv("CASE_RADAR_ENABLE_SCHIBSTED", "true").lower() == "true"
-SCHIBSTED_FEEDS: list[dict] = [
-    {"name": "Aftenposten", "url": "https://www.aftenposten.no/rss"},
-    {"name": "Bergens Tidende", "url": "https://www.bt.no/rss"},
-    {"name": "E24", "url": "https://e24.no/rss"},
-]
+# Aftenbladet-navnet brukes av DEKNINGSSJEKKEN (coverage.py): har de allerede
+# skrevet om dette temaet? Det er den eneste lovlige bruken av avisartikler her.
+#
+# Feedene til Aftenposten, Bergens Tidende og E24 sto her og laget LEADS. De er
+# fjernet 26.07.2026 - se app/collectors/__init__.py for hvorfor. Kort: verktoyet
+# skal bruke kilder som kan LAGE artikler, ikke artikler for aa lage artikler.
 AFTENBLADET_NAME = "Stavanger Aftenblad"
 ENABLE_COVERAGE = os.getenv("CASE_RADAR_ENABLE_COVERAGE", "true").lower() == "true"
 ENABLE_SSB = os.getenv("CASE_RADAR_ENABLE_SSB", "true").lower() == "true"

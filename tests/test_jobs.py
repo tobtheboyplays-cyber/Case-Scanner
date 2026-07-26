@@ -673,7 +673,7 @@ def test_reddit_er_av_og_sier_hvorfor(klient, monkeypatch):
     kalt = []
     monkeypatch.setattr(collectors.reddit, "collect", lambda: kalt.append(1) or ([], []))
     monkeypatch.setattr(collectors.google_trends, "collect", lambda: ([], []))
-    for navn in ("ssb", "ssb_flytting", "ssb_sok", "schibsted"):
+    for navn in ("ssb", "ssb_flytting", "ssb_sok"):
         monkeypatch.setattr(getattr(collectors, navn), "collect", lambda: ([], []))
 
     _, _, status = collectors.collect_all()

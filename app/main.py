@@ -6,6 +6,7 @@ Kjor:  uv run uvicorn app.main:app --reload
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import re
 import threading
 from calendar import monthrange
@@ -78,8 +79,45 @@ MONTHS_NO = [
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 app = FastAPI(title="Case-radar", version=__version__)
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+
+
+def _css_versjon() -> str:
+    """Kort hash av style.css, brukt som `?v=` paa lenka til den.
+
+    Dette er ikke pynt - det er en feil som allerede har rammet eieren. Hele
+    fiksen som gjorde sveipen synlig laa i CSS, og CSS-en er en EGEN fil uten
+    cache-buster. JS-en ligger inline i dashboard.html og oppdateres ved hver
+    sidelast; CSS-en gjorde det ikke. Foran appen staar en Cloudflare-tunnel som
+    cacher statiske filer hardt, og en pull-to-refresh henter HTML - ikke en
+    cachet CSS-fil. Resultat: ny kode, gammel CSS, og en sveip som fortsatt var
+    usynlig.
+
+    Innholdshash og ikke versjonsnummer, fordi den da buster seg selv hver eneste
+    gang fila endres. `__version__` sto paa 0.1.0 gjennom hele arbeidet - et
+    versjonsnummer noen maa huske aa bumpe er ingen garanti.
+
+    md5 fordi det er kort og raskt. Ingen sikkerhetsrolle: dette skal skille to
+    versjoner av en stilfil, ikke motstaa noen.
+    """
+    try:
+        raa = (BASE_DIR / "static" / "style.css").read_bytes()
+    except OSError:
+        return "0"
+    return hashlib.md5(raa, usedforsecurity=False).hexdigest()[:8]
+
+
+CSS_V = _css_versjon()
+
+# Lang max-age er trygt NETTOPP fordi URL-en endrer seg med innholdet. Uten
+# hashen over ville dette gjort problemet permanent i stedet for aa loese det.
+app.mount(
+    "/static",
+    StaticFiles(directory=BASE_DIR / "static"),
+    name="static",
+)
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+# Global, saa ingen sidevisning kan glemme aa sende den med.
+templates.env.globals["css_v"] = CSS_V
 
 
 def kortkilde(navn: str) -> str:
@@ -103,6 +141,92 @@ def kortkilde(navn: str) -> str:
 
 
 templates.env.filters["kortkilde"] = kortkilde
+
+
+# Hvor mange broennoeysund-hendelser som blir SAKER. Resten staar fortsatt i
+# «hva som kommer»-fanen. Taket finnes fordi redaktoer og journalist bare rekker
+# fire saker per skann: slipper vi inn 40 konkurser, druknr SSB-funnene i dem, og
+# da har vi byttet ett problem mot et annet.
+HENDELSER_SOM_SAKER = 6
+
+
+def _hendelse_tittel(h: dict) -> str:
+    """«Ekte Kafe As gikk konkurs» - lesbart, uten aa paastaa noe som ikke staar."""
+    navn = h.get("navn") or "Foretak uten navn"
+    return {
+        "konkurs": f"{navn} har gaatt konkurs",
+        "avvikling": f"{navn} er under avvikling",
+        "nytt": f"{navn} er registrert i Stavanger-omraadet",
+    }.get(h.get("type", ""), navn)
+
+
+def _hendelse_finding(h: dict) -> str:
+    """Selve faktumet, i klartekst - det KI-agentene faar som eneste grunnlag.
+
+    Regnskapstallene er det som gjoer en konkurs til en SAK i stedet for et navn:
+    «Firma X gikk konkurs» er en notis, «Firma X omsatte for 4,1 millioner og gikk
+    med underskudd aaret foer» er noe en journalist kan ringe paa."""
+    deler = [_hendelse_tittel(h) + "."]
+    if h.get("dato"):
+        deler.append(f"Dato: {h['dato']} ({h.get('dager_siden', '?')} dager siden).")
+    if h.get("kommune"):
+        deler.append(f"Kommune: {h['kommune']}.")
+    if h.get("bransje"):
+        deler.append(f"Bransje: {h['bransje']}.")
+    if isinstance(h.get("ansatte"), int):
+        deler.append(f"Ansatte: {h['ansatte']}.")
+    r = h.get("regnskap") or {}
+    if r.get("omsetning") is not None:
+        deler.append(f"Omsetning {r.get('aar', 'siste aar')}: {r['omsetning']:,.0f} kr."
+                     .replace(",", " "))
+    if r.get("resultat") is not None:
+        deler.append(f"Aarsresultat: {r['resultat']:,.0f} kr.".replace(",", " "))
+    return " ".join(deler)
+
+
+def _hendelse_cases(hendelser: list[dict]) -> list[Case]:
+    """Gjoer broennoeysund-hendelser til leads paa lik linje med SSB-funn.
+
+    Eieren 26.07.2026: verktoyet skal bruke kilder som kan LAGE artikler. En
+    konkurs er akkurat det - et vedtak ingen har skrevet ut enda, med et orgnr
+    man kan slaa opp og et regnskap man kan lese.
+    """
+    ut: list[Case] = []
+    for h in hendelser[:HENDELSER_SOM_SAKER]:
+        orgnr = h.get("orgnr") or ""
+        if not orgnr:
+            continue          # uten orgnr finnes ingen stabil noekkel og ingen lenke
+        r = h.get("regnskap") or {}
+        # Tallet som staar oeverst i kortet: omsetningen naar vi har den, ellers
+        # hvor ferskt vedtaket er. Begge deler er konkret; ingen av dem er gjettet.
+        if r.get("omsetning") is not None:
+            verdi = f"{r['omsetning']:,.0f} kr".replace(",", " ")
+            periode = f"omsetning {r.get('aar', 'siste aar')}"
+        else:
+            verdi = h.get("dato", "")
+            periode = f"{h.get('dager_siden', '?')} dager siden"
+        ut.append(Case(
+            key=f"brreg:{h.get('type', 'hendelse')}:{orgnr}",
+            title=_hendelse_tittel(h),
+            kind="hendelse",
+            geo="lokal",
+            # Vekten fra brreg._hendelse() er allerede journalistisk: publikumsnaere
+            # bransjer og ferske konkurser veier tyngst. Gjenbrukes som score i
+            # stedet for aa finne paa en ny skala.
+            score=float(h.get("vekt", 1)) * 4,
+            topics=["jobb og okonomi"],
+            angle="Ring konkursboet og de ansatte - hva skjer med lokalene og jobbene?",
+            why="Hendelse i naeringslivet lokalt, hentet fra Broennoeysundregistrene.",
+            signals=[],
+            created_at=datetime.now(UTC),
+            finding=_hendelse_finding(h),
+            coverage_query=h.get("navn") or "",
+            data_source="Brønnøysundregistrene",
+            data_url=h.get("lenke", ""),
+            metric_value=verdi,
+            metric_period=periode,
+        ))
+    return ut
 
 
 def run_scan(jobb: jobs.Jobb | None = None) -> dict:
@@ -135,7 +259,32 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
         if not c.coverage_query:
             c.coverage_query = c.title
 
-    cases = ssb_cases + grassroots
+    # Naeringslivet: hva som aapner og hva som gaar under. Hendelser, ikke tall -
+    # saker journalisten kan ringe paa i DAG.
+    #
+    # Denne blokka sto FOER nedenfor KI-flyten, og da var hendelsene bare en liste
+    # i «hva som kommer»-fanen: de rakk verken dekningssjekk, scoring eller
+    # vinkler. Broennoeysund er en primaerkilde - konkursvedtak og nyregistreringer
+    # er raastoff ingen har skrevet ut enda - saa de hoerer hjemme her oppe,
+    # sammen med SSB-tallene. Egen try: en doed kilde skal aldri velte et skann.
+    hendelser: list[dict] = []
+    if ENABLE_BRREG:
+        si("Brønnøysund: konkurser og nyregistreringer")
+        try:
+            hendelser, br_status = brreg.collect()
+            status.extend(br_status)
+            hendelse_cases = _hendelse_cases(hendelser)
+            if hendelse_cases:
+                status.append(
+                    f"Brønnøysund: {len(hendelse_cases)} hendelser lagt inn som saker"
+                )
+        except Exception as exc:  # noqa: BLE001
+            hendelse_cases = []
+            status.append(f"[FEIL] Brønnøysund: {exc}")
+    else:
+        hendelse_cases = []
+
+    cases = ssb_cases + hendelse_cases + grassroots
 
     # Originalitetssjekk: har noen allerede skrevet om dette?
     steg(1)
@@ -199,16 +348,6 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
     except Exception as exc:  # noqa: BLE001
         kommende, _ = [], status.append(f"[FEIL] SSB-kalender: {exc}")
 
-    # Naeringslivet: hva som aapner og hva som gaar under. Hendelser, ikke tall -
-    # saker journalisten kan ringe paa i dag. Egen try av samme grunn som over.
-    hendelser: list[dict] = []
-    if ENABLE_BRREG:
-        try:
-            hendelser, br_status = brreg.collect()
-            status.extend(br_status)
-        except Exception as exc:  # noqa: BLE001
-            status.append(f"[FEIL] Brønnøysund: {exc}")
-
     # Nytt siden sist: samme kilder gir de samme funnene om igjen. Vi markerer hva
     # som ikke er sett foer, skjuler det journalisten allerede har forkastet, og loefter
     # det nye oeverst - saa et nytt soek faktisk gir noe nytt.
@@ -237,21 +376,21 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
         )
 
     for c in cases:
-        # Gjenbruks-leadene fra soesteravisene faar ALDRI «ny»-loeftet, og det er
-        # ikke en smakssak. Noekkelen deres er laget av overskriften
-        # (schibsted.py: «schibsted:<avis>:<tittel>»), og RSS-feeder bytter
-        # overskrifter hele tiden - saa de er teknisk «aldri sett foer» ved hvert
-        # eneste skann. Med er_ny som PRIMAER sorteringsnoekkel la de seg dermed
-        # oeverst hver gang, mens SSB-funnene - som har stabile noekler og er hele
-        # poenget med verktoyet - sank ned saa snart de var sett én gang.
+        # Alle noekler er naa stabile (SSB-tabell + periode, eller orgnr), saa
+        # «ny» betyr det den skal: verktoyet fant noe det ikke hadde foer.
         #
-        # «Ny» skal bety «verktoyet fant noe nytt», ikke «avisa byttet forside».
-        c.er_ny = c.kind != "schibsted" and c.key not in tidligere
+        # Det gjorde den ikke da avis-RSS var en kilde: noekkelen var laget av
+        # overskriften, og feeder bytter overskrifter hele tiden - saa de var
+        # teknisk «aldri sett foer» ved hvert eneste skann og la seg oeverst.
+        c.er_ny = c.key not in tidligere
 
-    # Egne datafunn foer gjenbrukte avissaker. Originalitet er hele forspranget:
-    # et SSB-tall ingen har skrevet om slaar en Aftenposten-sak som allerede er
-    # publisert, uansett hvor godt den scorer.
-    RANG = {"data": 0, "grasrot": 1, "schibsted": 2}
+    # PRIMAERKILDER FOERST. Eieren 26.07.2026: «Kilder som kan lage artikler,
+    # ikke artikler for aa lage artikler - de skal vaere foerst.»
+    #
+    # SSB-tall og Broennoeysund-hendelser er likestilt paa toppen: begge er
+    # raastoff ingen har skrevet ut enda. Google Trends er et signal om hva folk
+    # SOEKER paa - nyttig som bakteppe, men det baerer sjelden en sak alene.
+    RANG = {"data": 0, "hendelse": 0, "grasrot": 1}
     cases.sort(key=lambda c: (RANG.get(c.kind, 1), not c.er_ny, -c.score))
     mark_seen(for_dette_skannet, avtrykk)
     antall_nye = sum(1 for c in cases if c.er_ny)

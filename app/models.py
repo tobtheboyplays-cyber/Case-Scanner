@@ -45,7 +45,10 @@ class Case:
     created_at: datetime
 
     # v2-felter (datadrevne leads + originalitet)
-    kind: str = "grasrot"          # "data" (SSB) | "grasrot" (Trends/Reddit) | "schibsted"
+    # "data"     = SSB-tall (primaerkilde)
+    # "hendelse" = Broennoeysund: konkurs, avvikling, nyregistrering (primaerkilde)
+    # "grasrot"  = Google Trends/Reddit - et signal om hva folk soeker paa
+    kind: str = "grasrot"
     target_relevance: str = ""     # relevans for 20-39: "høy" | "middels" | "lav"
     finding: str = ""              # selve tallet/funnet i klartekst (fullsetning)
     metric_value: str = ""         # kort tall til "Funn"-boksen, f.eks. "−3,4 %"

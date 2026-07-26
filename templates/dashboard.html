@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark light" />
   <title>Case-radar</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%A1%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css?v={{ css_v }}" />
 </head>
 <body{{ ' class="ferskt"'|safe if ferskt }}>
 {% set s = data.summary if data else None %}
@@ -580,6 +580,9 @@
    dette igjen»-boks - han vet at han blir lei den etter tjuende sak. Valget
    lagres lokalt i nettleseren, ikke paa serveren: det er en preferanse for
    HANS telefon, ikke en innstilling verktoyet skal huske for alle. #}
+<p id="loft-hint" class="loft-hint" hidden role="status">
+  Flytt opp eller ned for å endre rekkefølgen · dra til venstre for å fjerne
+</p>
 <div id="fjern-dialog" class="fjern-dialog" hidden role="dialog" aria-modal="true"
      aria-labelledby="fjern-h">
   <div class="fjern-boks">
@@ -849,6 +852,18 @@
       });
     }
 
+    /* Et langt trykk er usynlig til man vet om det. Første gang et kort løftes
+       sier vi hva man nå kan gjøre - én gang, så huskes valget. */
+    var HINT_NOKKEL = 'caseradar-loft-hint-sett';
+    function visLofteHint() {
+      try { if (localStorage.getItem(HINT_NOKKEL) === '1') { return; } } catch (e) { return; }
+      var hint = document.getElementById('loft-hint');
+      if (!hint) { return; }
+      hint.hidden = false;
+      setTimeout(function () { hint.hidden = true; }, 3200);
+      try { localStorage.setItem(HINT_NOKKEL, '1'); } catch (e) { /* privat modus */ }
+    }
+
     /* Rekkefolgen han dro sakene i skal overleve en refresh. Gjor den ikke det,
        er det den samme stille logna som sveipede saker som kom tilbake: han tror
        han har ryddet, og finner rotet igjen. */
@@ -988,11 +1003,36 @@
       // han er vant til.
       var sist_x = 0, sist_t = 0, fart = 0, dy = 0, flyttet_i_lista = false;
       var FLIKK = 0.55;
+      // Langt trykk = plukk opp kortet. Uten dette var flyttingen umulig å
+      // utføre: låsen under krever sidelengs bevegelse FØRST, så drar man rett
+      // ned — den naturlige måten å flytte på — døde gesten. På telefon var den
+      // blokkert en gang til av `touch-action: pan-y`, som gir loddrett
+      // bevegelse til nettleseren, så vertikale pointermove aldri ble levert.
+      var LOFT_MS = 250, loft_timer = null, loftet = false;
+
+      function avbrytLoft() {
+        if (loft_timer) { clearTimeout(loft_timer); loft_timer = null; }
+      }
+
+      function loftOpp() {
+        loft_timer = null;
+        if (!drar || laast) { return; }
+        loftet = true;
+        laast = true;
+        // `touch-action: none` MÅ settes nå, mens fingeren står stille og ingen
+        // scroll er startet. Det er derfor løftet bare kan skje fra et langt
+        // trykk: hadde fingeren allerede beveget seg, ville nettleseren eid
+        // bevegelsen og ikke gitt den fra seg.
+        kort.classList.add('drar', 'loftet');
+        visLofteHint();
+      }
 
       function start(x, y) {
         x0 = x; y0 = y; dx = 0; dy = 0; drar = true; laast = false;
         sist_x = x; sist_t = (window.performance ? performance.now() : Date.now());
-        fart = 0; flyttet_i_lista = false;
+        fart = 0; flyttet_i_lista = false; loftet = false;
+        avbrytLoft();
+        loft_timer = setTimeout(loftOpp, LOFT_MS);
       }
       function flytt(x, y, ev) {
         if (!drar) { return; }
@@ -1000,6 +1040,8 @@
         // Avgjør én gang om dette er en sidelengs sveip eller vanlig scrolling.
         // Uten låsen «henger» kortet fast når man bare vil bla nedover.
         if (!laast) {
+          // Beveger fingeren seg i det hele tatt, er dette ikke et langt trykk.
+          if (Math.abs(ddx) > 10 || Math.abs(ddy) > 10) { avbrytLoft(); }
           if (Math.abs(ddy) > Math.abs(ddx) && Math.abs(ddy) > 10) { drar = false; return; }
           if (Math.abs(ddx) > 10) {
             laast = true;
@@ -1072,9 +1114,11 @@
         return kort.getBoundingClientRect().top - dy - foer;
       }
       function slipp() {
+        avbrytLoft();
         if (!drar && !laast) { return; }
         drar = false;
-        kort.classList.remove('drar', 'mot-venstre');
+        loftet = false;
+        kort.classList.remove('drar', 'mot-venstre', 'loftet');
         // Enten dratt langt nok, ELLER sluppet i full fart mot venstre. Uten
         // flikken må man dra hele veien hver gang, og da blir rydding tregt.
         if (dx < -TERSKEL || (dx < -40 && fart > FLIKK)) { spor(kort, fart); return; }
@@ -1098,7 +1142,11 @@
          kortet - målt i Chromium 26.07.2026 byttet kortet plass én gang og ble
          så liggende, og rekkefølgen ble aldri lagret fordi slipp() aldri kjørte. */
       function pekerFlytt(e) { flytt(e.clientX, e.clientY, e); }
+      function holdFast(e) {
+        if (loftet && e.cancelable) { e.preventDefault(); }
+      }
       function pekerSlipp() {
+        document.removeEventListener('touchmove', holdFast);
         document.removeEventListener('pointermove', pekerFlytt);
         document.removeEventListener('pointerup', pekerSlipp);
         document.removeEventListener('pointercancel', pekerSlipp);
@@ -1111,6 +1159,10 @@
         if (e.target.closest('a, button, input, label, summary, form')) { return; }
         start(e.clientX, e.clientY);
         document.addEventListener('pointermove', pekerFlytt, { passive: false });
+        // Ikke-passiv touchmove: `touch-action: none` alene er ikke nok på iOS
+        // Safari når klassen settes midt i en berøring. preventDefault() her er
+        // det som faktisk holder på bevegelsen mens kortet er løftet.
+        document.addEventListener('touchmove', holdFast, { passive: false });
         document.addEventListener('pointerup', pekerSlipp);
         document.addEventListener('pointercancel', pekerSlipp);
       });

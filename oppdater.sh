@@ -128,6 +128,27 @@ else
     *) bad "Lenka svarer IKKE utenfra. Appen kjorer, men journalisten naar den ikke."
        info "Kjor:  bash sjekk-server.sh" ;;
   esac
+
+  # At appen lever beviser ikke at NETTLESEREN faar ny CSS. Det gjorde den ikke
+  # 26.07.2026: hele fiksen som gjorde sveipen synlig laa i style.css, fila ble
+  # cachet av tunnelen, og en pull-to-refresh henter bare HTML. Deployen saa
+  # vellykket ut mens eieren satt med gammel stil.
+  #
+  # Naa har lenka en innholdshash (?v=...). Vi henter forsiden, plukker ut den
+  # hashen deployen faktisk serverer, og laster ned selve fila.
+  CSSURL=$(curl -s -m 15 "$LENKE/" 2>/dev/null \
+           | grep -oE '/static/style\.css\?v=[a-f0-9]+' | head -1)
+  if [ -z "${CSSURL:-}" ]; then
+    warn "Fant ingen versjonert CSS-lenke paa forsiden."
+    info "Da kan nettleseren fortsatt sitte paa en gammel stilfil."
+  else
+    BITER=$(curl -s -m 15 "$LENKE$CSSURL" 2>/dev/null | wc -c)
+    if [ "$BITER" -gt 1000 ]; then
+      ok "Ny CSS serveres (${CSSURL#*v=}, $BITER bytes)"
+    else
+      bad "CSS-lenka svarte med $BITER bytes - noe cacher seg fast."
+    fi
+  fi
 fi
 
 say "Ferdig"

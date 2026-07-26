@@ -525,7 +525,9 @@ def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> 
 
     # Redaktor vurderer datadrevne + Schibsted-leads (analytiker-valgte prioritert).
     ranked = sorted(cases, key=lambda c: c.score, reverse=True)
-    candidates = [c for c in ranked if c.kind in ("data", "schibsted")]
+    # KUN primaerkilder. Gjenbrukte avissaker sto her og spiste plasser i en
+    # kvote som bare rekker fire saker per skann.
+    candidates = [c for c in ranked if c.kind in ("data", "hendelse")]
     editor_cases = (
         [c for c in candidates if c.key in picks] + [c for c in candidates if c.key not in picks]
     )[:EDITOR_CAP] or ranked[:EDITOR_CAP]
