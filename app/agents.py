@@ -146,8 +146,13 @@ def analyst_pick(cases: list[Case], budsjett: Budsjett | None = None) -> dict[st
 # --- Agent 2: Redaktor -------------------------------------------------------
 def editor_judge_batch(
     saker: list[Case], budsjett: Budsjett | None = None
-) -> dict[str, dict]:
-    """Redaktoerdom for ALLE sakene i ETT kall. Returnerer {sakskey: dom}.
+) -> tuple[dict[str, dict], bool]:
+    """Redaktoerdom for ALLE sakene i ETT kall.
+
+    Returnerer ({sakskey: dom}, kallet_gikk_bra). Flagget er viktig: at modellen
+    UTELATER en sak er ikke det samme som at kallet feilet. Uten skillet ble
+    hver utelatte sak talt som et mislykket KI-kall, og statuslinja sa «delvis»
+    selv om KI-en var paa og svarte fint.
 
     Samme grunn som for vinklene, og oppdaget paa samme maate: EDITOR_SYSTEM er
     lang - den maa vaere det, for det er der redaktoerens 25 aars erfaring staar.
@@ -159,7 +164,7 @@ def editor_judge_batch(
     skannbudsjettet. Samlet koster de under 3 000.
     """
     if not saker:
-        return {}
+        return {}, True
 
     blokker = [f"=== SAK {c.key} ===\n{kildegrunnlag(c)}" for c in saker]
     user = (
@@ -170,13 +175,13 @@ def editor_judge_batch(
     tak = max(1000, 500 * len(saker))
 
     if budsjett is not None and not budsjett.be_om(prompts.EDITOR_BATCH_SYSTEM, user, tak):
-        return {}
+        return {}, True          # ikke forsoekt - koe, ikke feil
 
     result = llm.complete_json(
         prompts.EDITOR_BATCH_SYSTEM, user, model=llm.MODEL_EDITOR, max_tokens=tak
     )
     if not isinstance(result, dict) or not isinstance(result.get("saker"), list):
-        return {}
+        return {}, False
 
     ut: dict[str, dict] = {}
     gyldige = {c.key for c in saker}
@@ -189,7 +194,7 @@ def editor_judge_batch(
         # `mode` SIST, saa et modellsvar som inneholder feltet ikke kan overskrive
         # det - og dermed styre baade merkingen i UI og tellingen av vellykkede kall.
         ut[key] = {**{k: v for k, v in post.items() if k != "id"}, "mode": "llm"}
-    return ut
+    return ut, True
 
 
 def editor_judge(case: Case, budsjett: Budsjett | None = None) -> dict:
@@ -238,8 +243,11 @@ def _editor_mal(case: Case) -> dict:
 # --- Agent 3: Journalist -----------------------------------------------------
 def journalist_angles_batch(
     saker: list[Case], budsjett: Budsjett | None = None
-) -> dict[str, list[dict]]:
-    """Vinkler for ALLE sakene i ETT kall. Returnerer {sakskey: [vinkler]}.
+) -> tuple[dict[str, list[dict]], bool]:
+    """Vinkler for ALLE sakene i ETT kall.
+
+    Returnerer ({sakskey: [vinkler]}, kallet_gikk_bra) - se editor_judge_batch
+    for hvorfor de to er forskjellige ting.
 
     Dette er fiksen paa det eieren saa 26.07.2026: «KI-en rakk ikke alt - 4 av 4
     kall feilet», med `Groq (gratis): kvotetak (429)`.
@@ -254,7 +262,7 @@ def journalist_angles_batch(
     journalisten faar minst to overskrifter per funn - som var kravet.
     """
     if not saker:
-        return {}
+        return {}, True
 
     blokker = []
     for c in saker:
@@ -279,13 +287,13 @@ def journalist_angles_batch(
     if budsjett is not None and not budsjett.be_om(
         prompts.JOURNALIST_BATCH_SYSTEM, user, tak
     ):
-        return {}
+        return {}, True          # ikke forsoekt - koe, ikke feil
 
     result = llm.complete_json(
         prompts.JOURNALIST_BATCH_SYSTEM, user, model=llm.MODEL_ANALYST, max_tokens=tak
     )
     if not isinstance(result, dict) or not isinstance(result.get("saker"), list):
-        return {}
+        return {}, False
 
     ut: dict[str, list[dict]] = {}
     gyldige = {c.key for c in saker}
@@ -304,7 +312,7 @@ def journalist_angles_batch(
             for a in rene:
                 a["mode"] = "llm"
             ut[key] = rene[:3]
-    return ut
+    return ut, True
 
 
 def journalist_angles(
@@ -495,14 +503,18 @@ def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> 
     if maa_vurderes:
         melde(f"Redaktøren vurderer {len(maa_vurderes)} funn")
         ko_for = budsjett.i_ko
-        dommer = editor_judge_batch(maa_vurderes, budsjett)
+        dommer, kallet_ok = editor_judge_batch(maa_vurderes, budsjett)
+        # ETT kall, saa ETT utfall i regnskapet. Foer telte vi per sak, og en
+        # sak modellen utelot ble til et «mislykket kall» - det var derfor
+        # statuslinja sa «delvis» selv om KI-en svarte fint.
+        if budsjett.i_ko == ko_for:
+            tell(bool(dommer) or kallet_ok)
         for c in maa_vurderes:
             dom = dommer.get(c.key)
             if dom:
                 c.editor = dom
                 c.ai_mode = "llm"
                 storage.ki_lagre(c.key, editor=dom)
-                tell(True)
             elif budsjett.i_ko > ko_for:
                 # Ikke forsoekt - budsjettet var brukt opp. Malen brukes bare som
                 # PORT (slipper saken videre), og merkes «ko» saa UI-et sier
@@ -512,7 +524,6 @@ def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> 
             else:
                 c.editor = _editor_mal(c)
                 c.ai_mode = "mal"
-                tell(False)
 
     for c in editor_cases:
         if c.editor.get("is_story"):
@@ -543,20 +554,22 @@ def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> 
     if trenger:
         melde(f"Journalisten lager vinkler for {len(trenger)} saker")
         ko_for = budsjett.i_ko
-        vinkler = journalist_angles_batch(trenger, budsjett)
+        vinkler, kallet_ok = journalist_angles_batch(trenger, budsjett)
+        if budsjett.i_ko == ko_for:
+            tell(bool(vinkler) or kallet_ok)
         for c in trenger:
             c.angles = vinkler.get(c.key, [])
             if c.angles:
                 c.ai_mode = "llm"
                 storage.ki_lagre(c.key, angles=c.angles)
-                tell(True)
             elif budsjett.i_ko > ko_for:
                 c.ai_mode = "ko"
             else:
                 # Saken merkes etter det SVAKESTE leddet: uten vinkler er den
-                # ikke «KI» selv om redaktoren tilfeldigvis kom gjennom.
+                # ikke «KI» selv om redaktoren tilfeldigvis kom gjennom. Men den
+                # telles IKKE som et feilet kall - kallet gikk, modellen utelot
+                # bare denne saken.
                 c.ai_mode = "mal"
-                tell(False)
 
     regnskap["i_ko"] = budsjett.i_ko
     if not has_key:

@@ -299,7 +299,7 @@ def _case_topic_trends(cases: list) -> list[dict]:
 
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, apen: str = ""):
+def dashboard(request: Request, apen: str = "", ferskt: str = ""):
     """`apen` er «<sakskey>|<vinkelnr>» og aapner den vinkelen ved sidelast.
 
     Uten dette landet journalisten paa en side der alt var slaatt sammen igjen -
@@ -314,6 +314,7 @@ def dashboard(request: Request, apen: str = ""):
         context={
             "data": data,
             "apen": apen,
+            "ferskt": bool(ferskt),
             "scanned_at": scanned_at,
             "version": __version__,
             "decisions": decisions_map(),

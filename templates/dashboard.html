@@ -8,7 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%A1%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
-<body>
+<body{{ ' class="ferskt"'|safe if ferskt }}>
 {% set s = data.summary if data else None %}
 {% set green_pct = ((s.green / s.total * 100) | round | int) if (s and s.total) else 0 %}
 
@@ -76,6 +76,25 @@
       {% else %}Ikke skannet ennå{% endif %}</p>
   </div>
 </header>
+
+{# Radaren: popper opp OEVERST i feltet naar man trykker soek, slik matchmaking
+   gjor i spill. Sida blir staaende - man mister ikke konteksten sin, og man ser
+   at det jobbes. Skjult til noe faktisk skjer. #}
+<div id="skann-radar" class="skann-radar" hidden role="status" aria-live="polite">
+  <div class="radar-flate" aria-hidden="true">
+    <span class="radar-ring"></span><span class="radar-ring r2"></span>
+    <span class="radar-arm"></span>
+    <span class="radar-blip b1"></span><span class="radar-blip b2"></span>
+    <span class="radar-blip b3"></span>
+  </div>
+  <div class="radar-tekst">
+    <p class="skann-fase">Starter skann …</p>
+    <div class="skann-spor"><div class="skann-fyll" style="width:0%"></div></div>
+    <p class="skann-siste"></p>
+  </div>
+  <p class="skann-pct"><span>0</span>&nbsp;%</p>
+  <button type="button" class="skann-lukk" hidden>Lukk</button>
+</div>
 
 {# KI-koen. Dette er IKKE en feil, og skal ikke se ut som en: skannet stopper
    med vilje foer Groqs minuttkvote (12 000 tokens) er brukt opp, slik at det
@@ -552,19 +571,10 @@
 
 <!-- Skanneskjerm. Et skann tar 40-60 sekunder; foer dette sto journalisten og
      saa paa den samme siden uten et eneste tegn paa at noe skjedde. -->
-<div id="skann-skjerm" class="skann-skjerm" hidden role="dialog" aria-modal="true"
-     aria-labelledby="skann-tittel">
-  <div class="skann-kort">
-    <div class="radar" aria-hidden="true"><span class="radar-arm"></span></div>
-    <h2 id="skann-tittel" class="skann-fase">Starter skann …</h2>
-    <div class="skann-spor"><div class="skann-fyll" style="width:0%"></div></div>
-    <p class="skann-pct"><span>0</span>&nbsp;%</p>
-    <p class="skann-siste" aria-live="polite"></p>
-    <p class="skann-hint">Henter fra SSB, sjekker hva som allerede er skrevet, og
-      lar redaktøren vurdere funnene. Tar vanligvis under ett minutt.</p>
-    <button type="button" class="skann-lukk" hidden>Lukk</button>
-  </div>
-</div>
+{# Radaren staar IKKE lenger som en helskjerm-overlay over sida. Den popper opp
+   oeverst i feltet - som matchmaking i et spill - saa journalisten beholder
+   konteksten sin og ser at det jobbes, i stedet for at alt forsvinner bak en
+   svart skjerm. Selve elementet er flyttet inn i `.page` av malen under. #}
 
 <!-- Framdrift for utkast. Ligger nede til venstre og er skjult til noe faktisk skjer. -->
 <div id="framdrift" class="framdrift" hidden role="status" aria-live="polite">
@@ -653,7 +663,7 @@
   /* Skanneskjermen. Samme jobbmotor som utkastet, men et skann tar 40-60
      sekunder - da holder det ikke med en liten boks i hjornet. */
   (function () {
-    var skjerm = document.getElementById('skann-skjerm');
+    var skjerm = document.getElementById('skann-radar');
     if (!skjerm) { return; }
     var fase = skjerm.querySelector('.skann-fase');
     var fyll = skjerm.querySelector('.skann-fyll');
@@ -673,8 +683,15 @@
     document.querySelectorAll('form[data-skann]').forEach(function (form) {
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
+        // Lukk temamenyen, ellers staar den aapen over radaren.
+        var meny = form.closest('details');
+        if (meny) { meny.open = false; }
         skjerm.hidden = false;
         skjerm.classList.remove('skann-feil');
+        // Rull radaren i syne. Den staar oeverst, saa dette er som regel en
+        // kort bevegelse - men trykker han fra kø-knappen langt nede, ville
+        // han ellers ikke sett at noe skjedde.
+        skjerm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         lukk.hidden = true;
         tegn({ tekst: 'Starter skann …', pct: 2, siste: '' });
 
@@ -708,7 +725,11 @@
           }
           if (s.status === 'ferdig') {
             tegn({ tekst: 'Ferdig — henter resultatet', pct: 100, siste: '' });
-            window.location.href = '/';
+            // `ferskt=1` forteller neste sidelast at sakene skal fly opp paa
+            // plass. Vi laster om i stedet for aa bytte ut DOM-en: da er det
+            // serveren som bestemmer hva som vises, og animasjonen er ren CSS
+            // som ikke kan komme ut av takt med innholdet.
+            window.location.href = '/?ferskt=1';
             return;
           }
           stopp(s.feil || 'Skannet stoppet.');

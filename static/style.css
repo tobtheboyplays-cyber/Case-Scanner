@@ -1371,3 +1371,112 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .tall-minus { color: var(--red); font-weight: 600; }
 .tall-pluss { color: var(--green); font-weight: 600; }
 .hend-aar { color: var(--faint); }
+
+/* ── Radaren: popper opp øverst, som matchmaking i et spill ──────────────── */
+/* Før var dette en helskjerm-overlay som dekket alt. Journalisten mistet
+   konteksten sin i 40–60 sekunder og satt og så på en svart skjerm. Nå blir
+   siden stående, og radaren legger seg øverst i feltet. */
+.skann-radar {
+  display: flex; align-items: center; gap: 16px;
+  margin: 0 auto 16px; padding: 14px 18px;
+  max-width: 1200px; width: calc(100% - 32px);
+  background: linear-gradient(180deg, #16233a, #111a29);
+  border: 1px solid #2a4368; border-radius: 16px;
+  box-shadow: 0 10px 34px rgba(47, 107, 255, .18);
+  animation: radar-inn .38s cubic-bezier(.2, .8, .3, 1) both;
+}
+@keyframes radar-inn {
+  from { opacity: 0; transform: translateY(-14px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+.skann-radar[hidden] { display: none; }
+
+/* Selve radarflaten: roterende arm + ringer + blip. */
+.radar-flate {
+  position: relative; width: 54px; height: 54px; flex: none;
+  border-radius: 50%; overflow: hidden;
+  background: radial-gradient(circle, #16304d 0%, #0d1725 70%);
+  border: 1px solid #2f5686;
+}
+.radar-ring {
+  position: absolute; inset: 30%; border: 1px solid #2f568666; border-radius: 50%;
+}
+.radar-ring.r2 { inset: 12%; }
+.radar-arm {
+  position: absolute; inset: 0;
+  background: conic-gradient(from 0deg, rgba(59,130,246,.55) 0deg,
+              rgba(59,130,246,0) 55deg, rgba(59,130,246,0) 360deg);
+  animation: radar-sveip 1.8s linear infinite;
+}
+@keyframes radar-sveip { to { transform: rotate(360deg); } }
+.radar-blip {
+  position: absolute; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 6px var(--green);
+  opacity: 0; animation: radar-blink 1.8s linear infinite;
+}
+.radar-blip.b1 { top: 30%; left: 62%; animation-delay: .35s; }
+.radar-blip.b2 { top: 62%; left: 38%; animation-delay: 1.0s; }
+.radar-blip.b3 { top: 46%; left: 24%; animation-delay: 1.5s; }
+@keyframes radar-blink {
+  0%, 8% { opacity: 1; transform: scale(1.25); }
+  45%    { opacity: .35; transform: scale(1); }
+  70%    { opacity: 0; }
+  100%   { opacity: 0; }
+}
+
+.radar-tekst { flex: 1; min-width: 0; }
+.skann-radar .skann-fase { margin: 0; font-size: 14.5px; font-weight: 650; color: var(--text); }
+.skann-radar .skann-spor {
+  height: 5px; margin: 8px 0 6px; background: #0d1725; border-radius: 3px; overflow: hidden;
+}
+.skann-radar .skann-fyll {
+  height: 100%; border-radius: 3px; transition: width .5s cubic-bezier(.3,.8,.4,1);
+  background: linear-gradient(90deg, var(--accent), #6aa9ff);
+}
+.skann-radar .skann-siste {
+  margin: 0; font-size: 11.5px; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.skann-radar .skann-pct {
+  margin: 0; flex: none; font-size: 18px; font-weight: 700;
+  font-variant-numeric: tabular-nums; color: var(--accent);
+}
+.skann-radar .skann-lukk {
+  flex: none; background: var(--panel2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 9px; padding: 7px 13px;
+  font-size: 12.5px; cursor: pointer;
+}
+.skann-radar.skann-feil { border-color: #6b2d28; box-shadow: none; }
+.skann-radar.skann-feil .radar-arm { animation: none; }
+.skann-radar.skann-feil .skann-fase { color: var(--red); }
+
+/* ── Sakene flyter opp på plass etter et ferskt skann ────────────────────── */
+/* Trappet forsinkelse, så de lander etter hverandre i stedet for samtidig —
+   det er den bevegelsen som leser som «resultatene kommer inn». */
+.ferskt .prio-row, .ferskt .lead, .ferskt .hend {
+  animation: flyt-opp .5s cubic-bezier(.2, .8, .3, 1) both;
+}
+@keyframes flyt-opp {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: none; }
+}
+.ferskt .prio-row:nth-child(-n+8) { animation-delay: calc(var(--i, 0) * 60ms); }
+.ferskt .prio-row:nth-of-type(1) { animation-delay: 40ms; }
+.ferskt .prio-row:nth-of-type(2) { animation-delay: 100ms; }
+.ferskt .prio-row:nth-of-type(3) { animation-delay: 160ms; }
+.ferskt .prio-row:nth-of-type(4) { animation-delay: 220ms; }
+.ferskt .prio-row:nth-of-type(5) { animation-delay: 280ms; }
+.ferskt .prio-row:nth-of-type(6) { animation-delay: 340ms; }
+.ferskt .lead:nth-of-type(1) { animation-delay: 260ms; }
+.ferskt .lead:nth-of-type(2) { animation-delay: 320ms; }
+.ferskt .lead:nth-of-type(3) { animation-delay: 380ms; }
+.ferskt .lead:nth-of-type(n+4) { animation-delay: 430ms; }
+
+/* Bevegelse er ikke gratis for alle. Har brukeren bedt om mindre av det, skal
+   alt stå stille - innholdet er det samme. */
+@media (prefers-reduced-motion: reduce) {
+  .skann-radar, .ferskt .prio-row, .ferskt .lead, .ferskt .hend { animation: none; }
+  .radar-arm, .radar-blip { animation: none; }
+  .radar-blip { opacity: .8; }
+  .skann-radar .skann-fyll { transition: none; }
+}
