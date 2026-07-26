@@ -1975,3 +1975,35 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 /* Menyen er festet til knappen. Uten dette ville en `nowrap`-rad presset den
    åpne temaboksen ut i intet i stedet for å legge den under knappen. */
 .skann-meny { position: relative; }
+
+/* ── «Hva du skal lage» — saker gruppert per maaned ──────────────────────────
+   Eieren 26.07.2026: «Istedenfor at det står den samme saken igjen og igjen …
+   så kan det heller stå: hvis det er en sak den måneden, så står den saken.»
+
+   Rutenettet over svarer på NÅR i måneden. Dette svarer på HVA han skal lage —
+   og hver sak står nøyaktig én gang, på tvers av måneder, så august og september
+   er synlige samtidig. */
+.mnd + .mnd { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.mnd-navn { display: flex; align-items: center; gap: 10px;
+  font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 10px; }
+.mnd-naa .mnd-navn { color: var(--accent); }
+.mnd-naa-merke { font-size: 9.5px; font-weight: 700; letter-spacing: .04em;
+  text-transform: none; padding: 3px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.mnd-tall { margin-left: auto; font-size: 11.5px; font-weight: 700;
+  color: var(--faint); font-variant-numeric: tabular-nums; }
+
+.mnd-saker { list-style: none; margin: 0; padding: 0; }
+.mnd-sak a { display: flex; align-items: center; gap: 11px;
+  padding: 11px 12px; border-radius: 10px; text-decoration: none;
+  transition: background .13s ease; }
+.mnd-sak a:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.mnd-tittel { flex: 1 1 auto; min-width: 0; color: var(--text);
+  font-size: 14.5px; font-weight: 600; line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mnd-frist { flex: none; color: var(--muted); font-size: 12.5px;
+  font-variant-numeric: tabular-nums; }
+/* Forfalt frist er den ene tilstanden som krever en handling i dag. */
+.mnd-forfalt .mnd-frist { color: var(--red); font-weight: 700; }
+.mnd-forfalt .mnd-tittel { color: var(--text); }

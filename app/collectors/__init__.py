@@ -22,6 +22,7 @@ from app.collectors import (
     ssb_flytting,
     ssb_kalender,
     ssb_sok,
+    stortinget,
 )
 from app.config import ENABLE_REDDIT
 from app.models import Case, SignalItem
@@ -78,6 +79,20 @@ def collect_all(
         status.extend(notes)
     except Exception as exc:  # noqa: BLE001
         status.append(f"[FEIL] SSB-soek: {exc}")
+
+    # 1c) Stortinget - hva Rogalands egne representanter holder paa med. Eneste
+    # av kandidatkildene 26.07.2026 som baade hadde «Allow: /» i robots.txt og
+    # faktisk svarte; se docs/KILDER.md for hvem som falt fra og hvorfor.
+    # Verdien er ikke det nasjonale stoffet, men at en sak med en
+    # Rogaland-representant paa seg gir journalisten en NAVNGITT kilde med
+    # svarplikt - i motsetning til et tall han maa finne noen som merker.
+    meld("Stortinget: saker med Rogaland-representanter")
+    try:
+        cases, notes = stortinget.collect(temaer)
+        ssb_cases.extend(cases)
+        status.extend(notes)
+    except Exception as exc:  # noqa: BLE001
+        status.append(f"[FEIL] Stortinget: {exc}")
 
     # Her laa det EN GANG en kollektor som hentet saker fra Aftenposten, Bergens
     # Tidende og E24 og gjorde dem til leads. Den er slettet, ikke skrudd av.

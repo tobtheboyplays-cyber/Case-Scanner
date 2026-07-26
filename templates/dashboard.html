@@ -176,105 +176,6 @@
 
 
 
-<section class="page" style="padding-bottom:0">
-{% if faner %}
-  {# Panelet blandet to helt ulike ting under én overskrift: konkurser som HAR
-     skjedd, og SSB-tall som IKKE er sluppet. 52 rader der man måtte lese hver
-     enkelt for å vite hva slags sak det var.
-
-     Nå er det én fane per tema, hver med sin egen farge og sitt ikon — og en
-     prikk over fanen når det har kommet noe ferskt der. Fargen står aldri
-     alene: ikon og navn sier det samme.
-
-     Fanebyttet er ren CSS (skjulte radioknapper), så det virker uten JS og
-     overlever en refresh uten å måtte lagre noe. #}
-  <details class="panel forsprang" open>
-    <summary>
-      <h2>⏳ Kommer snart</h2>
-      <span class="panel-sub">Hva som har skjedd i næringslivet, og hvilke tall som slippes.</span>
-    </summary>
-
-    <div class="temafaner">
-      {# Radioknappen staar rett FORAN innholdet sitt, ikke inne i faneraden.
-         Det er hele trikset: da er de sosken, og `:checked + .fane-innhold`
-         treffer. Ligger radioen inni raden, er innholdet en onkel - og ingen
-         CSS-kombinator naar dit. Det var nettopp den feilen nettlesertesten
-         fanget: fanene fantes, men ingen av dem viste noe. #}
-      <div class="fane-rad" role="tablist">
-        {% for f in faner %}
-        <label class="fane fane-{{ f.farge }}" for="fane-{{ f.slug }}">
-          <span class="fane-ikon" aria-hidden="true">{{ f.ikon }}</span>
-          <span class="fane-navn">{{ f.navn }}</span>
-          <span class="fane-tall">{{ f.antall }}</span>
-          {% if f.nytt %}<span class="fane-prikk" title="{{ f.nytt }} ferske">{{ f.nytt }}</span>{% endif %}
-        </label>
-        {% endfor %}
-      </div>
-
-      {% for f in faner %}
-      <input type="radio" name="fane" id="fane-{{ f.slug }}" class="fane-radio"
-             {{ 'checked' if loop.first }} />
-      <div class="fane-innhold fane-{{ f.farge }}" id="innhold-{{ f.slug }}">
-        {% for e in f.elementer %}
-          {% if e.slag == 'hendelse' %}
-          <div class="hend{{ ' hend-fersk' if e.fersk }}">
-            <span class="hend-ikon" aria-hidden="true">{{ f.ikon }}</span>
-            <div class="hend-mid">
-              <a class="hend-navn" href="{{ e.lenke }}" target="_blank" rel="noopener">{{ e.navn }}</a>
-              <div class="hend-meta">
-                <span class="hend-type hend-{{ e.type }}">{{ {'konkurs':'Konkurs','avvikling':'Under avvikling','nytt':'Nytt foretak'}[e.type] }}</span>
-                <span>{{ e.kommune }}</span>
-                {% if e.publikum %}<span class="tag">{{ e.publikum }}</span>{% endif %}
-                {% if e.ansatte %}<span>{{ e.ansatte }} ansatte</span>{% endif %}
-                <span>{{ e.dato }}</span>
-              </div>
-              {% if e.bransje %}<p class="hend-bransje">{{ e.bransje }}</p>{% endif %}
-              {# Regnskapstallet er det som gjor en konkurs til en sak i stedet
-                 for et navn. «Gikk konkurs» er en notis; «omsatte for 4,1 mill
-                 og gikk med underskudd aaret for» er noe man kan ringe paa. #}
-              {% if e.regnskap %}
-              <p class="hend-tall">
-                {% if e.regnskap.omsetning is not none %}
-                  Omsetning {{ '{:,.0f}'.format(e.regnskap.omsetning)|replace(',', ' ') }} kr
-                {% endif %}
-                {% if e.regnskap.resultat is not none %}
-                  · <span class="{{ 'tall-minus' if e.regnskap.resultat < 0 else 'tall-pluss' }}">resultat
-                  {{ '{:,.0f}'.format(e.regnskap.resultat)|replace(',', ' ') }} kr</span>
-                {% endif %}
-                <span class="hend-aar">({{ e.regnskap.aar }})</span>
-              </p>
-              {% endif %}
-            </div>
-          </div>
-          {% else %}
-          <div class="komm{{ ' komm-fersk' if e.fersk }}">
-            <div class="komm-when">{{ e.dager_til }}<span>dager</span></div>
-            <div class="komm-mid">
-              <a class="komm-title" href="{{ e.lenke }}" target="_blank" rel="noopener">{{ e.tittel }}</a>
-              <div class="komm-meta">
-                {% for c in e.kontakter[:1] %}
-                  <span class="komm-contact">📞 {{ c.navn }}
-                    {% if c.telefon %}<a href="tel:{{ c.telefon }}">{{ c.telefon }}</a>{% endif %}
-                  </span>
-                {% endfor %}
-              </div>
-            </div>
-          </div>
-          {% endif %}
-        {% endfor %}
-        {% if f.antall > f.elementer|length %}
-        <p class="komm-note">Viser {{ f.elementer|length }} av {{ f.antall }} — de ferskeste først.</p>
-        {% endif %}
-        {% if f.slug in ('konkurser', 'nyapninger') %}
-        <p class="komm-note">Kilde: Brønnøysundregistrene. Et registrert foretak er
-          ikke det samme som en åpen dør — ring og sjekk før du skriver.</p>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-  </details>
-{% endif %}
-</section>
 
 <div class="layout">
   <main class="maincol">
@@ -581,6 +482,113 @@
     </section>
   </aside>
 </div>
+{# «Kommer snart» flyttet hit fra toppen. Eieren 26.07.2026: «sett Kommer snart
+   nederst paa siden paa startsiden.»
+
+   Riktig prioritering: panelet svarer paa «hva kommer», og det er nyttig - men
+   det som skal avgjore hva han gjor NAA er saksforslagene. Sto det oeverst,
+   maatte han scrolle forbi femti konkurser og SSB-datoer for aa komme til
+   lista han faktisk aapnet appen for. #}
+<section class="page" style="padding-bottom:0">
+{% if faner %}
+  {# Panelet blandet to helt ulike ting under én overskrift: konkurser som HAR
+     skjedd, og SSB-tall som IKKE er sluppet. 52 rader der man måtte lese hver
+     enkelt for å vite hva slags sak det var.
+
+     Nå er det én fane per tema, hver med sin egen farge og sitt ikon — og en
+     prikk over fanen når det har kommet noe ferskt der. Fargen står aldri
+     alene: ikon og navn sier det samme.
+
+     Fanebyttet er ren CSS (skjulte radioknapper), så det virker uten JS og
+     overlever en refresh uten å måtte lagre noe. #}
+  <details class="panel forsprang" open>
+    <summary>
+      <h2>⏳ Kommer snart</h2>
+      <span class="panel-sub">Hva som har skjedd i næringslivet, og hvilke tall som slippes.</span>
+    </summary>
+
+    <div class="temafaner">
+      {# Radioknappen staar rett FORAN innholdet sitt, ikke inne i faneraden.
+         Det er hele trikset: da er de sosken, og `:checked + .fane-innhold`
+         treffer. Ligger radioen inni raden, er innholdet en onkel - og ingen
+         CSS-kombinator naar dit. Det var nettopp den feilen nettlesertesten
+         fanget: fanene fantes, men ingen av dem viste noe. #}
+      <div class="fane-rad" role="tablist">
+        {% for f in faner %}
+        <label class="fane fane-{{ f.farge }}" for="fane-{{ f.slug }}">
+          <span class="fane-ikon" aria-hidden="true">{{ f.ikon }}</span>
+          <span class="fane-navn">{{ f.navn }}</span>
+          <span class="fane-tall">{{ f.antall }}</span>
+          {% if f.nytt %}<span class="fane-prikk" title="{{ f.nytt }} ferske">{{ f.nytt }}</span>{% endif %}
+        </label>
+        {% endfor %}
+      </div>
+
+      {% for f in faner %}
+      <input type="radio" name="fane" id="fane-{{ f.slug }}" class="fane-radio"
+             {{ 'checked' if loop.first }} />
+      <div class="fane-innhold fane-{{ f.farge }}" id="innhold-{{ f.slug }}">
+        {% for e in f.elementer %}
+          {% if e.slag == 'hendelse' %}
+          <div class="hend{{ ' hend-fersk' if e.fersk }}">
+            <span class="hend-ikon" aria-hidden="true">{{ f.ikon }}</span>
+            <div class="hend-mid">
+              <a class="hend-navn" href="{{ e.lenke }}" target="_blank" rel="noopener">{{ e.navn }}</a>
+              <div class="hend-meta">
+                <span class="hend-type hend-{{ e.type }}">{{ {'konkurs':'Konkurs','avvikling':'Under avvikling','nytt':'Nytt foretak'}[e.type] }}</span>
+                <span>{{ e.kommune }}</span>
+                {% if e.publikum %}<span class="tag">{{ e.publikum }}</span>{% endif %}
+                {% if e.ansatte %}<span>{{ e.ansatte }} ansatte</span>{% endif %}
+                <span>{{ e.dato }}</span>
+              </div>
+              {% if e.bransje %}<p class="hend-bransje">{{ e.bransje }}</p>{% endif %}
+              {# Regnskapstallet er det som gjor en konkurs til en sak i stedet
+                 for et navn. «Gikk konkurs» er en notis; «omsatte for 4,1 mill
+                 og gikk med underskudd aaret for» er noe man kan ringe paa. #}
+              {% if e.regnskap %}
+              <p class="hend-tall">
+                {% if e.regnskap.omsetning is not none %}
+                  Omsetning {{ '{:,.0f}'.format(e.regnskap.omsetning)|replace(',', ' ') }} kr
+                {% endif %}
+                {% if e.regnskap.resultat is not none %}
+                  · <span class="{{ 'tall-minus' if e.regnskap.resultat < 0 else 'tall-pluss' }}">resultat
+                  {{ '{:,.0f}'.format(e.regnskap.resultat)|replace(',', ' ') }} kr</span>
+                {% endif %}
+                <span class="hend-aar">({{ e.regnskap.aar }})</span>
+              </p>
+              {% endif %}
+            </div>
+          </div>
+          {% else %}
+          <div class="komm{{ ' komm-fersk' if e.fersk }}">
+            <div class="komm-when">{{ e.dager_til }}<span>dager</span></div>
+            <div class="komm-mid">
+              <a class="komm-title" href="{{ e.lenke }}" target="_blank" rel="noopener">{{ e.tittel }}</a>
+              <div class="komm-meta">
+                {% for c in e.kontakter[:1] %}
+                  <span class="komm-contact">📞 {{ c.navn }}
+                    {% if c.telefon %}<a href="tel:{{ c.telefon }}">{{ c.telefon }}</a>{% endif %}
+                  </span>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
+        {% if f.antall > f.elementer|length %}
+        <p class="komm-note">Viser {{ f.elementer|length }} av {{ f.antall }} — de ferskeste først.</p>
+        {% endif %}
+        {% if f.slug in ('konkurser', 'nyapninger') %}
+        <p class="komm-note">Kilde: Brønnøysundregistrene. Et registrert foretak er
+          ikke det samme som en åpen dør — ring og sjekk før du skriver.</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+{% endif %}
+</section>
+
 <!-- Tallene sist: de forteller hvordan skannet gikk, men de er ikke noe
      journalisten HANDLER paa. Handlingen staar oeverst. -->
 <section class="kpis">
@@ -760,6 +768,68 @@
           });
       });
     });
+
+    /* «Lag vinkler» bruker SAMME framdriftspanel som utkast. Eieren 26.07.2026:
+       «legg til en progress bar slik folk vet at det funker.»
+
+       Den er viktigere her enn for utkast: kallet kan bli staaende og VENTE paa
+       Groqs minuttvindu i opptil ett minutt (se llm.TAALMODIG_VENT). Uten en
+       linje som beveger seg ser det ut som ingenting skjer - og forrige gang det
+       skjedde, fikk han «RuntimeError ... kvotetak (429)» i stedet. */
+    document.querySelectorAll('form[data-vinkler]').forEach(function (form) {
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var knapp = form.querySelector('button');
+        knapp.disabled = true;
+        knapp.textContent = '💡 Journalisten tenker …';
+        vis('Starter …', 2, false);
+
+        var data = new FormData();
+        data.append('js', '1');
+
+        fetch(form.action, { method: 'POST', body: data })
+          .then(function (r) { return r.json(); })
+          .then(function (svar) {
+            if (!svar.jobb) { throw new Error('Fikk ingen jobb tilbake'); }
+            pollVinkler(svar.jobb, knapp);
+          })
+          .catch(function (e) {
+            vis('Klarte ikke å starte: ' + e.message, 100, true);
+            knapp.disabled = false;
+            knapp.textContent = '💡 Prøv igjen';
+          });
+      });
+    });
+
+    function pollVinkler(id, knapp) {
+      fetch('/jobb/' + id)
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          if (s.status === 'kjorer') {
+            /* `siste` er det som faktisk skjer akkurat nå - «Venter i kø — 1
+               sak foran deg», «Groq (gratis): kvotetak — venter 40 s». `tekst`
+               er bare navnet på fasen. Viser vi fasen, står det «Journalisten
+               finner vinkler …» i to minutter mens sannheten er at han står i
+               kø, og da er linja like taus som en feilmelding. */
+            vis(s.siste || s.tekst, s.pct, false);
+            setTimeout(function () { pollVinkler(id, knapp); }, 700);
+            return;
+          }
+          if (s.status === 'ferdig') {
+            vis('Vinklene er klare', 100, false);
+            setTimeout(function () { location.reload(); }, 500);
+            return;
+          }
+          vis(s.feil || 'Klarte ikke å lage vinkler.', 100, true);
+          knapp.disabled = false;
+          knapp.textContent = '💡 Prøv igjen';
+        })
+        .catch(function () {
+          vis('Mistet kontakten med serveren.', 100, true);
+          knapp.disabled = false;
+          knapp.textContent = '💡 Prøv igjen';
+        });
+    }
 
     function poll(id, form, knapp) {
       fetch('/jobb/' + id)
@@ -1325,47 +1395,6 @@
     v.querySelector('.varsel-lukk').addEventListener('click', ut);
   })();
 
-  /* ── «Lag vinkler for denne» ───────────────────────────────────────────────
-     Samme framdriftspanel som utkast bruker. Uten JS poster skjemaet vanlig og
-     venter - siden virker fortsatt, den blir bare staaende i ti sekunder. */
-  document.querySelectorAll('[data-vinkler]').forEach(function (skjema) {
-    skjema.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var knapp = skjema.querySelector('button');
-      knapp.disabled = true;
-      knapp.textContent = '💡 Journalisten tenker …';
-
-      var d = new FormData();
-      d.append('js', '1');
-      fetch(skjema.action, { method: 'POST', body: d })
-        .then(function (r) { return r.json(); })
-        .then(function (svar) { folgJobb(svar.jobb, knapp); })
-        .catch(function () {
-          knapp.disabled = false;
-          knapp.textContent = '💡 Prøv igjen';
-        });
-    });
-  });
-
-  function folgJobb(id, knapp) {
-    var stopp = setInterval(function () {
-      fetch('/jobb/' + id)
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          if (j.status === 'kjorer') return;
-          clearInterval(stopp);
-          if (j.status === 'ferdig') {
-            location.reload();
-          } else {
-            knapp.disabled = false;
-            /* Grunnen skal staa PAA knappen. En feil som bare havner i konsollen
-               er en feil journalisten aldri faar vite om. */
-            knapp.textContent = '💡 ' + (j.feil || 'Prøv igjen');
-          }
-        })
-        .catch(function () { clearInterval(stopp); knapp.disabled = false; });
-    }, 1200);
-  }
 </script>
 </body>
 </html>

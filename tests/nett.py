@@ -169,6 +169,13 @@ class Nett:
         self.spurt.append(url)
         if "01222" in url:
             return FalsktSvar(200, FLYTTING)
+        if "data.stortinget.no" in url:
+            # Stortinget kom til som kilde 26.07.2026. Uten en rute her ville
+            # conftest-stubben slaatt inn - og den kaster `Failed`, som arver fra
+            # BaseException og dreper hele skanntraaden. Skannet hang i 240 s.
+            if "dagensrepresentanter" in url:
+                return FalsktSvar(200, {"dagensrepresentanter_liste": []})
+            return FalsktSvar(200, {"saker_liste": []})
         if "data.brreg.no" in url:
             return FalsktSvar(200, KONKURS if self.brreg else {"page": {}})
         if "regnskapsregisteret" in url:

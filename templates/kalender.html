@@ -181,166 +181,58 @@
     </div>
   </section>
 
-  <!-- Dagene med saker, utbrettet under -->
-  {% set any_day = false %}
-  {% for week in weeks %}
-    {% for cell in week %}
-      {% if cell and cell.leads %}
-        {% set any_day = true %}
-        <section class="panel day-panel" id="dag-{{ cell.iso }}">
-          <div class="panel-head">
-            <h2>{{ cell.day }}. {{ month_name }}</h2>
-            {# Timeregnskapet «5.0 av 7.5 timer» og framdriftsbaren sto her.
-               Eieren 26.07.2026, med skjermbilde: «alt for rotete under
-               kalenderen.» Han har rett - tallet var et budsjett ingen hadde
-               satt bevisst, og baren fylte seg mot en kapasitet han aldri ble
-               spurt om. Timene ligger fortsatt paa hver sak for den som
-               planlegger; de skal bare ikke rope fra en overskrift. #}
-            <span class="panel-sub">{{ cell.leads|length }} sak{{ '' if cell.leads|length == 1 else 'er' }}</span>
-          </div>
+  {# ── Saker gruppert per MAANED ─────────────────────────────────────────────
+     Eieren 26.07.2026, med skjermbilde: «Istedenfor at det staar den samme saken
+     igjen og igjen. Saa kan det heller staa: hvis det er en sak den maaneden, saa
+     staar den saken - dette skal du lage denne maaneden.»
 
-          {# Tak per dag. Med mange saker som gaar over lange spenn kan én dag
-             ellers rendre hundrevis av kort - kalendersida ble 1,8 MB HTML i
-             stresstest. Ingen leser den 13. saken paa en dag uansett. #}
-          {% set dagens = cell.leads[:12] %}
-          {% if cell.leads|length > 12 %}
-          <p class="dag-flere">Viser 12 av {{ cell.leads|length }} saker denne dagen.
-            Resten står i <a href="/kalender?ym={{ '%04d-%02d'|format(year, month) }}&amp;fane=oppgaver">Oppgaver</a>.</p>
-          {% endif %}
-          {% for lead in dagens %}
-            {% set draft = lead.draft or {} %}
-            {# En sak som gaar fra 27. til 31. dukker opp paa fem dager. Full
-               artikkel + skjema fem ganger er samme sak fem ganger - ikke fem
-               oppgaver. Midt i loepet holder det med én linje som sier at den
-               er i arbeid; start- og deadline-dagen faar hele kortet. #}
-            {# En sak som gaar fra 27. til 31. dukket foer opp paa FEM dager: én
-               gang med hele kortet, fire ganger som en gjentatt linje. Det var
-               det som gjorde sida uleselig - man scrollet forbi den samme saken
-               igjen og igjen og trodde det var fem saker.
+         august      gutter med testo
+         september   jenter med kort haar
+                     voksne blir mer barnslige
 
-               Naa staar hver sak ÉN gang, paa dagen den starter. Fristen staar
-               paa kortet, saa spennet er ikke tapt - det tar bare ikke plass
-               fire ganger. #}
-            {% if not lead._is_start and not lead._is_deadline %}
-            {% elif not lead._is_start and lead._is_deadline and lead._start %}
-            {% else %}
-            {# Eieren 26.07.2026: «Kalendersiden skal være slik. Men det under
-               ser veldig dårlig ut.»
+     Her sto det foer ett panel per DAG, med hele saken utbrettet: merkelapper,
+     ingress, tre datolinjer, artikkelen og et redigeringsskjema. En sak som gikk
+     fra 27. til 31. dukket opp paa fem dager. Fire planlagte saker ble til flere
+     skjermlengder der man scrollet forbi den samme overskriften om og om igjen.
 
-               Rutenettet øverst var greit; det UNDER var problemet. Hver sak sto
-               som et fullt kort med merkelapper, ingress, tre datolinjer, hele
-               artikkelen og et redigeringsskjema - alt utbrettet, alltid. Fire
-               planlagte saker ble til flere skjermlengder man måtte scrolle
-               forbi for å se hva som skjer i juli.
+     Naa staar hver sak NOEYAKTIG ÉN gang, under maaneden den skal lages i, og
+     lista gaar paa tvers av maaneder - saa han ser august OG september uten aa
+     bla. Rutenettet over svarer fortsatt paa «naar i maaneden»; dette svarer paa
+     «hva skal jeg lage». #}
+  {% if maanedsliste %}
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Hva du skal lage</h2>
+      <span class="panel-sub">Én linje per sak — trykk for detaljer og plan</span>
+    </div>
 
-               Nå er hver sak ÉN linje: fase, tittel, frist. Alt det andre ligger
-               bak samme linje - trykk, og kortet folder seg ut med artikkelen og
-               skjemaet. Ingenting er fjernet, det er bare ikke i veien lenger. #}
-            <details class="day-lead">
-              <summary class="dag-rad">
-                <span class="dot-stage stage-bg-{{ lead._stage or 'ide' }}" aria-hidden="true"></span>
-                <span class="dag-rad-t">{{ draft.title or lead.title }}</span>
-                <span class="dag-rad-m">
-                  {% if lead._deadline %}frist {{ lead._deadline }}{% else %}uten frist{% endif %}
-                </span>
-                <span class="dag-rad-fase">{{ stage_labels[lead._stage or 'ide'] }}</span>
-              </summary>
-
-              {% if draft.ingress %}<p class="day-lead-ingress">{{ draft.ingress }}</p>{% endif %}
-              <p class="dag-fakta">
-                {% if lead._start %}<span>▶ {{ lead._start }}</span>{% endif %}
-                {% if lead._deadline %}<span>⚑ {{ lead._deadline }}</span>{% endif %}
-                {% if lead._timer %}<span>⏱ {{ lead._timer|round(1) }} t</span>{% endif %}
-                {% if lead.geo == 'lokal' %}<span>📍 Stavanger</span>{% endif %}
-              </p>
-
-              {% if draft.body %}
-              <details class="angle">
-                <summary>
-                  <span class="angle-title">📄 Åpne artikkelen</span>
-                  {% if draft.inngang %}<span class="tag">{{ draft.inngang }}</span>{% endif %}
-                </summary>
-
-                <div class="draft-body">{{ draft.body }}</div>
-
-                {% if draft.checks %}
-                <p class="draft-checks-h">Må sjekkes før publisering</p>
-                <ul class="draft-checks">{% for chk in draft.checks %}<li>{{ chk }}</li>{% endfor %}</ul>
-                {% endif %}
-
-                {% if draft.kilder %}
-                <p class="draft-checks-h">Kilder</p>
-                <ul class="src-list">
-                  {% for k in draft.kilder %}
-                  <li>
-                    {% if k.url %}<a class="kilde" href="{{ k.url }}" target="_blank" rel="noopener">{{ k.navn }}</a>
-                    {% else %}<span>{{ k.navn }}</span>{% endif %}
-                    {% if k.hva %}<span class="muted"> — {{ k.hva }}</span>{% endif %}
-                  </li>
-                  {% endfor %}
-                </ul>
-                {% elif lead.data_url %}
-                <p class="draft-checks-h">Kilde</p>
-                <ul class="src-list">
-                  <li><a class="kilde" href="{{ lead.data_url }}" target="_blank" rel="noopener">{{ lead.data_source or 'Datakilde' }}</a></li>
-                </ul>
-                {% endif %}
-
-                {% if draft.image_ideas %}
-                <p class="draft-checks-h">Bildeforslag</p>
-                <ul class="src-list">
-                  {% for img in draft.image_ideas %}
-                  <li><strong>{{ img.motiv }}</strong>{% if img.bildetekst %}<span class="muted"> — {{ img.bildetekst }}</span>{% endif %}</li>
-                  {% endfor %}
-                </ul>
-                {% endif %}
-              </details>
-              {% endif %}
-
-              {# Skjemaet laa aapent paa HVER sak. Scrollet man ned for aa se hva
-                 man skulle gjore, moette man en vegg av datovelgere og
-                 nedtrekksmenyer i stedet for en lesbar liste. Planlegging er noe
-                 man gjor av og til; lesing er noe man gjor hver dag - saa den
-                 sjeldne handlingen legges bort, ikke den hyppige. #}
-              <details class="plan-rediger">
-                <summary>✏️ Endre plan</summary>
-              <form class="day-form" method="post" action="/leads/{{ lead.key }}/plan">
-                <input type="hidden" name="tilbake" value="/kalender?ym={{ '%04d-%02d'|format(year, month) }}" />
-                <label class="fld">
-                  <span>Start</span>
-                  <input type="date" name="start_date" value="{{ lead._start }}" />
-                </label>
-                <label class="fld">
-                  <span>Deadline</span>
-                  <input type="date" name="deadline" value="{{ lead._deadline }}" />
-                </label>
-                <label class="fld">
-                  <span>Stadium</span>
-                  <select name="stage">
-                    {% for st in stages %}
-                      <option value="{{ st }}"{{ ' selected' if (lead._stage or 'ide') == st }}>{{ stage_labels[st] }}</option>
-                    {% endfor %}
-                  </select>
-                </label>
-                <label class="fld fld-timer">
-                  <span>Timer/dag</span>
-                  <input type="number" name="timer" min="0" max="24" step="0.5"
-                         value="{{ lead._timer|round(1) }}" />
-                </label>
-                <button type="submit" class="btn-small">Lagre</button>
-              </form>
-              </details>
-            </details>
-            {% endif %}
-          {% endfor %}
-        </section>
-      {% endif %}
+    {% for m in maanedsliste %}
+    <div class="mnd{{ ' mnd-naa' if m.er_denne }}">
+      <h3 class="mnd-navn">
+        {{ m.navn }}
+        {% if m.er_denne %}<span class="mnd-naa-merke">denne måneden</span>{% endif %}
+        <span class="mnd-tall">{{ m.saker|length }}</span>
+      </h3>
+      <ul class="mnd-saker">
+        {% for sak in m.saker %}
+        <li class="mnd-sak{{ ' mnd-forfalt' if sak.forfalt }}">
+          <a href="/godkjente#sak-{{ sak.key }}">
+            <span class="dot-stage stage-bg-{{ sak.stage }}" aria-hidden="true"
+                  title="{{ stage_labels[sak.stage] }}"></span>
+            <span class="mnd-tittel">{{ sak.tittel }}</span>
+            <span class="mnd-frist">
+              {% if sak.frist %}{{ sak.dag }}.{% else %}uten frist{% endif %}
+            </span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
     {% endfor %}
-  {% endfor %}
-
-  {% if not any_day %}
+  </section>
+  {% else %}
     <section class="panel empty-inline">
-      <p>Ingen saker planlagt i {{ month_name }} ennå.</p>
+      <p>Ingen saker planlagt ennå.</p>
       <p class="muted">Godkjenn en sak på radaren, så kan du gi den en dato her.</p>
     </section>
   {% endif %}

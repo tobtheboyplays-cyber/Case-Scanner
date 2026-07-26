@@ -651,18 +651,66 @@ def test_skann_tabellen_har_tak(klient):
     assert storage.load_latest()["cases"][0]["key"] == KEY
 
 
-def test_kalenderdagen_har_tak_paa_antall_kort(klient):
-    """En dag med 40 saker rendret 40 fulle kort med hvert sitt skjema.
-    Kalendersida ble 1,8 MB HTML i stresstest."""
+def test_kalendersida_holder_seg_liten_med_mange_saker(klient):
+    """En dag med 40 saker rendret 40 fulle kort med hvert sitt skjema, og
+    kalendersida ble 1,8 MB HTML i stresstest. Dagpanelene er borte nå — hver sak
+    er én linje under måneden sin — men grensen må fortsatt voktes: en liste som
+    vokser fritt er den samme feilen i ny drakt."""
     for i in range(40):
         k = f"m{i}"
         storage.approve_lead(k, {"title": f"Sak {i}", "key": k})
         storage.set_plan(k, start_date="2026-08-10", deadline="2026-08-10", timer="0.5")
 
     html = klient.get("/kalender", params={"ym": "2026-08"}).text
-    assert "Viser 12 av 40 saker" in html
-    assert html.count('name="timer"') <= 14      # 12 dagskort + kapasitetsfeltet
-    assert len(html) < 400_000                    # ikke en megabyte
+    assert len(html) < 200_000, f"{len(html)} tegn"
+    # Ingen skjemaer i lista i det hele tatt - de laa i hvert eneste dagkort.
+    assert html.count('name="timer"') <= 1, "planskjemaene er tilbake i lista"
+
+
+def test_hver_sak_staar_noeyaktig_en_gang(klient):
+    """Eieren 26.07.2026, med skjermbilde: «Dropp å ha den samme casen nedover og
+    nedover.»
+
+    En sak som gikk fra 27. til 31. dukket opp på FEM dagpaneler. Med fire saker
+    ble sida flere skjermlengder der man scrollet forbi den samme overskriften om
+    og om igjen og trodde det var fem ulike saker.
+    """
+    storage.approve_lead("lang", {"title": "En sak som strekker seg", "key": "lang"})
+    storage.set_plan("lang", start_date="2026-08-03", deadline="2026-08-28", timer="4")
+
+    html = klient.get("/kalender", params={"ym": "2026-08"}).text
+    # Bare INNI «Hva du skal lage». At saken også står under «Kommende
+    # deadlines» er riktig - det er en annen seksjon med et annet spørsmål, og
+    # eieren ba uttrykkelig om å beholde den.
+    lista = html.split("Hva du skal lage", 1)[1].split("Uten dato", 1)[0]
+    assert lista.count("En sak som strekker seg") == 1, "saken sto der flere ganger"
+
+
+def test_maanedene_staar_hver_for_seg(klient):
+    """«Så da står det august: gutter med testo. September: jenter med kort hår.»
+
+    Lista går på TVERS av måneder, så august og september er synlige samtidig —
+    ellers måtte han bla for å se hva som venter."""
+    storage.approve_lead("a", {"title": "Sak i august", "key": "a"})
+    storage.set_plan("a", start_date="2026-08-10", deadline="2026-08-12", timer="2")
+    storage.approve_lead("s", {"title": "Sak i september", "key": "s"})
+    storage.set_plan("s", start_date="2026-09-01", deadline="2026-09-04", timer="2")
+
+    html = klient.get("/kalender", params={"ym": "2026-08"}).text
+    assert "august 2026" in html and "september 2026" in html
+    assert "Sak i august" in html and "Sak i september" in html
+    # Rekkefølgen skal være kronologisk, ikke tilfeldig.
+    assert html.index("Sak i august") < html.index("Sak i september")
+
+
+def test_kommende_deadlines_staar_fortsatt(klient):
+    """Eieren presiserte: «Kommende deadlines er fint, tenkte på det under det.»
+    Det var dagpanelene som skulle bort, ikke fristoversikten."""
+    storage.approve_lead("d", {"title": "Med frist", "key": "d"})
+    storage.set_plan("d", start_date="2099-01-01", deadline="2099-01-31", timer="2")
+
+    html = klient.get("/kalender", params={"ym": "2099-01"}).text
+    assert "KOMMENDE DEADLINES" in html.upper()
 
 
 def test_reddit_er_av_og_sier_hvorfor(klient, monkeypatch):
@@ -673,8 +721,11 @@ def test_reddit_er_av_og_sier_hvorfor(klient, monkeypatch):
     kalt = []
     monkeypatch.setattr(collectors.reddit, "collect", lambda: kalt.append(1) or ([], []))
     monkeypatch.setattr(collectors.google_trends, "collect", lambda: ([], []))
-    for navn in ("ssb", "ssb_flytting", "ssb_sok"):
-        monkeypatch.setattr(getattr(collectors, navn), "collect", lambda: ([], []))
+    # Stortinget kom til som kilde 26.07.2026. En ny kollektor i `collect_all`
+    # maa stubbes her ogsaa, ellers ringer testen ut paa ekte nett.
+    for navn in ("ssb", "ssb_flytting", "ssb_sok", "stortinget"):
+        monkeypatch.setattr(getattr(collectors, navn), "collect",
+                            lambda *a, **k: ([], []))
 
     _, _, status = collectors.collect_all()
     assert not kalt, "Reddit skal ikke kalles når den er av"

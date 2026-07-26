@@ -10,6 +10,7 @@ import hashlib
 import os
 import re
 import threading
+import time
 from calendar import monthrange
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -871,52 +872,161 @@ def _apen_url(key: str, vinkel: int) -> str:
     return f"/?apen={quote(key)}%7C{vinkel}#sak-{key}"
 
 
+# Fasene bak «Lag vinkler». Den siste er LANG med vilje - eieren 26.07.2026:
+# «bare la loadingen bruke litt tid», «aldri la det vaere en feilmelding, men
+# heller en treig progress bar».
+#
+# Prosenten kryper mot toppen av fasen sin og naar den aldri foer fasen er over
+# (se app/jobs.py), saa en lang fase gir noeyaktig den treige linja han ber om.
+# Teksten ved siden av byttes ut med det som FAKTISK skjer (`jobb.notat`): «Venter
+# i koe - 1 sak foran deg» eller «Groq (gratis): kvotetak - venter 40 s».
 VINKEL_FASER: list[tuple[int, str, float]] = [
-    (5, "Henter kildegrunnlaget", 1.0),
-    (15, "Journalisten finner vinkler …", 12.0),
+    (4, "Henter kildegrunnlaget", 1.0),
+    (10, "Journalisten finner vinkler …", 150.0),
 ]
+
+# ÉN vinkeljobb om gangen, og resten staar i koe. Eieren 26.07.2026: «hvis han
+# trykker paa fler saa stiller de seg bare i koe og venter 1 minutt til det er
+# dems tur. Hvis han tar to samtidig saa sier den andre venter i koe.»
+#
+# Dette er ikke bare pynt - det er selve loesningen paa kvotetaket. To kall
+# samtidig deler det samme minuttvinduet paa 12 000 tokens og feller hverandre;
+# to kall etter hverandre faar hvert sitt vindu og gaar begge gjennom.
+_VINKEL_LAAS = threading.Lock()
+_VINKEL_KO_LAAS = threading.Lock()
+_VINKEL_I_KO = 0
+
+# Hvor mange runder vi proever foer vi gir oss. Hver runde venter ut et
+# minuttvindu, saa dette er rundt fire minutter - og i praksis lykkes det paa
+# foerste eller andre runde.
+VINKEL_RUNDER = 4
+
+
+def _vent_paa_tur(jobb: jobs.Jobb) -> None:
+    """Ta plass i koen, og hold journalisten oppdatert mens han staar der.
+
+    Vi laaser med timeout i en loekke i stedet for et blokkerende `with`: staar
+    han bak noen andre, skal linja fortsatt fortelle ham hvorfor. En stille
+    venting er ikke til aa skille fra en henging."""
+    global _VINKEL_I_KO
+    with _VINKEL_KO_LAAS:
+        _VINKEL_I_KO += 1
+        foran = _VINKEL_I_KO - 1
+    if foran:
+        jobb.notat(f"Venter i kø — {foran} sak{'' if foran == 1 else 'er'} foran deg")
+    while not _VINKEL_LAAS.acquire(timeout=2.0):
+        with _VINKEL_KO_LAAS:
+            foran = max(0, _VINKEL_I_KO - 1)
+        jobb.notat(
+            f"Venter i kø — {foran} sak{'' if foran == 1 else 'er'} foran deg"
+            if foran else "Venter på tur …"
+        )
+
+
+def _forlat_koen() -> None:
+    global _VINKEL_I_KO
+    with _VINKEL_KO_LAAS:
+        _VINKEL_I_KO = max(0, _VINKEL_I_KO - 1)
+    with contextlib.suppress(RuntimeError):
+        _VINKEL_LAAS.release()
 
 
 def _lag_vinkler(jobb: jobs.Jobb, key: str) -> dict:
     """Vinkler for ÉN sak, paa forespoersel.
 
-    Eieren 26.07.2026, med skjermbilde: «Ingen vinkler. Fiks dette.»
+    Eieren 26.07.2026, med skjermbilde: «Ingen vinkler. Fiks dette.» Kortet sa
+    «journalisten lager forslag for de hoeyest rangerte sakene ved hvert skann» -
+    sant, men en blindvei: Groqs minuttak rekker TRE saker, og et skann finner
+    atten. Femten kort sto uten en eneste tittel.
 
-    Kortet sa «journalisten lager forslag for de hoeyest rangerte sakene ved
-    hvert skann», og det var sant - men ubrukelig. Groqs minuttak paa 12 000
-    tokens gjor at ett skann rekker TRE saker; et skann finner atten. Femten av
-    kortene sto altsaa uten en eneste tittel.
+    Aa heve taket i skannet er ikke loesningen - da ryker hele skannet paa en
+    429, og han faar null i stedet for tre. Men taket gjelder per MINUTT: naar
+    han peker paa én sak, er det bare aa vente til vinduet ruller.
 
-    Aa heve taket er ikke en loesning - da ryker hele skannet paa en 429, og han
-    faar null i stedet for tre. Men taket gjelder per MINUTT, ikke per dag: det
-    er ingenting i veien for aa bruke ett kall til naar han faktisk peker paa en
-    sak. Det er ogsaa den billigste rekkefolgen - vi betaler bare for vinkler
-    noen vil ha.
+    Da han proevde, fikk han «RuntimeError: ... kvotetak (429)», og sa: «Kvotetak,
+    finn en loesning. Hvis han trykker paa fler saa stiller de seg bare i koe og
+    venter 1 minutt til det er dems tur. Men aldri la det vaere en feilmelding,
+    men heller en treig progress bar.»
 
-    Svaret lagres (storage.ki_lagre), saa saken beholder vinklene ved neste
-    skann i stedet for aa koste kvote om igjen.
+    Det er noeyaktig det som skjer her:
+
+      1. KOE. Én jobb om gangen (`_vent_paa_tur`). To kall samtidig deler det
+         samme minuttvinduet og feller hverandre; to etter hverandre faar hvert
+         sitt vindu og gaar begge gjennom. Den som staar bak, faar vite det.
+      2. TAALMODIGHET. `taalmodig=True` lar llm-laget vente ut kvoten i stedet
+         for aa gi opp, og `si=jobb.notat` skriver ventingen inn i linja.
+      3. FLERE RUNDER. Holder ikke ett vindu, tar vi neste. Fire runder er rundt
+         fire minutter, og i praksis lykkes det paa den foerste eller andre.
+
+    Laasen om skannfila holdes BARE rundt lesing og skriving. Holdt vi den
+    gjennom KI-kallet, ville et fire minutters vinkelkall blokkert «Lag utkast»
+    like lenge - to funksjoner som ikke har noe med hverandre aa gjore.
     """
-    with _SKANN_LAAS:
-        data = load_latest()
-        if not data:
-            raise RuntimeError("Ingen skann å jobbe fra — kjør et søk først.")
-        sak = next((c for c in data.get("cases", []) if c.get("key") == key), None)
-        if sak is None:
-            raise RuntimeError("Fant ikke saken i siste skann. Kjør søk på nytt.")
+    _vent_paa_tur(jobb)
+    try:
+        with _SKANN_LAAS:
+            data = load_latest()
+            if not data:
+                raise RuntimeError("Ingen skann å jobbe fra — kjør et søk først.")
+            sak = next((c for c in data.get("cases", []) if c.get("key") == key), None)
+            if sak is None:
+                raise RuntimeError("Fant ikke saken i siste skann. Kjør søk på nytt.")
+            case = _case_from_dict(sak)
+            editor = sak.get("editor") or {}
 
         jobb.fase(1)
-        case = _case_from_dict(sak)
-        angles = journalist_angles(case, sak.get("editor") or {})
-        if not angles:
-            raise RuntimeError(
-                f"Journalisten leverte ingen vinkler. {llm.last_error() or ''}".strip()
-            )
+        angles: list[dict] = []
+        for runde in range(1, VINKEL_RUNDER + 1):
+            angles = journalist_angles(case, editor, si=jobb.notat, taalmodig=True)
+            if angles:
+                break
+            feil = llm.last_error() or ""
+            if not ("429" in feil or "kvotetak" in feil):
+                break        # en ekte feil kommer ikke til aa gaa over av seg selv
+            if runde < VINKEL_RUNDER:
+                jobb.notat(
+                    f"Kvoten er full — venter på neste minutt "
+                    f"(forsøk {runde + 1} av {VINKEL_RUNDER})"
+                )
+                time.sleep(20)
 
-        sak["angles"] = angles
-        sak["ai_mode"] = "llm"
-        storage.ki_lagre(key, angles=angles)
-        save_scan(data)
-    return {"angles": len(angles)}
+        if not angles:
+            raise RuntimeError(_vinkelfeil(llm.last_error() or ""))
+
+        # Les paa nytt: skannet kan ha skrevet mens vi ventet i fire minutter.
+        with _SKANN_LAAS:
+            data = load_latest() or {}
+            fersk = next(
+                (c for c in data.get("cases", []) if c.get("key") == key), None
+            )
+            if fersk is not None:
+                fersk["angles"] = angles
+                fersk["ai_mode"] = "llm"
+                save_scan(data)
+            # Hurtiglageret uansett: da overlever vinklene selv om saken
+            # tilfeldigvis falt ut av skannet mens vi holdt paa, og neste skann
+            # slipper aa betale kvote for dem om igjen.
+            storage.ki_lagre(key, angles=angles)
+        return {"angles": len(angles)}
+    finally:
+        _forlat_koen()
+
+
+def _vinkelfeil(raa: str) -> str:
+    """Gjor leverandoerens feil om til noe journalisten kan handle paa.
+
+    «RuntimeError: Journalisten leverte ingen vinkler. Groq (gratis): kvotetak
+    (429)» stod paa kortet hans 26.07.2026. Det er sant, og det er ubrukelig:
+    det sier ikke hva han skal gjore, og «RuntimeError» er et ord fra vaar
+    verden, ikke hans."""
+    if "429" in raa or "kvotetak" in raa:
+        return (
+            "KI-en har brukt opp minuttkvoten sin. Vent et minutt og trykk igjen "
+            "— skannet du nettopp kjørte tok nesten hele kvoten."
+        )
+    if "noekkel" in raa or "nokkel" in raa or "ingen KI" in raa:
+        return "Ingen KI-nøkkel er satt på serveren, så vinkler kan ikke lages."
+    return f"Journalisten leverte ingen vinkler. {raa}".strip()
 
 
 @app.post("/leads/{key:path}/vinkler")
@@ -1186,6 +1296,56 @@ def kalender(request: Request, ym: str = "", fane: str = "kalender"):
         if len(kommende) == 5:
             break
 
+    # ── Saker gruppert per MAANED ────────────────────────────────────────────
+    # Eieren 26.07.2026, med skjermbilde: «Istedenfor at det staar den samme
+    # saken igjen og igjen. Saa kan det heller staa: hvis det er en sak den
+    # maaneden, saa staar den saken - dette skal du lage denne maaneden.»
+    #
+    #     august      gutter med testo
+    #     september   jenter med kort haar
+    #                 voksne blir mer barnslige
+    #
+    # Dagpanelene under rutenettet gjentok en sak som gikk fra 27. til 31. paa
+    # fem dager. Med fire planlagte saker ble sida flere skjermlengder lang, og
+    # man scrollet forbi den samme overskriften om og om igjen i den tro at det
+    # var fem ulike saker.
+    #
+    # Her staar hver sak NOEYAKTIG ÉN gang, under maaneden den skal lages i.
+    # Fristen bestemmer maaneden - det er den datoen som styrer arbeidet; en
+    # startdato kan flyttes, en frist er en avtale. Uten frist faller den
+    # tilbake paa start, og har den ingen av delene staar den under «Uten dato».
+    maaneder: dict[str, dict] = {}
+    for lead in approved:
+        naar = lead.get("_deadline") or lead.get("_start") or ""
+        if not naar:
+            continue                      # vises under «Uten dato»
+        try:
+            d = date.fromisoformat(naar)
+        except ValueError:
+            continue
+        n = f"{d.year:04d}-{d.month:02d}"
+        bolk = maaneder.setdefault(n, {
+            "ym": n,
+            "navn": f"{MONTHS_NO[d.month - 1]} {d.year}",
+            "er_denne": (d.year, d.month) == (today.year, today.month),
+            "saker": [],
+        })
+        draft = lead.get("draft") or {}
+        bolk["saker"].append({
+            "key": lead.get("key", ""),
+            "tittel": draft.get("title") or lead.get("title", ""),
+            "frist": lead.get("_deadline") or "",
+            "dag": d.day,
+            "stage": lead.get("_stage") or "ide",
+            "forfalt": bool(lead.get("_deadline")) and naar < today.isoformat(),
+        })
+
+    for bolk in maaneder.values():
+        # Innad i maaneden: naermeste frist foerst. Det er rekkefolgen han
+        # faktisk jobber i.
+        bolk["saker"].sort(key=lambda s: (s["frist"] or "9999", s["tittel"]))
+    maanedsliste = [maaneder[k] for k in sorted(maaneder)]
+
     prev_m = date(year, month, 1) - timedelta(days=1)
     next_m = date(year, month, days_in_month) + timedelta(days=1)
 
@@ -1203,6 +1363,7 @@ def kalender(request: Request, ym: str = "", fane: str = "kalender"):
             "today_ym": f"{today.year:04d}-{today.month:02d}",
             "uplanlagt": uplanlagt,
             "kommende": kommende,
+            "maanedsliste": maanedsliste,
             "planned_count": sum(len(v) for v in by_day.values()),
             # Oppgavefanen: det samme arbeidet som en liste, med naermeste frist
             # foerst. Kalenderen viser NAAR; denne viser HVA som staar for tur.

@@ -476,3 +476,285 @@ def test_bergingen_finner_ikke_paa_data():
 
     assert llm._extract_json('{"saker": [{"id": "1", "ang') is None
     assert llm._extract_json("ikke json i det hele tatt") is None
+
+
+# ── «Lag vinkler» på én sak: kvotetaket skal ikke drepe den ────────────────
+#
+# Eieren 26.07.2026, med skjermbilde:
+#   «RuntimeError: Journalisten leverte ingen vinkler. Groq (gratis): kvotetak (429)»
+#   «Kvotetak. Finn en løsning.»
+#
+# Løsningen er ikke mer kvote — den er gratis og fast på 12 000 tokens i minuttet.
+# Løsningen er å VENTE. Et skann bruker ~10 800 av dem, så et knappetrykk rett
+# etterpå har ikke plass på noen sekunder — men det HAR plass når minuttvinduet
+# ruller, for kallet trenger bare 2 000.
+
+
+def test_knappen_venter_ut_kvoten_i_stedet_for_aa_gi_opp(monkeypatch):
+    """Kjernen. Første forsøk får 429, andre går gjennom — som i virkeligheten
+    når minuttvinduet har rullet."""
+    from app import llm
+
+    forsok = {"n": 0}
+    ventet: list[float] = []
+
+    def flakete(navn, system, user, *, model, max_tokens):
+        forsok["n"] += 1
+        if forsok["n"] == 1:
+            raise llm.KvoteSprengt(2.0, "Groq (gratis): kvotetak naadd (429)")
+        return '{"angles": [{"title": "En ekte tittel", "vinkel": "uventet"}]}'
+
+    monkeypatch.setattr(llm, "_ett_kall", flakete)
+    monkeypatch.setattr(llm, "leverandorkjede", lambda: ["groq"])
+    monkeypatch.setattr(llm.time, "sleep", lambda s: ventet.append(s))
+
+    svar = llm.complete_json("sys", "user", model="m", max_tokens=100, taalmodig=True)
+    assert svar == {"angles": [{"title": "En ekte tittel", "vinkel": "uventet"}]}
+    assert forsok["n"] == 2
+    # Minst 20 s: kortere vent treffer det SAMME minuttvinduet, og da er
+    # «forsøk nr. 2» bare den samme feilen en gang til.
+    assert ventet and max(ventet) >= 20, ventet
+
+
+def test_skannet_er_fortsatt_utaalmodig(monkeypatch):
+    """Taalmodigheten må være kallerens valg. Et SKANN som står stille i to
+    minutter er et ødelagt skann — der er det ingen som ser på en linje."""
+    from app import llm
+
+    forsok = {"n": 0}
+
+    def alltid_429(navn, system, user, *, model, max_tokens):
+        forsok["n"] += 1
+        raise llm.KvoteSprengt(2.0, "429")
+
+    monkeypatch.setattr(llm, "_ett_kall", alltid_429)
+    monkeypatch.setattr(llm, "leverandorkjede", lambda: ["groq"])
+    monkeypatch.setattr(llm.time, "sleep", lambda s: None)
+
+    llm.complete_json("sys", "user", model="m", max_tokens=100)
+    assert forsok["n"] == llm.MAKS_FORSOK, forsok
+    forsok["n"] = 0
+    llm.complete_json("sys", "user", model="m", max_tokens=100, taalmodig=True)
+    assert forsok["n"] == llm.TAALMODIG_FORSOK, forsok
+
+
+def test_ventingen_meldes_til_framdriftslinja(monkeypatch):
+    """Uten dette står linja stille i førti sekunder og ser ut som en henging.
+    Beskjeden er halve løsningen — den andre halvdelen er at vi venter."""
+    from app import llm
+
+    meldt: list[str] = []
+
+    def alltid_429(navn, system, user, *, model, max_tokens):
+        raise llm.KvoteSprengt(30.0, "429")
+
+    monkeypatch.setattr(llm, "_ett_kall", alltid_429)
+    monkeypatch.setattr(llm, "leverandorkjede", lambda: ["groq"])
+    monkeypatch.setattr(llm.time, "sleep", lambda s: None)
+
+    llm.complete_json("sys", "u", model="m", max_tokens=100,
+                      si=meldt.append, taalmodig=True)
+    assert any("kvotetak" in m and "venter" in m for m in meldt), meldt
+
+
+def test_feilmeldingen_sier_hva_han_skal_gjore():
+    """«RuntimeError: ... Groq (gratis): kvotetak (429)» sto på kortet hans. Det
+    er sant og ubrukelig: det sier ikke hva han skal gjøre, og «RuntimeError» er
+    et ord fra vår verden, ikke hans."""
+    from app.main import _vinkelfeil
+
+    kvote = _vinkelfeil("Groq (gratis): kvotetak (429)")
+    assert "RuntimeError" not in kvote and "429" not in kvote
+    assert "Vent" in kvote and "trykk igjen" in kvote
+
+    ingen = _vinkelfeil("ingen KI-nokkel i miljoet (GROQ/OPENROUTER)")
+    assert "nøkkel" in ingen and "GROQ" not in ingen
+
+
+def test_vinklene_lagres_saa_de_ikke_maa_kjopes_paa_nytt(tmp_path, monkeypatch):
+    """Ett kall koster kvote. Forsvant svaret ved neste skann, ville den samme
+    saken kostet kvote om og om igjen — og køen ville aldri tømt seg."""
+    from app import jobs, main, storage
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "t.sqlite3"))
+    sak = {**lag_saker(1)[0].to_dict(), "angles": [], "editor": {}}
+    storage.save_scan({"cases": [sak], "plan": {}, "status": [], "summary": {},
+                       "ai_mode": "mal"})
+
+    monkeypatch.setattr(main, "journalist_angles",
+                        lambda c, e, **k: [{"title": "T", "vinkel": "uventet"}])
+
+    main._lag_vinkler(jobs.Jobb("x", main.VINKEL_FASER), sak["key"])
+    assert storage.load_latest()["cases"][0]["angles"], "vinklene ble ikke lagret"
+    assert storage.ki_hent([sak["key"]])[sak["key"]]["angles"], "ikke i hurtiglageret"
+
+
+# ── Køen: to trykk samtidig ────────────────────────────────────────────────
+#
+# Eieren 26.07.2026: «Hvis han trykker på fler så stiller de seg bare i kø og
+# venter 1 minutt til det er dems tur. Men aldri la det være en feilmelding, men
+# heller en treig progress bar. Hvis han tar to samtidig så sier den andre venter
+# i kø.»
+#
+# Dette er ikke pynt. To KI-kall samtidig deler det samme minuttvinduet på
+# 12 000 tokens og feller hverandre; to etter hverandre får hvert sitt vindu og
+# går begge gjennom. Køen ER løsningen på kvotetaket.
+
+
+def _skann_med_en_sak(tmp_path, monkeypatch):
+    from app import storage
+
+    monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "t.sqlite3"))
+    sak = {**lag_saker(1)[0].to_dict(), "angles": [], "editor": {}}
+    storage.save_scan({"cases": [sak], "plan": {}, "status": [], "summary": {},
+                       "ai_mode": "mal"})
+    return sak["key"]
+
+
+def test_to_samtidige_trykk_kjorer_etter_hverandre(tmp_path, monkeypatch):
+    """Overlapper de, deler de minuttvinduet og feller hverandre."""
+    import threading
+    import time as t
+
+    from app import jobs, main
+
+    key = _skann_med_en_sak(tmp_path, monkeypatch)
+    inne: list[int] = []
+    samtidige = {"maks": 0, "naa": 0}
+    laas = threading.Lock()
+
+    def treg(case, editor, **kw):
+        with laas:
+            samtidige["naa"] += 1
+            samtidige["maks"] = max(samtidige["maks"], samtidige["naa"])
+        t.sleep(0.25)
+        with laas:
+            samtidige["naa"] -= 1
+        inne.append(1)
+        return [{"title": "T", "vinkel": "uventet"}]
+
+    monkeypatch.setattr(main, "journalist_angles", treg)
+
+    traader = [
+        threading.Thread(target=main._lag_vinkler,
+                         args=(jobs.Jobb(f"j{i}", main.VINKEL_FASER), key))
+        for i in range(3)
+    ]
+    for x in traader:
+        x.start()
+    for x in traader:
+        x.join(timeout=20)
+
+    assert len(inne) == 3, "ikke alle tre kom gjennom"
+    assert samtidige["maks"] == 1, f"{samtidige['maks']} kall gikk samtidig"
+
+
+def test_den_som_staar_bak_faar_vite_det(tmp_path, monkeypatch):
+    """«Hvis han tar to samtidig så sier den andre venter i kø.» En stille
+    venting er ikke til å skille fra en henging."""
+    import threading
+    import time as t
+
+    from app import jobs, main
+
+    key = _skann_med_en_sak(tmp_path, monkeypatch)
+    slipp = threading.Event()
+
+    def foerste(case, editor, **kw):
+        slipp.wait(timeout=5)
+        return [{"title": "T", "vinkel": "uventet"}]
+
+    monkeypatch.setattr(main, "journalist_angles", foerste)
+
+    j1 = jobs.Jobb("j1", main.VINKEL_FASER)
+    j2 = jobs.Jobb("j2", main.VINKEL_FASER)
+    t1 = threading.Thread(target=main._lag_vinkler, args=(j1, key))
+    t1.start()
+    t.sleep(0.3)                       # la den første ta låsen
+
+    t2 = threading.Thread(target=main._lag_vinkler, args=(j2, key))
+    t2.start()
+    t.sleep(0.3)                       # la den andre rekke å melde fra
+
+    # `siste` er «hva skjer akkurat nå»; `tekst` er bare navnet på fasen.
+    # UI-et viser `siste || tekst` - se pollVinkler i dashboard.html.
+    tilstand = j2.tilstand()
+    naa = tilstand.get("siste") or tilstand.get("tekst", "")
+    assert "kø" in naa.lower(), f"nr. 2 sa ikke fra: {naa!r}"
+
+    slipp.set()
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+
+
+def test_koen_toemmer_seg_selv_om_en_jobb_feiler(tmp_path, monkeypatch):
+    """Slipper ikke en feilet jobb låsen, står alle etterfølgende for alltid —
+    og «venter i kø» blir en løgn."""
+    import threading
+
+    from app import jobs, main
+
+    key = _skann_med_en_sak(tmp_path, monkeypatch)
+
+    def sprekker(case, editor, **kw):
+        raise ValueError("noe gikk galt")
+
+    monkeypatch.setattr(main, "journalist_angles", sprekker)
+    with pytest.raises(ValueError):
+        main._lag_vinkler(jobs.Jobb("j", main.VINKEL_FASER), key)
+
+    # Låsen skal være fri: neste jobb må komme rett gjennom.
+    monkeypatch.setattr(main, "journalist_angles",
+                        lambda c, e, **k: [{"title": "T", "vinkel": "uventet"}])
+    ferdig = threading.Event()
+
+    def kjor():
+        main._lag_vinkler(jobs.Jobb("j2", main.VINKEL_FASER), key)
+        ferdig.set()
+
+    threading.Thread(target=kjor, daemon=True).start()
+    assert ferdig.wait(timeout=5), "køen var låst etter en feilet jobb"
+
+
+def test_kvotetak_gir_flere_runder_ikke_en_feilmelding(tmp_path, monkeypatch):
+    """«Aldri la det være en feilmelding.» Første runde møter kvotetaket, andre
+    går gjennom — og journalisten ser bare at det tok litt tid."""
+    from app import jobs, llm, main
+
+    key = _skann_med_en_sak(tmp_path, monkeypatch)
+    runder = {"n": 0}
+
+    def foerst_kvotetak(case, editor, **kw):
+        runder["n"] += 1
+        if runder["n"] == 1:
+            llm._sett_feil("Groq (gratis): kvotetak (429)")
+            return []
+        return [{"title": "Endelig", "vinkel": "uventet"}]
+
+    monkeypatch.setattr(main, "journalist_angles", foerst_kvotetak)
+    monkeypatch.setattr(main.time, "sleep", lambda s: None)
+
+    jobb = jobs.Jobb("j", main.VINKEL_FASER)
+    assert main._lag_vinkler(jobb, key) == {"angles": 1}
+    assert runder["n"] == 2
+
+
+def test_en_ekte_feil_venter_vi_ikke_ut(tmp_path, monkeypatch):
+    """Taalmodighet er for kvotetak. En manglende nøkkel blir ikke bedre av at
+    vi venter fire minutter på den."""
+    from app import jobs, llm, main
+
+    key = _skann_med_en_sak(tmp_path, monkeypatch)
+    runder = {"n": 0}
+
+    def ingen_nokkel(case, editor, **kw):
+        runder["n"] += 1
+        llm._sett_feil("ingen KI-nokkel i miljoet")
+        return []
+
+    monkeypatch.setattr(main, "journalist_angles", ingen_nokkel)
+    monkeypatch.setattr(main.time, "sleep", lambda s: pytest.fail("ventet på en ekte feil"))
+
+    with pytest.raises(RuntimeError, match="nøkkel"):
+        main._lag_vinkler(jobs.Jobb("j", main.VINKEL_FASER), key)
+    assert runder["n"] == 1

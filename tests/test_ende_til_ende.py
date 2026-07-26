@@ -77,10 +77,11 @@ def koble_til(nett: Nett, monkeypatch) -> None:
         ssb_flytting,
         ssb_kalender,
         ssb_sok,
+        stortinget,
     )
 
     for mod in (brreg, coverage, news_rss, reddit, ssb, ssb_flytting,
-                ssb_kalender, ssb_sok):
+                ssb_kalender, ssb_sok, stortinget):
         if hasattr(mod, "http_get"):
             monkeypatch.setattr(mod, "http_get", nett.get)
     monkeypatch.setattr(httpx, "post", nett.post)

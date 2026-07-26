@@ -497,7 +497,12 @@ def journalist_angles_batch(
 
 
 def journalist_angles(
-    case: Case, editor: dict, budsjett: Budsjett | None = None
+    case: Case,
+    editor: dict,
+    budsjett: Budsjett | None = None,
+    *,
+    si: Callable[[str], None] | None = None,
+    taalmodig: bool = False,
 ) -> list[dict]:
     """To KORTE vinkelforslag - ingen artikkel enda.
 
@@ -524,8 +529,12 @@ def journalist_angles(
     ):
         return []      # i koe - neste skann tar den
 
+    # `taalmodig` brukes naar journalisten trykker paa knappen for ÉN sak: da er
+    # det han som venter, med en framdriftslinje foran seg, og da er ett minutts
+    # venting paa kvotevinduet uendelig mye bedre enn «kvotetak (429)».
     result = llm.complete_json(
-        prompts.JOURNALIST_ANGLES_SYSTEM, user, model=llm.MODEL_ANALYST, max_tokens=1400
+        prompts.JOURNALIST_ANGLES_SYSTEM, user, model=llm.MODEL_ANALYST,
+        max_tokens=1400, si=si, taalmodig=taalmodig,
     )
     angles = result.get("angles") if isinstance(result, dict) else None
     if isinstance(angles, list):

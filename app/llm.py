@@ -100,6 +100,21 @@ MAKS_FORSOK = 2
 # Et skann som staar stille i to minutter er ikke et skann.
 MAKS_VENT = 45.0
 
+# TAALMODIG MODUS. Eieren 26.07.2026, med skjermbilde av «Journalisten leverte
+# ingen vinkler. Groq (gratis): kvotetak (429)»: «Kvotetak. Finn en loesning.»
+#
+# Loesningen er ikke mer kvote - den er gratis og fast paa 12 000 tokens i
+# minuttet. Loesningen er aa VENTE. Et skann bruker ~10 800 av de 12 000, saa
+# trykker han «Lag vinkler» rett etterpaa, er det ikke plass paa noen sekunder
+# - men det ER plass naar minuttvinduet ruller. Kallet trenger bare 2 000.
+#
+# Forskjellen paa de to situasjonene er hvem som venter. Et SKANN som staar
+# stille i to minutter er et oedelagt skann; en journalist som trykker paa én
+# knapp og ser en framdriftslinje, venter gjerne i ett minutt. Derfor er
+# taalmodigheten et VALG kalleren tar, ikke en ny global innstilling.
+TAALMODIG_FORSOK = 4
+TAALMODIG_VENT = 70.0
+
 
 class KvoteSprengt(Exception):
     """429 fra leverandoren. `sekunder` er dens eget forslag til ventetid."""
@@ -200,10 +215,11 @@ def anslaa_tokens(system: str, user: str, max_tokens: int) -> int:
     return _anslaa_tokens(system, user, max_tokens)
 
 
-def _vent(sekunder: float, si: Callable[[str], None] | None, hvorfor: str) -> None:
+def _vent(sekunder: float, si: Callable[[str], None] | None, hvorfor: str,
+          tak: float | None = None) -> None:
     if sekunder <= 0:
         return
-    sekunder = min(sekunder, MAKS_VENT)
+    sekunder = min(sekunder, MAKS_VENT if tak is None else tak)
     if si is not None:
         si(f"{hvorfor} — venter {sekunder:.0f} s")
     time.sleep(sekunder)
@@ -530,6 +546,7 @@ def complete_json(
     model: str,
     max_tokens: int = 1500,
     si: Callable[[str], None] | None = None,
+    taalmodig: bool = False,
 ):
     """Kall KI-en og returner parset JSON, eller None om ingen leverandor klarte det.
 
@@ -547,25 +564,39 @@ def complete_json(
 
     anslag = _anslaa_tokens(system, user, max_tokens)
     siste_feil = ""
+    # Se TAALMODIG_FORSOK for hvorfor dette er kallerens valg og ikke en global.
+    forsok_tak = TAALMODIG_FORSOK if taalmodig else MAKS_FORSOK
+    vent_tak = TAALMODIG_VENT if taalmodig else MAKS_VENT
 
     for i, navn in enumerate(kjede):
         if i > 0 and si is not None:
             si(f"Prøver {provider_label(navn)} i stedet")
 
-        for forsok in range(1, MAKS_FORSOK + 1):
+        for forsok in range(1, forsok_tak + 1):
             # Vent heller enn aa bli avvist.
             _vent(
                 _KVOTER[navn].ventetid(anslag),
                 si,
                 f"{provider_label(navn)}: nær kvotetaket",
+                tak=vent_tak,
             )
             try:
                 text = _ett_kall(navn, system, user, model=model, max_tokens=max_tokens)
             except KvoteSprengt as exc:
                 siste_feil = f"{provider_label(navn)}: kvotetak (429)"
                 _KVOTER[navn].registrer(anslag)
-                if forsok < MAKS_FORSOK:
-                    _vent(exc.sekunder, si, f"{provider_label(navn)}: kvotetak")
+                if forsok < forsok_tak:
+                    # Groq oppgir sjelden en brukbar retry-after paa TPM: den
+                    # sier gjerne «2 s» naar det som trengs er at hele
+                    # minuttvinduet ruller. I TAALMODIG modus setter vi derfor et
+                    # gulv paa 20 s - kortere vent treffer det samme vinduet, og
+                    # da er «forsoek nr. 2» bare den samme feilen en gang til.
+                    #
+                    # I vanlig modus foelger vi leverandoeren som foer. Skannet
+                    # har et budsjett og skal ikke staa og vente; det er nettopp
+                    # forskjellen taalmodigheten finnes for.
+                    pause = max(exc.sekunder, 20.0) if taalmodig else exc.sekunder
+                    _vent(pause, si, f"{provider_label(navn)}: kvotetak", tak=vent_tak)
                     continue
                 break  # gi opp denne leverandoren, prov neste i kjeden
             except Exception as exc:  # noqa: BLE001 - nettverk/noekkel/modell
