@@ -721,12 +721,18 @@ def test_reddit_er_av_og_sier_hvorfor(klient, monkeypatch):
     kalt = []
     monkeypatch.setattr(collectors.reddit, "collect", lambda: kalt.append(1) or ([], []))
     monkeypatch.setattr(collectors.google_trends, "collect", lambda: ([], []))
-    # Stortinget kom til som kilde 26.07.2026. En ny kollektor i `collect_all`
-    # maa stubbes her ogsaa, ellers ringer testen ut paa ekte nett.
-    for navn in ("ssb", "ssb_flytting", "ssb_sok", "stortinget",
-                 "strompris", "sola"):
-        monkeypatch.setattr(getattr(collectors, navn), "collect",
-                            lambda *a, **k: ([], []))
+    # Alle OEVRIGE kollektorer stubbes - ellers ringer testen ut paa ekte nett.
+    #
+    # Dette sto som en haandskrevet liste, og den ble utdatert hver gang en
+    # kilde kom til. 26.07.2026 lekket den tre nye kilder ut paa ekte internett;
+    # testen var groenn, men brukte 6,4 sekunder paa aa spoerre Vegvesenet.
+    # Naa finner vi modulene selv, saa lista ikke kan bli utdatert igjen.
+    import types
+    for navn, mod in vars(collectors).items():
+        if (isinstance(mod, types.ModuleType)
+                and navn not in ("reddit", "google_trends")
+                and hasattr(mod, "collect")):
+            monkeypatch.setattr(mod, "collect", lambda *a, **k: ([], []))
 
     _, _, status = collectors.collect_all()
     assert not kalt, "Reddit skal ikke kalles når den er av"

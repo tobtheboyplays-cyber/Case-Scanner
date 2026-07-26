@@ -87,6 +87,12 @@ def koble_til(nett: Nett, monkeypatch) -> None:
         if hasattr(mod, "http_get"):
             monkeypatch.setattr(mod, "http_get", nett.get)
     monkeypatch.setattr(httpx, "post", nett.post)
+    # ... og `httpx.get`. `vegtrafikk`, `kolumbus` og `farevarsel` gaar ikke via
+    # `http_get`, saa uten denne traff de conftest-vakta - som kaster `Failed`.
+    # `Failed` arver fra BaseException, gaar rett forbi hver `except Exception` i
+    # de fail-soft kollektorene, ut av `run_scan`, forbi feilfangsten i
+    # `jobs.start`, og etterlater jobben i «kjorer» for alltid. Hele suiten hang.
+    monkeypatch.setattr(httpx, "get", nett.get)
 
 
 def skann(klient, temaer: list[str] | None = None) -> str:

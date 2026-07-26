@@ -131,3 +131,73 @@ Ferskhetssporet slipper fortsatt gjennom uansett tema — det er meningen.
 Alt står øverst i `app/collectors/ssb_sok.py`: `KOMMUNER`, `FERSK_DAGER`,
 `MAKS_KANDIDATER`, `MIN_ENDRING_PST`, `MIN_NIVAA`. Søkeordene per tema står i
 `app/config.py` under `TEMAER`.
+
+---
+
+# Gjennomgang 26.07.2026 — hva som faktisk kom ut
+
+Eieren: *«ta en full sjekk av søke systemet og tester iherdig og ser litt over
+hva som kommer og hva som kan eventuelt forbedres»*.
+
+Metode: tre ekte skann mot SSB med **tom database**, så rotasjonen startet på
+null. Alt under er målt, ikke antatt.
+
+**Resultat:** 24 tabeller probet, **7 leads** (~29 % treffrate). Rotasjonen
+virker — runde 1 lette på folkemengde/flytting/fødte/døde, runde 2 på
+barnehage/grunnskole/elever, runde 3 på barnevern/eldre/sykehjem, og hver runde
+tok en ny katalogside. De beste funnene var ekte saker: *«Ulykker i Sandnes: 65 i
+2025, mot 39 i 2024»* og *«Godkjent bruksareal til annet enn boliger opp 154 %»*.
+
+## Tre problemer, alle rettet
+
+### 1. Overskriftene var rå SSB-variabelnavn
+
+| Før | Etter |
+|---|---|
+| `Antall menn i kvalifiseringsprogram (antall) opp 23 %` | `Kvalifiseringsstønad opp 17 %` |
+| `Kommunens totale kostnader til krisesentertilbud (NOK) … opp 96 %` | `Kommunens totale kostnader til krisesentertilbud opp 96 %` |
+| `Årstimer til morsmålsopplæring, kommunale og private … opp 20 %` | `Årstimer til morsmålsopplæring opp 20 %` |
+
+Tallene var riktige hele tiden. Men ingen leser en overskrift som begynner med
+«Korrigerte brutto driftsutgifter», og et lead som ikke blir lest er et lead som
+ikke finnes. `_overskrift()` fjerner enhetsparenteser (`(antall)`, `(kr)`,
+`(NOK)`), etatskoder (`(f221)`) og et stumt innledende «Antall ».
+
+**Det fulle variabelnavnet står uendret i `finding`** — der er presisjon
+viktigere enn rytme, og journalisten må kunne finne igjen variabelen hos SSB.
+
+### 2. Fem av sju leads var Sandnes — i en Stavanger-avis
+
+Systemet valgte kommunen med størst prosentutslag. Sandnes er mindre, så
+prosentene svinger mer der, og Sandnes vant nesten alltid.
+
+`SANDNES_MARGIN = 1.4`: Sandnes må slå Stavanger med margin, ikke med en desimal.
+**Vektlegging, ikke filter** — en kraftig Sandnes-sak går fortsatt gjennom, og
+har Stavanger ingen sak i den tabellen, er Sandnes riktig svar. Etter endringen
+er fordelingen fortsatt Sandnes-tung, og det er ærlig: i de tabellene lå
+Stavanger-utslaget under terskelen.
+
+### 3. Småtall konkurrerte med ekte signaler
+
+`Antall menn i kvalifiseringsprogram: 128 mot 104` er +23 % og 24 personer — det
+kan være ett kull. Det lå og konkurrerte med `Ulykker: 65 mot 39`.
+
+Under `SMAATALL = 300` kreves nå 30 % endring i stedet for 15 %. Etter endringen
+plukket systemet en annen variabel i samme tabell: kvalifiseringsstønad, 40,8 mot
+34,9 millioner kroner. Samme tabell, større tall, bedre sak.
+
+## Det som IKKE ble endret, og hvorfor
+
+- **Treffraten på 29 % er ikke et problem.** De 71 prosentene er tabeller uten
+  kommunetall, uten eliminerbare dimensjoner, eller under terskelen — og utfallet
+  skrives til `ssb_tabeller`, så de aldri probes igjen.
+- **Åtte kandidater per skann** (`MAKS_KANDIDATER`) ligger godt under SSBs tak på
+  30 kall i minuttet. Å øke det ville gitt flere leads, men også lengre skann — og
+  redaktøren rekker uansett bare fire saker per skann på Groqs kvote.
+
+## Testene
+
+`tests/test_ssb_sok.py` har nå 38 tester. De ni nye vokter nøyaktig funnene over:
+at Stavanger vinner ved likt utslag, at en klart større Sandnes-sak likevel går
+gjennom, at småtall krever mer, at store tall beholder den lave terskelen, og at
+overskriften ryddes mens funnet forblir presist.

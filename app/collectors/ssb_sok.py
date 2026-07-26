@@ -104,6 +104,21 @@ NIVAA_FYLKE = "(F)"
 MIN_ENDRING_PST = 15.0
 MIN_NIVAA = 20.0
 
+# ... men 20 er lavt naar tallet er et ANTALL MENNESKER. Maalt paa tre ekte skann
+# 26.07.2026 slapp «Antall menn i kvalifiseringsprogram: 128 mot 104, opp 23 %»
+# gjennom og konkurrerte med «Ulykker: 65 mot 39». Det foerste er 24 personer og
+# kan vaere ett kull; det andre er en sak. Under `SMAATALL` kreves derfor en
+# stoerre endring foer det teller.
+SMAATALL = 300.0
+MIN_ENDRING_SMAATALL = 30.0
+
+# Aftenbladet er en STAVANGER-avis. Sandnes er nabokommunen - relevant, men
+# sekundaer. Sandnes er ogsaa mindre, saa prosentene svinger mer der, og uten
+# denne marginen vinner Sandnes nesten alltid naar begge kvalifiserer: fem av
+# sju leads i maalingen 26.07.2026 var Sandnes. Sandnes maa slaa Stavanger med
+# margin, ikke bare med en desimal.
+SANDNES_MARGIN = 1.4
+
 # Hele landet i SSBs regionkoder. Brukes til nivaasammenligning, ikke til aa
 # lage nasjonale saker.
 LANDET = "0"
@@ -225,6 +240,40 @@ def _hovedtall(metric_dim: dict, antall: int = MAKS_METRIKKER) -> list[str]:
     etiketter = metric_dim["category"].get("label", {})
     rangert = sorted(koder, key=lambda k: (len(etiketter.get(k, k)), koder.index(k)))
     return rangert[:antall]
+
+
+# Enheter og etatskoder SSB henger bak variabelnavnene sine. De hoerer hjemme i
+# funnet, der presisjonen betyr noe - ikke i en overskrift.
+_STOEY = re.compile(
+    r"\s*\((?:antall|antal|tal|kr|NOK|prosent|pst|per innbygger|1000 kr|"
+    r"f\d{3}[a-z]?|K|F|B)\)", re.IGNORECASE)
+
+
+def _overskrift(metric_navn: str, tabell_tittel: str = "") -> str:
+    """SSB-variabelnavn -> noe en journalist gidder aa lese.
+
+    Maalt 26.07.2026 kom disse ut av soekesystemet:
+
+        «Antall menn i kvalifiseringsprogram (antall) opp 23 % i Sandnes»
+        «Korrigerte brutto driftsutgifter til lokaler og skyss … opp 20 %»
+        «Kommunens totale kostnader til krisesentertilbud (NOK) … opp 96 %»
+
+    Tallene bak var riktige, men ingen leser en overskrift som begynner med
+    «Korrigerte brutto driftsutgifter». Her fjernes enhetsparentesene og
+    etatskodene, og et innledende «Antall » som ikke sier noe.
+
+    Det FULLE navnet staar fortsatt uendret i `finding` - der er presisjon
+    viktigere enn rytme, og journalisten maa kunne finne igjen variabelen.
+    """
+    t = _STOEY.sub("", metric_navn or "").strip(" ,;-")
+    # «Antall menn i ...» -> «Menn i ...». Ordet er stumt: tallet staar i funnet.
+    t = re.sub(r"^[Aa]ntall\s+", "", t)
+    # SSB skriver ofte «... , kommunale og private grunnskoler» som hale.
+    t = re.sub(r"\s*,\s*(kommunale og private|kommunale|private)\b.*$", "", t)
+    t = t.strip(" ,;-")
+    if not t:
+        t = _kort(tabell_tittel, 55) or "Tallet"
+    return t[0].upper() + t[1:] if t else t
 
 
 def _kort(tekst: str, maks: int = 65) -> str:
@@ -537,7 +586,7 @@ def _case(rad: dict, roller: tuple[str, str, str], data: dict, steg: int) -> Cas
 
     # Sterkeste utslag paa tvers av alle statistikkvariabler OG begge kommunene.
     # Bare ÉN sak per tabell: fem varianter av samme funn er stoy, ikke fem leads.
-    beste: tuple[float, str, str, float, float, str] | None = None
+    beste: tuple[float, str, str, float, float, str, float] | None = None
     for metrikk in idx[metric]:
         for kode, kommune in KOMMUNER.items():
             if kode not in idx[geo]:
@@ -550,10 +599,21 @@ def _case(rad: dict, roller: tuple[str, str, str], data: dict, steg: int) -> Cas
             if naa is None or fjor is None or min(abs(naa), abs(fjor)) < MIN_NIVAA:
                 continue
             pst = _pst(naa, fjor)
-            if pst is None or abs(pst) < MIN_ENDRING_PST:
+            if pst is None:
                 continue
-            if beste is None or abs(pst) > abs(beste[0]):
-                beste = (pst, kode, kommune, naa, fjor, etiketter.get(metrikk, metrikk))
+            # Smaa tall trenger et stoerre utslag. 23 % av 104 er 24 enheter og
+            # kan vaere tilfeldig; 23 % av 4 000 er det ikke.
+            krav = (MIN_ENDRING_SMAATALL
+                    if min(abs(naa), abs(fjor)) < SMAATALL else MIN_ENDRING_PST)
+            if abs(pst) < krav:
+                continue
+            # Stavanger foran Sandnes med mindre Sandnes-utslaget er klart
+            # stoerre. Vektlegging, ikke filter: en kraftig Sandnes-sak vinner
+            # fortsatt, en marginalt stoerre gjor det ikke.
+            vekt = abs(pst) * (1.0 if kode == "1103" else 1.0 / SANDNES_MARGIN)
+            if beste is None or vekt > beste[6]:
+                beste = (pst, kode, kommune, naa, fjor,
+                         etiketter.get(metrikk, metrikk), vekt)
 
     if beste is None:
         # Ingen endring stor nok. MEN et tall kan vaere en sak uten aa ha
@@ -562,7 +622,7 @@ def _case(rad: dict, roller: tuple[str, str, str], data: dict, steg: int) -> Cas
         # landet» er ikke en endring, det er et nivaa. Foer dette fant
         # soekesystemet ALDRI slike tall, uansett hvor sjokkerende de var.
         return _nivaacase(rad, idx, geo, metric, hent, naa_p, etiketter, tabell_id, tittel_raa)
-    pst, _kode, kommune, naa, fjor, metric_navn = beste
+    pst, _kode, kommune, naa, fjor, metric_navn, _vekt = beste
 
     retning = "opp" if pst > 0 else "ned"
     funn = (
@@ -571,7 +631,8 @@ def _case(rad: dict, roller: tuple[str, str, str], data: dict, steg: int) -> Cas
     )
     return Case(
         key=f"ssb-sok:{tabell_id}:{_kode}:{naa_p}",
-        title=f"{_kort(metric_navn, 55)} {retning} {abs(pst):.0f} % i {kommune}",
+        title=(f"{_kort(_overskrift(metric_navn, tittel_raa), 55)} "
+               f"{retning} {abs(pst):.0f} % i {kommune}"),
         score=min(10 + abs(pst) / 2, 45),
         geo="lokal",
         topics=_tema_fra(f"{tittel_raa} {metric_navn}"),

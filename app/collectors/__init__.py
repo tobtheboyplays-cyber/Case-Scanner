@@ -16,7 +16,9 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from app.collectors import (
+    farevarsel,
     google_trends,
+    kolumbus,
     reddit,
     ssb,
     ssb_flytting,
@@ -129,6 +131,27 @@ def collect_all(
         status.extend(notes)
     except Exception as exc:  # noqa: BLE001
         status.append(f"[FEIL] Vegtrafikk: {exc}")
+
+    # 1g) Kolumbus i sanntid. Sola svarer paa «staar flyene?»; denne paa det
+    # som treffer langt flere hver morgen: staar bussen?
+    meld("Kolumbus: innstilte og forsinkede avganger")
+    try:
+        cases, notes = kolumbus.collect(temaer)
+        ssb_cases.extend(cases)
+        status.extend(notes)
+    except Exception as exc:  # noqa: BLE001
+        status.append(f"[FEIL] Kolumbus: {exc}")
+
+    # 1h) MET-farevarsel. Gir hurtighet, ikke eksklusivitet - hele landets
+    # redaksjoner faar det samme varselet. Verdien er at konsekvenser og raad
+    # foelger med ferdig formulert, saa vinkelen kan gaa rett paa lokale foelger.
+    meld("Farevarsel: MET for storbyområdet")
+    try:
+        cases, notes = farevarsel.collect(temaer)
+        ssb_cases.extend(cases)
+        status.extend(notes)
+    except Exception as exc:  # noqa: BLE001
+        status.append(f"[FEIL] Farevarsel: {exc}")
 
     # Her laa det EN GANG en kollektor som hentet saker fra Aftenposten, Bergens
     # Tidende og E24 og gjorde dem til leads. Den er slettet, ikke skrudd av.

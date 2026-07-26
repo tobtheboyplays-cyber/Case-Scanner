@@ -248,3 +248,93 @@ def test_rotasjonen_gaar_videre_og_runder(db):
 def test_rotasjonen_taaler_soppel_i_markoeren(db):
     storage.meta_set("t", "ikke et tall")
     assert storage.neste_i_rotasjon("t", ["a", "b"], 1) == ["a"]
+
+
+# ── Tre forbedringer maalt paa ekte skann 26.07.2026 ────────────────────────
+#
+# Eieren: «ta en full sjekk av soeke systemet ... se litt over hva som kommer og
+# hva som kan eventuelt forbedres». Tre skann mot ekte SSB ga sju leads, og
+# viste tre ting som ikke var maalt av noen test:
+#
+#   · fem av sju var Sandnes, ikke Stavanger — i en Stavanger-avis
+#   · overskriftene var raa SSB-variabelnavn med enhetsparenteser
+#   · «Antall menn i kvalifiseringsprogram: 128 mot 104» slapp gjennom og
+#     konkurrerte med «Ulykker: 65 mot 39»
+
+
+def test_stavanger_vinner_naar_utslagene_er_like():
+    """Aftenbladet er en Stavanger-avis. Sandnes er nabokommunen."""
+    # Begge +50 %. Uten preferansen avgjorde rekkefolgen i dict-en.
+    sak = ssb_sok._case(RAD, ("Region", "Tid", "ContentsCode"),
+                        _data(["2025K2", "2026K2"], [1000, 1500, 1000, 1500]), steg=1)
+    assert sak is not None
+    assert "Stavanger" in sak.title, sak.title
+
+
+def test_klart_stoerre_sandnes_utslag_vinner_likevel():
+    """Vektlegging, ikke filter — en kraftig Sandnes-sak skal fortsatt fram."""
+    sak = ssb_sok._case(RAD, ("Region", "Tid", "ContentsCode"),
+                        _data(["2025K2", "2026K2"], [1000, 1200, 1000, 4000]), steg=1)
+    assert sak is not None
+    assert "Sandnes" in sak.title, sak.title
+
+
+def test_marginalt_stoerre_sandnes_utslag_vinner_ikke():
+    """+22 % i Sandnes mot +20 % i Stavanger er ikke grunn til å bytte by."""
+    sak = ssb_sok._case(RAD, ("Region", "Tid", "ContentsCode"),
+                        _data(["2025K2", "2026K2"], [1000, 1200, 1000, 1220]), steg=1)
+    assert sak is not None
+    assert "Stavanger" in sak.title, sak.title
+
+
+def test_smaatall_krever_stoerre_utslag():
+    """128 mot 104 er +23 % og 24 personer — kan vaere ett kull, ikke en sak."""
+    sak = ssb_sok._case(RAD, ("Region", "Tid", "ContentsCode"),
+                        _data(["2025K2", "2026K2"], [104, 128, 104, 128]), steg=1)
+    assert sak is None
+
+
+def test_smaatall_med_stort_utslag_slipper_gjennom():
+    """65 mot 39 ulykker er +67 % — det ER en sak."""
+    sak = ssb_sok._case(RAD, ("Region", "Tid", "ContentsCode"),
+                        _data(["2025K2", "2026K2"], [39, 65, 39, 65]), steg=1)
+    assert sak is not None
+
+
+def test_store_tall_holder_seg_paa_den_lave_terskelen():
+    """15 % av 4 000 er 600 enheter. Det skal fortsatt telle."""
+    sak = ssb_sok._case(RAD, ("Region", "Tid", "ContentsCode"),
+                        _data(["2025K2", "2026K2"], [4000, 4700, 4000, 4700]), steg=1)
+    assert sak is not None
+
+
+@pytest.mark.parametrize("raa,vent", [
+    ("Antall menn i kvalifiseringsprogram (antall)", "Menn i kvalifiseringsprogram"),
+    ("Kommunens totale kostnader til krisesentertilbud (NOK)",
+     "Kommunens totale kostnader til krisesentertilbud"),
+    ("Årstimer til morsmålsopplæring, kommunale og private grunnskoler (antall)",
+     "Årstimer til morsmålsopplæring"),
+    ("Godkjent bruksareal (kr)", "Godkjent bruksareal"),
+    ("Ulykker", "Ulykker"),
+])
+def test_overskriften_er_ryddet(raa, vent):
+    assert ssb_sok._overskrift(raa, "Reserve") == vent
+
+
+def test_overskrift_faller_tilbake_paa_tabellnavnet():
+    """Blir det ingenting igjen, er tabellnavnet bedre enn en tom overskrift."""
+    assert ssb_sok._overskrift("(antall)", "Konkurser i Rogaland") == "Konkurser i Rogaland"
+
+
+def test_det_fulle_variabelnavnet_staar_fortsatt_i_funnet():
+    """Overskriften ryddes; funnet skal vaere presist nok til aa finne igjen
+    variabelen hos SSB."""
+    sak = ssb_sok._case(
+        RAD, ("Region", "Tid", "ContentsCode"),
+        _data(["2025K2", "2026K2"], [4000, 4700, 4000, 4700],
+              metrikker=["Tall"],
+              tekster={"Tall": "Antall menn i kvalifiseringsprogram (antall)"}),
+        steg=1)
+    assert sak is not None
+    assert "Antall menn i kvalifiseringsprogram (antall)" in sak.finding
+    assert "(antall)" not in sak.title

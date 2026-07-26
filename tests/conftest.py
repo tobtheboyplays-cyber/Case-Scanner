@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib
 
+import httpx
 import pytest
 
 
@@ -31,6 +32,15 @@ _NETTKOLLEKTORER = (
     "ssb", "ssb_flytting", "ssb_kalender", "ssb_sok", "stortinget",
     "strompris", "sola",
 )
+
+# ... og de som IKKE gaar via `http_get`. `ssb`, `vegtrafikk`, `kolumbus` og
+# `farevarsel` kaller `httpx` direkte, fordi kildene deres er GraphQL over POST
+# eller krever egne headere. De slapp derfor rett forbi vakta over.
+#
+# Maalt 26.07.2026: de tre nye kildene tok testsuiten fra 20 til 48 sekunder ved
+# aa ringe ekte API-er i hver eneste skanntest - groent hele veien, saa ingen saa
+# det. Nøyaktig samme felle som brreg gikk i, og grunnen er at vakta bare saa
+# etter ett navn. Naa stenges selve `httpx` ogsaa.
 
 
 @pytest.fixture(autouse=True)
@@ -59,3 +69,20 @@ def ingen_nett(monkeypatch):
                     "Stubb kilden i testen, eller legg den til i _NETTKOLLEKTORER."
                 ),
             )
+
+    # Selve httpx. Dette er den brede sperra: uansett hvilken kollektor som
+    # kommer til senere, og uansett om den bruker `http_get` eller ikke, naar
+    # den ikke ut. En test som TRENGER svar patcher httpx etterpaa (se
+    # tests/nett.py) - siste tilordning vinner.
+    def _stengt(navn):
+        def gjor(*a, **k):
+            adresse = a[0] if a else k.get("url", "?")
+            pytest.fail(
+                f"httpx.{navn} mot {adresse} i en test — det er et ekte "
+                "nettkall. Ruter kilden i tests/nett.py, eller stubb httpx "
+                "i testen selv."
+            )
+        return gjor
+
+    monkeypatch.setattr(httpx, "get", _stengt("get"))
+    monkeypatch.setattr(httpx, "post", _stengt("post"))

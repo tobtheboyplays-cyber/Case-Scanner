@@ -176,6 +176,9 @@ class Nett:
             if "dagensrepresentanter" in url:
                 return FalsktSvar(200, {"dagensrepresentanter_liste": []})
             return FalsktSvar(200, {"saker_liste": []})
+        if "api.met.no" in url:
+            # MET kom til som kilde 26.07.2026. Ingen varsler = ingen sak.
+            return FalsktSvar(200, {"features": []})
         if "hvakosterstrommen.no" in url:
             return FalsktSvar(404, {})       # ingen stroemsak i testene
         if "asrv.avinor.no" in url:
@@ -196,6 +199,10 @@ class Nett:
         self.spurt.append(url)
         if "07459" in url:
             return FalsktSvar(200, BEFOLKNING)
+        if "api.entur.io" in url:
+            # Kolumbus/Entur kom til 26.07.2026. Ingen avganger = ingen sak;
+            # koblingen testes her, regnestykket i test_kolumbus.py.
+            return FalsktSvar(200, {"data": {}})
         if "trafikkdata-api" in url:
             # Vegvesenet kom til som kilde 26.07.2026. Ingen tellepunkter i
             # svaret = ingen sak, og det er det ende-til-ende-testene vil ha:
