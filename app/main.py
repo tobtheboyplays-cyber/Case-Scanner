@@ -22,7 +22,13 @@ from fastapi.templating import Jinja2Templates
 from app import __version__, jobs, llm, verify
 from app.agents import run_workflow, write_draft
 from app.collectors import brreg, collect_all, coverage, ssb_kalender
-from app.config import ENABLE_AI, ENABLE_BRREG, TEMAER, temagrupper
+from app.config import (
+    ENABLE_AI,
+    ENABLE_BRREG,
+    TEMAER,
+    demografi_for,
+    temagrupper,
+)
 from app.models import Case
 from app.planner import build_plan
 from app.scoring import build_cases, finalize_scores
@@ -172,6 +178,16 @@ templates.env.filters["kortkilde"] = kortkilde
 # da har vi byttet ett problem mot et annet.
 HENDELSER_SOM_SAKER = 6
 
+# Har INGENTING endret seg siden forrige skann, viser vi saa mange av de sterkeste
+# gjengangerne paa nytt - merket «uendret» - i stedet for en tom skjerm. Tallet er
+# lavt med vilje: dette er et aerlig naest-beste svar, ikke et fullt skann.
+UENDRET_VISES = 5
+
+# Konkurser, avviklinger og nyregistreringer er naeringsliv. Treffer temavalget
+# ingen av disse merkelappene, hoerer hendelsene ikke hjemme i lead-lista - de
+# staar fortsatt i «Kommer snart»-fanen.
+BRREG_DEMOGRAFI = {"jobb og okonomi", "uteliv og kultur", "bolig og leie"}
+
 
 def _hendelse_tittel(h: dict) -> str:
     """«Ekte Kafe As gikk konkurs» - lesbart, uten aa paastaa noe som ikke staar."""
@@ -290,8 +306,26 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
     # vinkler. Broennoeysund er en primaerkilde - konkursvedtak og nyregistreringer
     # er raastoff ingen har skrevet ut enda - saa de hoerer hjemme her oppe,
     # sammen med SSB-tallene. Egen try: en doed kilde skal aldri velte et skann.
+    #
+    # Temavalget gjelder ogsaa her. Et konkursvedtak er naeringsliv - velger
+    # journalisten bare «natur og miljø», er seks konkurser ikke det han spurte
+    # om, og de tar plassene fra det han faktisk ba om. Hendelsene staar fortsatt
+    # i «Kommer snart»-fanen uansett tema; det er bare LEAD-lista som filtreres.
     hendelser: list[dict] = []
-    if ENABLE_BRREG:
+    tema_passer_brreg = not temaer or bool(demografi_for(temaer) & BRREG_DEMOGRAFI)
+    if ENABLE_BRREG and not tema_passer_brreg:
+        hendelse_cases = []
+        si("Brønnøysund: konkurser og nyregistreringer")
+        try:
+            hendelser, br_status = brreg.collect()
+            status.extend(br_status)
+        except Exception as exc:  # noqa: BLE001
+            status.append(f"[FEIL] Brønnøysund: {exc}")
+        status.append(
+            "Brønnøysund: hendelsene er utenfor temavalget - vises bare i "
+            "«Kommer snart», ikke som saksforslag"
+        )
+    elif ENABLE_BRREG:
         si("Brønnøysund: konkurser og nyregistreringer")
         try:
             hendelser, br_status = brreg.collect()
@@ -324,6 +358,84 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
     # Originalitet legges paa scoren, deretter sorteres alt samlet.
     finalize_scores(cases)
     cases.sort(key=lambda c: c.score, reverse=True)
+
+    # ── Hva journalisten faktisk skal se, avgjores FOER KI-en kalles ──────────
+    #
+    # Denne blokka sto EN GANG etter KI-arbeidsflyten, og det var grunnen til at
+    # eieren 26.07.2026 meldte «naar jeg scanner saa kommer det ingenting».
+    #
+    # Rekkefolgen gjorde to skader samtidig: KI-en brukte hele budsjettet (tre
+    # saker per skann) paa de hoyest scorede funnene - som er de faste
+    # SSB-probene - og rett etterpaa fjernet uendret-filteret nettopp de sakene
+    # fordi tallene sto stille. Kvota var brukt opp paa noe som aldri ble vist,
+    # og siden var tom. Naa filtreres det forst, og KI-en jobber bare paa det som
+    # faktisk naar skjermen.
+    for_dette_skannet = [c.key for c in cases]
+    tidligere = seen_map()
+    beslutninger = decisions_map()
+    cases = [c for c in cases if beslutninger.get(c.key) != "rejected"]
+
+    # «Trykker jeg soek igjen, skal nye tall dukke opp - aldri de samme.»
+    #
+    # De faste SSB-probene (config.SSB_PROBES) spor de SAMME tabellene hver gang,
+    # og flyttetallene likesaa. Uten dette kom de samme fem funnene tilbake ved
+    # hvert eneste skann, med identiske tall, og druknet det som faktisk var nytt.
+    #
+    # Vi sammenligner avtrykket av selve TALLET, ikke bare noekkelen: samme sak
+    # med nytt tall er en ny sak og skal fram. Samme sak med samme tall er noe
+    # journalisten allerede har sett, og da er det stoy.
+    avtrykk = {c.key: f"{c.metric_value}|{c.metric_period}|{c.finding}" for c in cases}
+    sett_verdier = sette_verdier()
+    ferske = [c for c in cases if sett_verdier.get(c.key) != avtrykk[c.key]]
+    gjengangere = [c for c in cases if sett_verdier.get(c.key) == avtrykk[c.key]]
+
+    if ferske:
+        cases = ferske
+        if gjengangere:
+            status.append(
+                f"Skjult: {len(gjengangere)} funn med uendret tall siden sist "
+                "(samme sak, samme tall - kommer tilbake naar SSB oppdaterer)"
+            )
+    elif gjengangere:
+        # ALDRI en tom skjerm. Har ingenting endret seg, er det et aerlig svar -
+        # men et blankt dashboard ser ut som en feil, og journalisten kan ikke
+        # skille «kildene sto stille» fra «verktoyet er i stykker». Da viser vi
+        # de sterkeste gjengangerne, tydelig merket, i stedet for ingenting.
+        for c in gjengangere:
+            c.uendret = True
+        cases = gjengangere[:UENDRET_VISES]
+        status.append(
+            f"Ingen tall har endret seg siden forrige skann. Viser de "
+            f"{len(cases)} sterkeste funnene paa nytt, merket «uendret» - "
+            "SSB publiserer nye tall paa faste datoer (se «Kommer snart»)."
+        )
+
+    for c in cases:
+        # Alle noekler er naa stabile (SSB-tabell + periode, eller orgnr), saa
+        # «ny» betyr det den skal: verktoyet fant noe det ikke hadde foer.
+        #
+        # Det gjorde den ikke da avis-RSS var en kilde: noekkelen var laget av
+        # overskriften, og feeder bytter overskrifter hele tiden - saa de var
+        # teknisk «aldri sett foer» ved hvert eneste skann og la seg oeverst.
+        c.er_ny = c.key not in tidligere
+
+    # PRIMAERKILDER FOERST. Eieren 26.07.2026: «Kilder som kan lage artikler,
+    # ikke artikler for aa lage artikler - de skal vaere foerst.»
+    #
+    # SSB-tall og Broennoeysund-hendelser er likestilt paa toppen: begge er
+    # raastoff ingen har skrevet ut enda. Google Trends er et signal om hva folk
+    # SOEKER paa - nyttig som bakteppe, men det baerer sjelden en sak alene.
+    #
+    # Sorteringen ligger FOER KI-kallet med vilje: analytikeren og redaktoeren
+    # rekker bare tre saker, og de tre skal vaere de tre oeverste her.
+    RANG = {"data": 0, "hendelse": 0, "grasrot": 1}
+    cases.sort(key=lambda c: (RANG.get(c.kind, 1), not c.er_ny, -c.score))
+    mark_seen(for_dette_skannet, avtrykk)
+    antall_nye = sum(1 for c in cases if c.er_ny)
+    status.append(
+        f"Nytt siden sist: {antall_nye} av {len(cases)} leads"
+        + (" (ingen nye - kildene har ikke endret seg)" if not antall_nye else "")
+    )
 
     # Redaksjonell KI-arbeidsflyt: analytiker -> redaktor -> journalist.
     ai_mode = "av"
@@ -370,57 +482,6 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
         status.extend(kal_status)
     except Exception as exc:  # noqa: BLE001
         kommende, _ = [], status.append(f"[FEIL] SSB-kalender: {exc}")
-
-    # Nytt siden sist: samme kilder gir de samme funnene om igjen. Vi markerer hva
-    # som ikke er sett foer, skjuler det journalisten allerede har forkastet, og loefter
-    # det nye oeverst - saa et nytt soek faktisk gir noe nytt.
-    for_dette_skannet = [c.key for c in cases]
-    tidligere = seen_map()
-    beslutninger = decisions_map()
-    cases = [c for c in cases if beslutninger.get(c.key) != "rejected"]
-
-    # «Trykker jeg soek igjen, skal nye tall dukke opp - aldri de samme.»
-    #
-    # De faste SSB-probene (config.SSB_PROBES) spor de SAMME tabellene hver gang,
-    # og flyttetallene likesaa. Uten dette kom de samme fem funnene tilbake ved
-    # hvert eneste skann, med identiske tall, og druknet det som faktisk var nytt.
-    #
-    # Vi sammenligner avtrykket av selve TALLET, ikke bare noekkelen: samme sak
-    # med nytt tall er en ny sak og skal fram. Samme sak med samme tall er noe
-    # journalisten allerede har sett, og da er det stoy.
-    avtrykk = {c.key: f"{c.metric_value}|{c.metric_period}|{c.finding}" for c in cases}
-    sett_verdier = sette_verdier()
-    uendret = sum(1 for c in cases if sett_verdier.get(c.key) == avtrykk[c.key])
-    cases = [c for c in cases if sett_verdier.get(c.key) != avtrykk[c.key]]
-    if uendret:
-        status.append(
-            f"Skjult: {uendret} funn med uendret tall siden sist "
-            "(samme sak, samme tall - kommer tilbake naar SSB oppdaterer)"
-        )
-
-    for c in cases:
-        # Alle noekler er naa stabile (SSB-tabell + periode, eller orgnr), saa
-        # «ny» betyr det den skal: verktoyet fant noe det ikke hadde foer.
-        #
-        # Det gjorde den ikke da avis-RSS var en kilde: noekkelen var laget av
-        # overskriften, og feeder bytter overskrifter hele tiden - saa de var
-        # teknisk «aldri sett foer» ved hvert eneste skann og la seg oeverst.
-        c.er_ny = c.key not in tidligere
-
-    # PRIMAERKILDER FOERST. Eieren 26.07.2026: «Kilder som kan lage artikler,
-    # ikke artikler for aa lage artikler - de skal vaere foerst.»
-    #
-    # SSB-tall og Broennoeysund-hendelser er likestilt paa toppen: begge er
-    # raastoff ingen har skrevet ut enda. Google Trends er et signal om hva folk
-    # SOEKER paa - nyttig som bakteppe, men det baerer sjelden en sak alene.
-    RANG = {"data": 0, "hendelse": 0, "grasrot": 1}
-    cases.sort(key=lambda c: (RANG.get(c.kind, 1), not c.er_ny, -c.score))
-    mark_seen(for_dette_skannet, avtrykk)
-    antall_nye = sum(1 for c in cases if c.er_ny)
-    status.append(
-        f"Nytt siden sist: {antall_nye} av {len(cases)} leads"
-        + (" (ingen nye - kildene har ikke endret seg)" if not antall_nye else "")
-    )
 
     plan = build_plan(cases)
     summary = {

@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.collectors.base import http_get
+from app.config import demografi_for
 from app.models import Case
 
 TABELL = "01222"
@@ -80,8 +81,20 @@ def _oppslag(data: dict):
     return hent, idx["Tid"], dim["Region"]["category"]["label"]
 
 
-def collect() -> tuple[list[Case], list[str]]:
-    """Leads fra kvartalsvise flyttetall. Fail-soft som alle kollektorer."""
+# Flyttetall handler om hvem som kommer og hvem som drar - det treffer bolig og
+# arbeidsmarked. Velger journalisten bare «klima» eller «kriminalitet», er dette
+# ikke det han spurte om, og da skal det ikke ta plassen hans.
+DEMOGRAFI = {"bolig og leie", "jobb og okonomi"}
+
+
+def collect(temaer: list[str] | None = None) -> tuple[list[Case], list[str]]:
+    """Leads fra kvartalsvise flyttetall. Fail-soft som alle kollektorer.
+
+    `temaer` er journalistens valg; treffer det ikke bolig/jobb, hopper vi over."""
+    onsket = demografi_for(temaer)
+    if onsket and not (onsket & DEMOGRAFI):
+        return [], ["SSB flytting: hoppet over (utenfor temavalget)"]
+
     try:
         data = _hent()
         hent, kvartaler, navn = _oppslag(data)

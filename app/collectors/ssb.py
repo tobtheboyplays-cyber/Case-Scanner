@@ -12,7 +12,14 @@ from __future__ import annotations
 import httpx
 
 from app.collectors.base import now_utc
-from app.config import ENABLE_SSB, SSB_API, SSB_PROBES, SSB_REGIONS, USER_AGENT
+from app.config import (
+    ENABLE_SSB,
+    SSB_API,
+    SSB_PROBES,
+    SSB_REGIONS,
+    USER_AGENT,
+    demografi_for,
+)
 from app.models import Case
 
 
@@ -20,7 +27,10 @@ def _build_query(spec: dict) -> dict:
     query = []
     for code, sel in spec.items():
         if isinstance(sel, dict) and "top" in sel:
-            query.append({"code": code, "selection": {"filter": "top", "values": [str(sel["top"])]}})
+            query.append(
+                {"code": code,
+                 "selection": {"filter": "top", "values": [str(sel["top"])]}}
+            )
         else:
             query.append({"code": code, "selection": {"filter": "item", "values": list(sel)}})
     return {"query": query, "response": {"format": "json-stat2"}}
@@ -176,13 +186,31 @@ def _make_case(probe: dict, series: dict, tids: list[str]) -> Case | None:
     )
 
 
-def collect() -> tuple[list[Case], list[str]]:
+def collect(temaer: list[str] | None = None) -> tuple[list[Case], list[str]]:
+    """Faste befolkningsprober, filtrert paa journalistens temavalg.
+
+    Eieren 26.07.2026: «Den gir ikke det jeg velger i menyen.» Han hadde rett -
+    bare soekesystemet (ssb_sok) leste valget. Disse fem probene kjorte uansett,
+    og fordi de scorer hoyt, la de seg oeverst og tok KI-plassene fra det han
+    faktisk hadde bedt om.
+
+    Tomt valg = alle prober, som foer."""
     if not ENABLE_SSB:
         return [], ["SSB: avslaatt (CASE_RADAR_ENABLE_SSB=false)"]
 
+    onsket = demografi_for(temaer)
+    prober = SSB_PROBES
+    if onsket:
+        prober = [p for p in SSB_PROBES if onsket & set(p.get("topics", []))]
+
     cases: list[Case] = []
     status: list[str] = []
-    for probe in SSB_PROBES:
+    if onsket:
+        status.append(
+            f"SSB: {len(prober)} av {len(SSB_PROBES)} befolkningsprober "
+            "passer temavalget"
+        )
+    for probe in prober:
         try:
             data = _fetch(probe["table"], probe["query"])
             series, tids = _series_by_region(data)

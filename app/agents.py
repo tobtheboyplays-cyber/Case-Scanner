@@ -129,22 +129,63 @@ def kildegrunnlag(case: Case) -> str:
 
 
 # --- Agent 1: Analytiker -----------------------------------------------------
-def analyst_pick(cases: list[Case], budsjett: Budsjett | None = None) -> dict[str, dict]:
-    """Velg de journalistisk interessante funnene. Returner {key: {score, reason}}."""
-    data_cases = [c for c in cases if c.kind == "data"]
-    if not data_cases:
-        return {}
+# Kildene analytikeren rangerer: primaerfunn. Broennoeysund-hendelser kom med
+# 26.07.2026 - de er saker paa lik linje med SSB-tallene, og skal rangeres av
+# samme oeye. Google Trends holdes utenfor; den er et signal, ikke et funn.
+ANALYSERBARE = ("data", "hendelse")
+
+
+def analyst_pick(
+    cases: list[Case], budsjett: Budsjett | None = None
+) -> tuple[dict[str, dict], str]:
+    """Velg de journalistisk interessante funnene.
+
+    Returnerer ({key: {score, reason}}, utfall) der utfall er ett av:
+
+        "llm"       - ekte KI-svar, brukt
+        "mal"       - kallet gikk, men ga ikke noe brukbart -> mekanisk fallback
+        "ko"        - ikke forsoekt, budsjettet var brukt opp
+        "ingenting" - det fantes ingen funn aa rangere
+
+    UTFALLET er halve poenget med funksjonen, og grunnen til at den ble skrevet
+    om. Foer returnerte den bare dicten, og `run_workflow` gjettet paa resten:
+
+        tell(bool(picks) and llm.last_error() is None)
+
+    Den gjetningen var feil i to retninger. Fantes det ingen datafunn, returnerte
+    den `{}` - og et tomt resultat ble talt som et MISLYKKET KI-kall, selv om
+    ingen kall var forsoekt. Det var det eieren saa som «KI: delvis» 26.07.2026,
+    og det ble mye vanligere idet konkurser kom inn i lista: et skann med bare
+    hendelser hadde null `data`-saker.
+
+    Motsatt vei loey den ogsaa: sto kallet i koe, ga fallbacken en full dict, og
+    det ble talt som en SUKSESS. En statuslinje som lyver i begge retninger er
+    verre enn ingen statuslinje.
+    """
+    funn = [c for c in cases if c.kind in ANALYSERBARE]
+    if not funn:
+        return {}, "ingenting"
 
     payload = [
         {"id": c.key, "finding": c.finding, "topics": c.topics, "geo": c.geo}
-        for c in data_cases
+        for c in funn
     ]
     user = "Funn:\n" + json.dumps(payload, ensure_ascii=False)
-    result = None
-    if budsjett is None or budsjett.be_om(prompts.ANALYST_SYSTEM, user, 450):
-        result = llm.complete_json(
-            prompts.ANALYST_SYSTEM, user, model=llm.MODEL_ANALYST, max_tokens=450
-        )
+
+    # Mekanisk fallback: alle funn, rangert etter storrelsen paa avviket. Den
+    # brukes i alle utfall som ikke er "llm", saa saken aldri forsvinner bare
+    # fordi rangeringen ikke ble gjort.
+    reserve = {
+        c.key: {"score": min(int(c.score) * 3, 100), "reason": "Tydelig lokalt avvik i tallene."}
+        for c in funn
+    }
+
+    if budsjett is not None and not budsjett.be_om(prompts.ANALYST_SYSTEM, user, 450):
+        return reserve, "ko"
+
+    result = llm.complete_json(
+        prompts.ANALYST_SYSTEM, user, model=llm.MODEL_ANALYST, max_tokens=450
+    )
     # `isinstance`-vakten er ikke pynt: _extract_json kan returnere en LISTE hvis
     # modellen svarer med `[...]`, og da ville `result.get` kastet AttributeError
     # rett gjennom run_workflow og run_scan - som ikke fanger noe - og drept hele
@@ -155,13 +196,9 @@ def analyst_pick(cases: list[Case], budsjett: Budsjett | None = None) -> dict[st
             if isinstance(p, dict) and p.get("id") and p.get("interesting", True):
                 picks[p["id"]] = {"score": p.get("score", 50), "reason": p.get("reason", "")}
         if picks:
-            return picks
+            return picks, "llm"
 
-    # Fallback: velg alle datafunn, begrunnet med storrelsen paa avviket.
-    return {
-        c.key: {"score": min(int(c.score) * 3, 100), "reason": "Tydelig lokalt avvik i tallene."}
-        for c in data_cases
-    }
+    return reserve, "mal"
 
 
 # --- Agent 2: Redaktor -------------------------------------------------------
@@ -516,9 +553,12 @@ def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> 
         if si is not None:
             si(tekst)
 
-    picks = analyst_pick(cases, budsjett)
-    # Analytikeren telles ogsaa - foer var utfallet av den helt usynlig.
-    tell(bool(picks) and llm.last_error() is None)
+    picks, analyse = analyst_pick(cases, budsjett)
+    # Analytikeren telles BARE naar det faktisk ble gjort et forsoek. «Ingenting
+    # aa rangere» og «stod i koe» er ikke mislykkede kall, og aa telle dem som
+    # det var nettopp det som ga «KI: delvis» paa et skann der alt gikk bra.
+    if analyse in ("llm", "mal"):
+        tell(analyse == "llm")
     for c in cases:
         if c.key in picks:
             c.analyst_reason = picks[c.key].get("reason", "")

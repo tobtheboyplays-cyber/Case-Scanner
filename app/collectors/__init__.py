@@ -32,8 +32,12 @@ def collect_all(
 ) -> tuple[list[SignalItem], list[Case], list[str]]:
     """Returnerer (grasrot-signaler, ssb-leads, statuslinjer).
 
-    `temaer` er journalistens valg; det styrer hvilke SSB-tabeller soekesystemet
-    leter etter. Tomt valg = alle temaer.
+    `temaer` er journalistens valg, og det styrer ALLE SSB-kildene: hvilke faste
+    befolkningsprober som kjores (ssb), om flyttetallene er relevante
+    (ssb_flytting), og hva soekesystemet leter etter (ssb_sok). Tomt valg = alle.
+
+    Fram til 26.07.2026 leste bare soekesystemet valget. De faste probene kjorte
+    uansett, scoret hoyt, og la seg oeverst - saa menyen saa ut som pynt.
 
     `si` er en valgfri tilbakekalling som faar én linje per kilde mens den
     jobber. Uten den oppfoerer alt seg som foer; med den kan UI-et vise hvilken
@@ -49,7 +53,7 @@ def collect_all(
     # 1) SSB - datadrevne leads (Case-objekter)
     meld("SSB: befolkningstall")
     try:
-        cases, notes = ssb.collect()
+        cases, notes = ssb.collect(temaer)
         ssb_cases.extend(cases)
         status.extend(notes)
     except Exception as exc:  # noqa: BLE001
@@ -59,7 +63,7 @@ def collect_all(
     # type sak (bevegelsene bak befolkningstallet).
     meld("SSB: kvartalsvise flyttetall")
     try:
-        cases, notes = ssb_flytting.collect()
+        cases, notes = ssb_flytting.collect(temaer)
         ssb_cases.extend(cases)
         status.extend(notes)
     except Exception as exc:  # noqa: BLE001

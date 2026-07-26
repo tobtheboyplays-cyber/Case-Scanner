@@ -172,6 +172,17 @@ h1, h2, h3 { margin: 0; }
 .empty { margin: 40px 32px; padding: 34px; text-align: center; background: var(--panel);
   border: 1px dashed var(--border); border-radius: 14px; }
 
+/* Skannet kjorte, men ingenting kom gjennom. Ikke sentrert som `.empty`: dette
+   er ikke en velkomstskjerm, det er et svar med en begrunnelse og to veier ut,
+   og da leses venstrestilt tekst raskere. */
+.empty-skann { max-width: 620px; }
+.empty-b { color: var(--muted); font-size: 14px; line-height: 1.55; margin: 10px 0 0; }
+.empty-b .btn-scan, .empty-b .btn-ghost { margin: 14px 8px 0 0; }
+.empty-liste { margin: 12px 0 0; padding-left: 20px; color: var(--muted);
+  font-size: 13.5px; line-height: 1.6; }
+.empty-liste strong { color: var(--text); }
+.empty-skann .status { margin-top: 18px; background: none; border: 0; padding: 0; }
+
 /* ══════════════════════════════════════════════════════════════════════════
    Mobil-først pynt (v4). Lagt til nederst slik at den overstyrer bevisst.
    Prinsipp: telefonen er hovedflaten - journalisten bruker dette i felt, ikke ved
@@ -472,6 +483,13 @@ summary:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 1
 /* «NY» — det som ikke fantes ved forrige skann */
 .ny-merke { font-size: 9.5px; font-weight: 800; letter-spacing: .06em;
   background: var(--accent); color: #fff; padding: 4px 8px; border-radius: 6px; }
+
+/* «UENDRET» — motsatsen. Vises bare naar ingenting hadde endret seg og vi heller
+   viser gjengangerne enn en tom skjerm. Damp, ikke aksent: den skal opplyse, ikke
+   konkurrere med funnene om oppmerksomheten. */
+.uendret-merke { font-size: 9.5px; font-weight: 700; letter-spacing: .06em;
+  background: var(--line); color: var(--muted); padding: 4px 8px; border-radius: 6px;
+  border: 1px solid var(--line); }
 
 /* ── Framdrift for utkast (nede til venstre) ─────────────────────────────────
    Ligger fast i hjornet slik at den er synlig uansett hvor langt ned i saken

@@ -284,7 +284,14 @@ def test_ett_vellykket_kall_maskerer_ikke_lenger_at_resten_feilet(monkeypatch):
     from app import agents
 
     monkeypatch.setenv("GROQ_API_KEY", "x")
-    svar = iter([{"is_story": True, "headline": "H", "angle": "A", "verdict": "V"}])
+    # Kallene kommer i denne rekkefølgen: analytiker -> redaktør -> journalist.
+    # Fikstur som gir ALLE det samme svaret måler ikke det den tror: et
+    # redaktør-svar til analytikeren er ubrukelig for ham, og skal telle som et
+    # mislykket kall. (Før gjettet run_workflow på analytikerens utfall og
+    # bommet — det var «KI: delvis» på et skann der alt gikk bra.)
+    svar = iter([
+        {"picks": [{"id": "sak-0", "interesting": True, "score": 90, "reason": "r"}]},
+    ])
 
     def av_og_til(*a, **k):
         try:

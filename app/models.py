@@ -66,6 +66,9 @@ class Case:
     draft: dict = field(default_factory=dict)     # foerste vinkel (bakoverkompatibelt)
     angles: list[dict] = field(default_factory=list)  # TRE komplette pakker fra journalisten
     er_ny: bool = True             # ikke sett i et tidligere skann
+    # Vist paa nytt fordi INGENTING hadde endret seg. Et blankt dashboard ser ut
+    # som en feil; en merket gjenganger er et aerlig svar. Se main.run_scan.
+    uendret: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -91,6 +94,7 @@ class Case:
             "draft": self.draft,
             "angles": self.angles,
             "er_ny": self.er_ny,
+            "uendret": self.uendret,
             "sources": [
                 {
                     "source": s.source,

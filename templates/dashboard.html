@@ -283,6 +283,8 @@
       <div class="lead-body">
         <div class="lead-head">
           {% if case.er_ny %}<span class="ny-merke">NY</span>{% endif %}
+          {% if case.uendret %}<span class="uendret-merke"
+            title="Samme tall som forrige skann. Vises fordi ingenting hadde endret seg — ikke fordi det er nytt.">UENDRET</span>{% endif %}
           {% if case.coverage_status == 'green' %}
             <span class="cov cov-green"><span class="cov-ic" aria-hidden="true">◆</span>INGEN HAR SKREVET DETTE</span>
           {% elif case.coverage_status == 'yellow' %}
@@ -573,6 +575,49 @@
     <div class="kpi-sub">Kun offentlige kilder</div>
   </div>
 </section>
+
+{% if not data.cases %}
+{# Skannet kjorte, men ingenting kom gjennom. Foer sto det BOKSTAVELIG TALT
+   ingenting her - malen hoppet over hele hoveddelen, og journalisten satt igjen
+   med en tom side han ikke kunne skille fra en oedelagt app.
+
+   Et tomt skann er et lovlig svar (smalt tema + ingen ferske tall), men det maa
+   SI det, og det maa si hva han gjor naa. Statuslinjene fra skannet staar rett
+   under, saa han ser hvilke kilder som faktisk svarte. #}
+<section class="page">
+  <section class="panel empty-skann">
+    <div class="panel-head"><h2>Skannet fant ingen nye saker</h2></div>
+    <p class="empty-b">
+      Kildene svarte, men ingenting var nytt siden forrige skann — og ingen
+      gamle funn var igjen å vise. Det betyr som regel én av to ting:
+    </p>
+    <ul class="empty-liste">
+      <li><strong>Temavalget er for smalt.</strong> Færre temaer avhuket = færre
+        SSB-tabeller å lete i. Huk av flere, eller fjern alle for å lete bredt.</li>
+      <li><strong>SSB har ikke publisert nye tall.</strong> De kommer på faste
+        datoer — se «Kommer snart» for hva som slippes de nærmeste dagene.</li>
+    </ul>
+    <p class="empty-b">
+      {# Knappen aapner den samme temamenyen som staar oeverst - det finnes ingen
+         egen /temaer-side, valget og skanneknappen er samme handling. #}
+      <button class="btn-scan" type="button" data-apne-temaer>Velg flere temaer</button>
+      <a class="btn-ghost" href="/kalender">Se hva som kommer</a>
+    </p>
+    {# Uten denne er «ingen saker» uetterrettelig: han kan ikke se om SSB svarte
+       og ikke hadde noe nytt, eller om kilden var nede. #}
+    <div class="status">
+      <details>
+        <summary>Kildestatus (siste skann)</summary>
+        <ul>
+          {% for line in data.status %}
+          <li class="{{ 'err' if '[FEIL]' in line else '' }}">{{ line }}</li>
+          {% endfor %}
+        </ul>
+      </details>
+    </div>
+  </section>
+</section>
+{% endif %}{# slutt: tom-skjerm #}
 
 {% endif %}
 
@@ -1188,6 +1233,18 @@
           || (f === 'lokal' && el.dataset.geo === 'lokal');
         el.style.display = show ? '' : 'none';
       });
+    });
+  });
+
+  /* «Velg flere temaer» fra tomskjermen. Temamenyen ER skanneknappen oeverst -
+     det finnes ingen egen temaside - saa knappen aapner den og ruller dit i
+     stedet for aa lenke til en URL som ikke finnes. */
+  document.querySelectorAll('[data-apne-temaer]').forEach(function (knapp) {
+    knapp.addEventListener('click', function () {
+      var meny = document.querySelector('.tema-meny');
+      if (!meny) return;
+      meny.open = true;
+      meny.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   });
 </script>

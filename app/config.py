@@ -315,6 +315,25 @@ def ssb_emner_for(temaer: list[str] | None) -> set[str]:
     return {e for navn in valgte for e in TEMAER[navn]["ssb_emner"]}
 
 
+def demografi_for(temaer: list[str] | None) -> set[str]:
+    """DEMOGRAPHIC_TOPICS-merkelappene de valgte temaene dekker.
+
+    Brua mellom menyens vokabular og det de FASTE kildene er tagget med.
+    `ssb.py` (befolkningsprobene) og `ssb_flytting.py` har hardkodede topics som
+    «bolig og leie» og «jobb og okonomi» - de samme merkelappene TEMAER lister i
+    sitt `demografi`-felt.
+
+    Uten denne var det bare soekesystemet som brydde seg om menyen. Maalt paa et
+    ekte skann 26.07.2026: 7 av 11 funn kom fra de faste kildene og var de SAMME
+    uansett hva journalisten krysset av. Han sa det rett ut: «den gir ikke det
+    jeg velger i menyen.»
+
+    Tomt valg gir tom mengde - kallerne tolker tomt som «ikke filtrer», og det er
+    en annen ting enn «filtrer paa alt»."""
+    valgte = [t for t in (temaer or []) if t in TEMAER]
+    return {d for navn in valgte for d in TEMAER[navn]["demografi"]}
+
+
 def temagrupper() -> dict[str, list[str]]:
     """{gruppe: [temanavn]} i den rekkefolgen de er definert - til menyen."""
     ut: dict[str, list[str]] = {}
