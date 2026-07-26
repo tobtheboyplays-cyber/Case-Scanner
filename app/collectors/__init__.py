@@ -25,6 +25,7 @@ from app.collectors import (
     ssb_sok,
     stortinget,
     strompris,
+    vegtrafikk,
 )
 from app.config import ENABLE_REDDIT
 from app.models import Case, SignalItem
@@ -116,6 +117,18 @@ def collect_all(
         status.extend(notes)
     except Exception as exc:  # noqa: BLE001
         status.append(f"[FEIL] Sola: {exc}")
+
+    # 1f) Vegvesenets tellepunkter. Sykkeltallene foerst: 21 punkter i
+    # storbyomraadet teller sykler doegn for doegn - blant dem fire paa
+    # Sykkelstamvegen - og ingen henter dem ut, fordi de ligger bak et
+    # GraphQL-API i stedet for i en pressemelding.
+    meld("Vegvesenet: sykkel- og biltellinger")
+    try:
+        cases, notes = vegtrafikk.collect(temaer)
+        ssb_cases.extend(cases)
+        status.extend(notes)
+    except Exception as exc:  # noqa: BLE001
+        status.append(f"[FEIL] Vegtrafikk: {exc}")
 
     # Her laa det EN GANG en kollektor som hentet saker fra Aftenposten, Bergens
     # Tidende og E24 og gjorde dem til leads. Den er slettet, ikke skrudd av.

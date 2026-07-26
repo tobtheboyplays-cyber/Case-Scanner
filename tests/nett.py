@@ -196,6 +196,12 @@ class Nett:
         self.spurt.append(url)
         if "07459" in url:
             return FalsktSvar(200, BEFOLKNING)
+        if "trafikkdata-api" in url:
+            # Vegvesenet kom til som kilde 26.07.2026. Ingen tellepunkter i
+            # svaret = ingen sak, og det er det ende-til-ende-testene vil ha:
+            # de handler om KOBLINGEN, ikke om trafikktall. Selve regnestykket
+            # har egne tester med ekte tallformer (test_vegtrafikk.py).
+            return FalsktSvar(200, {"data": {"trafficRegistrationPoints": []}})
         if "groq" in url or "chat/completions" in url:
             raise AssertionError(
                 "KI-en ble kalt i en test som ikke har nøkkel — det ville brukt "

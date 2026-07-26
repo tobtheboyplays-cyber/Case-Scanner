@@ -21,7 +21,37 @@ antatt å virke. Statuskodene er de vi fikk.
 | **Stortinget** (data.stortinget.no) | Saker der en av Rogalands 14 representanter er saksordfører eller forslagsstiller | `Allow: /` |
 | **Strømpris NO2** (hvakosterstrommen.no) | Timepriser i Stavangers eget prisområde, i dag og i morgen | ingen direktiver + eksplisitt fri bruk |
 | **Sola lufthavn** (Avinor) | Kanselleringer og forsinkelser i sanntid | bare `Sitemap:`, ingen `Disallow` |
+| **Vegvesenets tellepunkter** (trafikkdata.no) | Sykler og biler per døgn — 21 sykkelpunkter i storbyområdet | ingen robots.txt (404) |
 | **Google News RSS** | Dekningssjekk + Aftenbladets eget arkiv (oppfølgere) | fasit, ikke råstoff |
+
+### Vegvesenets tellepunkter — råstoffet ingen henter ut
+
+Vegvesenet teller hver bil og hver sykkel som passerer 245 punkter i Rogaland,
+døgn for døgn, og legger tallene åpent ut i et GraphQL-API. Ingen skriver om dem,
+fordi de ligger bak et spørrespråk i stedet for i en pressemelding.
+
+**Sykkel først, med vilje.** 21 av punktene i Stavanger/Sandnes/Sola/Randaberg
+teller sykler — fire av dem på **Sykkelstamvegen**, som har kostet nær en
+milliard og som det har stått strid om i ti år. «Hvor mange sykler faktisk der?»
+er et spørsmål med et offentlig tall bak. Bilrekorder blir skrevet om uansett;
+sykkeltallene er de få ingen henter ut.
+
+**Terskel:** minst 15 % endring mot samme to ukers periode i fjor, på et punkt med
+minst 80 passeringer i døgnet og minst 10 komplett målte døgn i *begge* år.
+
+**Tre feller i dataene, og den tredje er den farligste:**
+
+1. Døde punkter svarer med `volumeNumbers: null`, ikke med en feilkode.
+   «Kannik (sykkel)» sto som `isOperational: true` og ga 14 tomme døgn på rad.
+2. Tallene henger etter — de siste døgnene er ikke kvalitetssikret. Vinduet
+   slutter fire dager tilbake.
+3. **Et døgn kan være delvis målt.** Første ekte kjøring meldte «Sykkelstamvegen
+   62 % opp mot i fjor» — men flere fjorårsdøgn var målt med 67 % dekning, så
+   fjorårssnittet var kunstig lavt og hele endringen blåst opp. Nå teller bare
+   døgn med minst 95 % dekning, og antall døgn oppgis for **begge** år i funnet.
+
+Målt 26.07.2026 med komplette døgn: Sykkelstamvegen (Asser Jåtten bru sør)
+1 039 sykler i døgnet 08.07–22.07, mot 639 i fjor — 63 prosent opp.
 
 ### Strømprisen — den mest personlige lokalnyheten som finnes
 
@@ -76,9 +106,9 @@ derfor null treff hele sommeren — altså nettopp når journalisten har minst a
 | politiet.no (politiloggen) | `Disallow: /api/`. Ikke lov. |
 | stavanger.kommune.no | `Disallow: /api`. Ikke lov. |
 | **NILU** (luftkvalitet) | `410 Gone` — «This endpoint has been discontinued». |
-| **Mattilsynet smilefjes** | 404 på alle kjente adresser; den gamle difi-hotellen svarer ikke. Skulle vært den beste av alle — restauranthygiene er lokalt, konkret og ringbart. Verdt et nytt forsøk hvis de publiserer på nytt. |
+| **Mattilsynet smilefjes** | `data.mattilsynet.no/robots.txt` sier `Disallow: /` (sjekket 26.07.2026). Det er et nei, ikke en teknisk feil. Skulle vært den beste av alle — restauranthygiene er lokalt, konkret og ringbart. Ikke prøv igjen uten at robots endrer seg. |
 | **NAV arbeidsplassen** | 404 på det åpne feed-endepunktet. |
-| **Vegvesenet trafikkdata** | GraphQL-utforskeren er flyttet; POST mot den nye adressen svarer med HTML, ikke data. |
+| ~~**Vegvesenet trafikkdata**~~ | **Denne raden var feil.** Den sa «POST mot den nye adressen svarer med HTML» — det var feil vertsnavn. `https://trafikkdata-api.atlas.vegvesen.no/` svarer med ren JSON. Kilden er **i bruk nå**, se over. Lærdommen: «svarer med HTML» betyr som regel feil adresse, ikke stengt dør. |
 | **NVE hydrologi** | `401` — krever gratis nøkkel. Mulig senere. |
 | **MET Frost** (vær) | `400` uten nøkkel. Gratis nøkkel finnes. |
 | **data.norge.no** | `Disallow: /api/`. Katalogen er lesbar, API-et ikke. |
@@ -90,6 +120,10 @@ derfor null treff hele sommeren — altså nettopp når journalisten har minst a
 | **Barnehagefakta** (Udir) | `200`, 128 barnehager i Stavanger, med feltet `oppfyllerPedagognorm` («Oppfyller pedagognormen med disp.») | Sterkeste ubrukte kandidat. Krever ett detaljkall per barnehage — 128 er for mange per skann, så den må rotere slik SSB-søket gjør. |
 | **Geonorge** (adresser, stedsnavn, kommuneinfo) | `200` | Referansedata. Presist, men ingen sak i seg selv. |
 | **Entur** (geocoder) | `200` | Samme — nyttig til oppslag, ikke til leads. |
+| **Sokkeldirektoratet** (factpages) | `200`, månedlig produksjon per felt som CSV. Verifisert 26.07.2026 | Fungerer, og er unikt Stavanger. Men månedstall per oljefelt dekkes allerede tett av E24 og Aftenbladets oljedesk, og «Johan Sverdrup produserte X» er ikke en personlig sak for 20–39-åringer. Verdt å ta inn hvis vinkelen blir *arbeidsplasser* (felt som nærmer seg avvikling), ikke produksjon. |
+| **Entur** (sanntid, Kolumbus) | `200`, ekte avgangstider med `cancellation`-flagg. Verifisert 26.07.2026 | Kan bli «bussen din er innstilt», som Sola er for fly. Krever at man plukker ut holdeplasser først — en innstilt buss er en tirsdag, akkurat som en forsinket avgang. Neste kandidat inn. |
+| **MET MetAlerts** (farevarsel) | `200` for Rogaland, tom liste (ingen varsel i juli) | Nesten null støy — den fyrer bare når det ER et varsel. Men ekstremvær er det ene hver eneste redaksjon allerede får dyttet på seg, så forspranget er null. Bevisst utelatt. |
+| **HKDIR/DBH** (studenttall UiS) | API-et svarer og gir en presis feilmelding på gale variabelnavn | Lovende for et 20–39-publikum (søkertall, frafall ved UiS), men krever at man kartlegger tabell- og variabelnavn først. |
 
 ## Regelen for neste gang
 
