@@ -35,10 +35,37 @@ export const K = {
   forsteSpawn: [20000, 60000],          // ms, tilfeldig i intervallet
   respawnEtterKast: [30000, 120000],
 
-  /* ── Hvor han faar vaere ─────────────────────────────────────────────── */
-  /* Nederste baand av viewporten, som andel av hoyden. Over dette ligger
-   * saksforslagene, og de skal han aldri staa i veien for. */
-  baand: { fra: 0.80, til: 0.94 },
+  /* ── Gulvet ──────────────────────────────────────────────────────────── */
+  /* Eieren 26.07.2026: «Vi sier at det er gulvet ... saa kan den gaa over hele
+   * skjermen paa en tenkt linje som er gulvet.»
+   *
+   * ÉN linje, ikke et baand. Foer dette fikk han en tilfeldig y i intervallet
+   * 0.80-0.94 hver gang han kom inn, og da saa det ut som om han svevde i ulike
+   * hoyder - ikke som om han gikk paa noe. Linja er usynlig, men den er den
+   * samme hele tiden, og det er nok til at oyet leser den som et gulv. */
+  gulv: 0.90,
+
+  /* Hvor naer kantene han faar gaa. Liten margin: eieren ba om at han skal gaa
+   * over HELE skjermen. */
+  gaaMargin: 0.22,          // andel av lerretsbredden
+
+  /* ── Landing ─────────────────────────────────────────────────────────── */
+  /* Kastes han opp, skal han falle ned igjen og lande - ikke forsvinne.
+   * Eieren: «saa er det physics saa du ser fallet og slik, ikke bare at han
+   * teleporterer tilbake.» */
+  /* Eieren 26.07.2026: «Vil ha Clumsy ninja physics.»
+   *
+   * Det betyr tre ting, og alle tre staar her: han SPRETTER flere ganger i
+   * stedet for aa stoppe doedt, han TUMLER videre mens han spretter, og
+   * lemmene henger etter kroppen i stedet for aa foelge den.
+   *
+   * Foerste utkast hadde sprett 0.42 og friksjon 0.68 - da stoppet han etter
+   * ett halvhjertet hopp. Naa beholder han over halve farten, og gulvfriksjonen
+   * er lav nok til at han sklir og ruller et stykke. */
+  sprett: 0.56,             // hvor mye fart han beholder i et sprett
+  friksjon: 0.82,           // vannrett fart som overlever et sprett
+  spinnBrems: 0.90,         // hvor mye av rotasjonen som overlever
+  landeGrense: 120,         // px/s - under dette blir han endelig liggende
 
   /* ── Fart ────────────────────────────────────────────────────────────── */
   gangfart: 46,                         // px/s, rolig
@@ -46,7 +73,7 @@ export const K = {
   snufart: 7,                           // rad/s naar han snur seg
 
   /* ── Kast ────────────────────────────────────────────────────────────── */
-  kastGrense: 900,                      // px/s - over dette flyr han ut
+  kastGrense: 820,                      // px/s - over dette slipper han taket
   tyngde: 2600,                         // px/s^2
   luftmotstand: 0.999,
 

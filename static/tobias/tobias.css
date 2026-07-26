@@ -143,3 +143,24 @@
   .tobias { transition: none; }
   .tobias-boble { animation: none; }
 }
+
+/* ── Fysikkvarianten ──────────────────────────────────────────────────────── */
+/*
+ * Eieren §17: «Behandle bunnen av viewport som fysisk gulv.» Derfor dekker
+ * dette lerretet HELE vinduet, i motsetning til den lille boksen over: gulvet
+ * er skjermkanten, og han skal kunne kastes tvers over sida.
+ *
+ * `pointer-events: none` er ikke pynt - det er det som gjor at et lerret over
+ * hele sida ikke stjeler et eneste klikk fra journalisten. JS slaar det paa i
+ * det oyeblikket en straale faktisk treffer en kroppsdel, og av igjen naar man
+ * slipper.
+ */
+.tobias-fysikk {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 40;
+  pointer-events: none;
+  background: transparent;
+}

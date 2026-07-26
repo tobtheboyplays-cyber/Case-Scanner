@@ -13,8 +13,22 @@
 <link rel="stylesheet" href="/static/tobias/tobias.css?v={{ css_v }}" />
 <script type="module">
   /* Modulen lastes bare naar den skal brukes. Three.js er 670 kB, og
-     journalisten er paa mobilnett - se kommentaren i konfig.js. */
-  import("/static/tobias/tobias.js")
-    .then((m) => m.monterTobias())
+     journalisten er paa mobilnett - se kommentaren i konfig.js.
+
+     TO VARIANTER, og bare én kjorer:
+
+     · fysikk/   - ekte ragdoll paa Rapier. Han staar, gaar, snubler, reiser
+                   seg, og kan gripes i hvilken som helst kroppsdel og kastes.
+                   Koster 2,7 MB (Three + Rapier).
+     · tobias.js - den lette animerte. 0,67 MB.
+
+     Fysikkvarianten er DESKTOP-ONLY, og det er et bevisst valg: 2,7 MB og
+     fjorten rigid bodies paa 120 Hz hoerer ikke hjemme paa mobilnettet til en
+     journalist som skal lese saker. `boerFysikk()` avgjor, og faller den fra,
+     faar man den lette i stedet - aldri ingen. */
+  import("/static/tobias/fysikk/tobias-fysikk.js")
+    .then((m) => (m.boerFysikk()
+      ? m.monterFysikkTobias()
+      : import("/static/tobias/tobias.js").then((t) => t.monterTobias())))
     .catch(() => { /* Et Easter Egg skal aldri velte sida. */ });
 </script>

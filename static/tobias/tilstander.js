@@ -51,6 +51,23 @@ export class Oppforsel {
     this.kroppRull = new Etterslep(0, 70, 9);
     this.hodeVri = new Etterslep(0, 90, 11);
 
+    /* Ragdoll. Eieren 26.07.2026: «Vil ha Clumsy ninja physics.»
+     *
+     * Fire fjaerer med FORSKJELLIG stivhet og demping - det er hele trikset.
+     * Er de like, beveger lemmene seg i takt, og da ser det ut som en dukke som
+     * blir ristet. Er de ulike, kommer de i utakt av seg selv, og da ser det ut
+     * som lemmer med egen vekt.
+     *
+     * Foerste utkast brukte `Math.sin(t * 9)` paa alle fire. Det var en
+     * animasjon som lot som den var fysikk, og den saa lik ut hver gang. */
+    this.dingl = {
+      armV: new Etterslep(0, 24, 3.6),
+      armH: new Etterslep(0, 29, 4.4),
+      beinV: new Etterslep(0, 36, 5.2),
+      beinH: new Etterslep(0, 42, 5.8),
+    };
+    this._kast = { x: 0, y: 0, spinn: 0 };
+
     /* Maalverdier tilstandene setter, og som kroppen joger mot. */
     this.maal = {
       vri: 0,          // kroppens rotasjon om y
@@ -647,14 +664,109 @@ export class Oppforsel {
     this.stol.rot.visible = false;
   }
 
-  /* Mens han flyr: armer og bein spriker, kroppen roterer. */
+  /* Han landet paa gulvet. Eieren 26.07.2026: «saa er det physics saa du ser
+   * fallet og slik, ikke bare at han teleporterer tilbake.»
+   *
+   * Sekvensen er kort og lesbar: klem sammen i sammenstoetet, ligg et oyeblikk,
+   * reis deg med overskudd. Uten klemmet ville landingen vaert et stopp, ikke
+   * et sammenstoet. */
+  startLandet() {
+    this.tilstand = "landet";
+    this.forloep = new Forloep(1500);
+    this.settUttrykk(UTTRYKK.PANIC);
+    this._reistOpp = false;
+  }
+
+  _landet(dt) {
+    const raa = this.forloep.raa;
+    this.forloep.steg(dt);
+
+    if (raa < 0.16) {
+      /* Sammenstoetet: han klemmes flat, og lemmene fortsetter framover -
+       * de vet ikke enda at kroppen har stoppet. */
+      const u = raa / 0.16;
+      const smell = Math.sin(u * Math.PI);
+      this.maal.strekk = -0.34 * smell;
+      this.maal.hoyde = 0.15 * smell;
+      this.maal.armV = this.dingl.armV.mot(1.9, dt);
+      this.maal.armH = this.dingl.armH.mot(2.1, dt);
+      this.maal.beinV = this.dingl.beinV.mot(1.0, dt);
+      this.maal.beinH = this.dingl.beinH.mot(0.7, dt);
+    } else if (raa < 0.5) {
+      /* Ligger og rister paa hodet. Lemmene faller sakte til ro - hver med sin
+       * egen fjaer, saa de ikke lander samtidig. */
+      this.maal.strekk = -0.06;
+      this.maal.hoyde = 0.10;
+      this.maal.hodeVri = Math.sin((raa - 0.16) * 22) * 0.30;
+      this.maal.armV = this.dingl.armV.mot(1.2, dt);
+      this.maal.armH = this.dingl.armH.mot(1.4, dt);
+      this.maal.beinV = this.dingl.beinV.mot(0.5, dt);
+      this.maal.beinH = this.dingl.beinH.mot(0.3, dt);
+      if (!this._reistOpp) {
+        this._reistOpp = true;
+        this.settUttrykk(UTTRYKK.CURIOUS);
+      }
+    } else {
+      /* Reiser seg, med overskudd saa han vipper litt forbi. */
+      const u = (raa - 0.5) / 0.5;
+      const opp = easeOverskudd(u, 1.6);
+      this.maal.hoyde = 0.10 * (1 - opp);
+      this.maal.strekk = -0.06 * (1 - opp) + 0.05 * Math.max(0, 1 - u * 3);
+      this.maal.hodeVri = 0;
+      /* Kloenete: han vipper til den ene siden foer han finner balansen. */
+      this.maal.armV = this.dingl.armV.mot(1.2 * (1 - opp) - 0.5 * (1 - opp), dt);
+      this.maal.armH = this.dingl.armH.mot(1.4 * (1 - opp) + 0.6 * (1 - opp), dt);
+      this.maal.beinV = this.dingl.beinV.mot(0.5 * (1 - opp), dt);
+      this.maal.beinH = this.dingl.beinH.mot(0.3 * (1 - opp), dt);
+      this.maal.skrå = Math.sin(u * Math.PI * 1.6) * 0.22;
+      this.maal.vri = Math.sin(u * Math.PI) * 0.30 * this.retning;
+    }
+
+    if (this.forloep.ferdig) {
+      this.nullstillLemmer();
+      this.settHumoer(HUMOER.ANNOYED);
+      this.settUttrykk(UTTRYKK.SMUG);
+      return true;
+    }
+    return false;
+  }
+
+  /* Farten og spinnet kroppen har akkurat naa. Settes fra `tobias.js` hver
+   * frame, saa lemmene reagerer paa det som FAKTISK skjer med kroppen. */
+  settKastfart(x, y, spinn) {
+    this._kast.x = x;
+    this._kast.y = y;
+    this._kast.spinn = spinn;
+  }
+
+  /* Mens han flyr: ragdoll.
+   *
+   * Lemmene drives av to krefter, begge hentet fra kroppens egen bevegelse:
+   *
+   *   · SENTRIFUGAL - spinner han, slenges lemmene utover, og motsatt vei paa
+   *     hver side. Det er dette som gjor at han ser ut til aa tumle og ikke
+   *     bare rotere.
+   *   · TREGHET - faller han, henger armene etter oppover; bremses han, kastes
+   *     de framover. «Armer og bein reagerer litt senere enn torso», som eieren
+   *     skrev.
+   *
+   * Etterslep-fjaerene gjor resten: de naar aldri helt fram, og de er i utakt.
+   */
   _thrown(dt) {
-    const t = this.tid * 9;
-    this.maal.armV = -2.0 + Math.sin(t) * 0.5;
-    this.maal.armH = -2.0 - Math.sin(t) * 0.5;
-    this.maal.beinV = 0.9 + Math.cos(t) * 0.3;
-    this.maal.beinH = 0.9 - Math.cos(t) * 0.3;
-    void dt;
+    const k = this._kast;
+    const sentrifugal = klem(k.spinn * 0.26, -2.6, 2.6);
+    const treghet = klem(-k.y / 700, -2.4, 2.4);
+    const sleng = klem(k.x / 1100, -1.6, 1.6);
+
+    this.maal.armV = this.dingl.armV.mot(-1.5 + treghet + sentrifugal - sleng, dt);
+    this.maal.armH = this.dingl.armH.mot(-1.5 + treghet - sentrifugal - sleng, dt);
+    this.maal.beinV = this.dingl.beinV.mot(0.8 - treghet * 0.5 - sentrifugal, dt);
+    this.maal.beinH = this.dingl.beinH.mot(0.8 - treghet * 0.5 + sentrifugal, dt);
+    /* Hodet ser i den retningen han kastes. */
+    this.maal.hodeVri = klem(sleng * 0.8, -0.7, 0.7);
+    this.maal.skrå = klem(-sentrifugal * 0.25, -0.5, 0.5);
+    /* Strukket i fallet, klemt i oppoverfarten - subtilt. */
+    this.maal.strekk = klem(k.y / 3000, -0.10, 0.14);
     return false;
   }
 }

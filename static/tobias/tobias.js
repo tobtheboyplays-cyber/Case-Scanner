@@ -28,7 +28,7 @@ import {
   K, TOBIAS_DEBUG, TOBIAS_ENABLED, erMobil, hastSpawn, roligBevegelse,
   tilfeldig, tilfeldigFra, velgVektet,
 } from "./konfig.js";
-import { klem } from "./bevegelse.js";
+import { jevn, klem } from "./bevegelse.js";
 import { Kastefysikk } from "./fysikk.js";
 import { HUMOER, Oppforsel } from "./tilstander.js";
 import { UTTRYKK } from "./ansikt.js";
@@ -297,11 +297,33 @@ class Tobias {
     } else if (o.tilstand === "thrown") {
       const p = this.fysikk.steg(dt, this.x, this.y);
       this.x = p.x; this.y = p.y;
+      /* Lemmene skal reagere paa kroppens FAKTISKE fart, ikke paa en klokke. */
+      o.settKastfart(this.fysikk.fartX, this.fysikk.fartY, this.fysikk.vinkelfart);
       o.oppdater(dt);
-      const m = Math.max(this.bredde, this.hoyde);
-      if (this.fysikk.utenfor(this.x, this.y, innerWidth, innerHeight, m)) {
+
+      /* GULVET. Kastes han opp, faller han ned igjen og lander - han skal ikke
+       * forsvinne bare fordi han passerte nederste skjermkant. */
+      const gulv = this._gulvY();
+      if (this.y >= gulv && this.fysikk.fartY > 0) {
+        this.y = gulv;
+        if (this.fysikk.land(K.sprett, K.friksjon, K.spinnBrems, K.landeGrense)) {
+          this._landing();
+          return;
+        }
+      }
+      /* Ut til SIDEN er det eneste som teller som borte. */
+      if (this.fysikk.utenfor(this.x, innerWidth, Math.max(this.bredde, this.hoyde))) {
         this._despawn();
         return;
+      }
+    } else if (o.tilstand === "landet") {
+      /* Rotasjonen fra flukten roteres tilbake til rett opp mens han reiser
+       * seg. Uten dette ble han staaende paa skakke resten av oekten. */
+      this.fysikk.rotasjon = jevn(this.fysikk.rotasjon, 0, 6, dt);
+      this.y = jevn(this.y, this._gulvY(), 12, dt);
+      if (o.oppdater(dt)) {
+        this.fysikk.rotasjon = 0;
+        this._nesteHendelse(1200);
       }
     } else {
       const ferdig = o.oppdater(dt);
@@ -324,8 +346,10 @@ class Tobias {
   /* Posisjonen skrives ut med transform - aldri med top/left, som ville
    * tvunget layout og kunne laget scrollbars. */
   _tegn() {
-    const rot = this.oppf.tilstand === "thrown"
-      ? `rotate(${this.fysikk.rotasjon}rad)` : "";
+    /* Rotasjonen gjelder ogsaa mens han reiser seg - da roteres den tilbake. */
+    const snurrer = this.oppf.tilstand === "thrown"
+      || this.oppf.tilstand === "landet";
+    const rot = snurrer ? `rotate(${this.fysikk.rotasjon}rad)` : "";
     this.boks.style.transform =
       `translate3d(${Math.round(this.x - this.bredde / 2)}px,` +
       `${Math.round(this.y - this.hoyde / 2)}px,0) ${rot}`;
@@ -333,16 +357,33 @@ class Tobias {
 
   /* Holder ham innenfor skjermen og innenfor sitt eget baand. Under kast og
    * kantkikk faar han bevisst lov til aa gaa utenfor. */
+  /* Gulvlinja. Én y-verdi for hele oekten, ikke et baand - eieren 26.07.2026:
+   * «en tenkt linje som er gulvet». */
+  _gulvY() {
+    return innerHeight * K.gulv;
+  }
+
   _klem() {
     if (!this.oppf) return;
     const fri = this.oppf.tilstand === "thrown"
+      || this.oppf.tilstand === "landet"
       || this.oppf.tilstand === "edge" || this.drar;
     if (fri) return;
-    const halv = this.bredde / 2;
-    this.x = klem(this.x, halv * 0.5, innerWidth - halv * 0.5);
-    this.y = klem(this.y, innerHeight * K.baand.fra, innerHeight * K.baand.til);
+    const halv = this.bredde * K.gaaMargin;
+    this.x = klem(this.x, halv, innerWidth - halv);
+    /* Foettene blir paa gulvet. */
+    this.y = this._gulvY();
     this.oppf.x = this.x;
     this.oppf.y = this.y;
+  }
+
+  /* Han landet og blir liggende et oyeblikk foer han reiser seg. */
+  _landing() {
+    this.y = this._gulvY();
+    this.fysikk.fartX = this.fysikk.fartY = 0;
+    this.fysikk.vinkelfart = 0;
+    this.oppf.x = this.x;
+    this.oppf.startLandet();
   }
 
   /* ── Hendelser ──────────────────────────────────────────────────────────── */
@@ -357,7 +398,7 @@ class Tobias {
     if (!this.lever) return;
     const fraVenstre = Math.random() < 0.5;
     this.x = fraVenstre ? -this.bredde * 0.4 : innerWidth + this.bredde * 0.4;
-    this.y = innerHeight * tilfeldig(K.baand.fra, K.baand.til);
+    this.y = this._gulvY();
     this.oppf.x = this.x;
     this.oppf.y = this.y;
     this.boks.hidden = false;
@@ -426,7 +467,9 @@ class Tobias {
     const type = velgVektet(vekter);
 
     if (type === "walk") {
-      const margin = this.bredde * 0.5;
+      /* Hele skjermen, ikke midtpartiet. Eieren: «saa kan den gaa over hele
+       * skjermen». Marginen er liten med vilje. */
+      const margin = this.bredde * K.gaaMargin;
       this.oppf.startWalk(tilfeldig(margin, innerWidth - margin));
     } else if (type === "look") {
       this.oppf.startLook();

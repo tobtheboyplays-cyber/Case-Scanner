@@ -29,6 +29,7 @@ export class Kastefysikk {
   }
 
   nullstill() {
+    this.spretter = 0;
     this.spor.length = 0;
     this.fartX = this.fartY = 0;
     this.rotasjon = this.vinkelfart = 0;
@@ -78,10 +79,30 @@ export class Kastefysikk {
     return { x: x + this.fartX * dt, y: y + this.fartY * dt };
   }
 
-  /* Ute av syne? Marginen er robotens egen stoerrelse, saa han er HELT ute
-   * foer vi despawner - ikke halvveis synlig i kanten. */
-  utenfor(x, y, bredde, hoyde, margin) {
-    return x < -margin || x > bredde + margin
-      || y < -margin || y > hoyde + margin;
+  /* Han traff gulvet. Spretter, mister vannrett fart til friksjon, og
+   * roterer saktere - som noe som faktisk lander paa et underlag.
+   *
+   * Returnerer `true` naar spretten var saa svak at han blir liggende. */
+  land(sprett, friksjon, spinnBrems, grense) {
+    this.fartY = -Math.abs(this.fartY) * sprett;
+    this.fartX *= friksjon;
+    /* Rotasjonen overlever nesten - det er den som gjor at han TUMLER videre i
+     * stedet for aa sprette som en ball. Uten dette stod han rett opp og ned
+     * mellom hvert sprett, og hele klonetheten forsvant. */
+    this.vinkelfart *= spinnBrems;
+    /* Et sprett paa skakke sparker ham litt til siden. */
+    this.fartX += this.vinkelfart * 12;
+    this.spretter = (this.spretter || 0) + 1;
+    return Math.abs(this.fartY) < grense && Math.abs(this.fartX) < grense;
+  }
+
+  /* Ute til SIDEN? Bare da er han borte for godt.
+   *
+   * Foer dette telte ogsaa «under skjermen» som borte, og da forsvant han i det
+   * han passerte nederste kant - selv om han var paa vei ned mot gulvet.
+   * Marginen er robotens egen stoerrelse, saa han er HELT ute foer vi
+   * despawner - ikke halvveis synlig i kanten. */
+  utenfor(x, bredde, margin) {
+    return x < -margin || x > bredde + margin;
   }
 }

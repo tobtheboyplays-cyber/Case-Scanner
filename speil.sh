@@ -150,7 +150,33 @@ say "3/4  Leter etter hemmeligheter i det som skal ut"
 cd "$MAAL" || exit 1
 git add -A
 # Formene vi faktisk bruker: Groq (gsk_), OpenAI-lignende (sk-), Alpaca (PK/AK).
-MISTENKT=$(git diff --cached | grep -nE '^\+.*(gsk_[A-Za-z0-9]{20}|sk-[A-Za-z0-9]{20}|(PK|AK)[A-Z0-9]{16})' | head -5 || true)
+#
+# ## Hvorfor vendor/ holdes utenfor MOENSTERsoeket - og hva som gjores i stedet
+#
+# `static/tobias/vendor/rapier.js` er 2 MB minifisert tredjepartskode med en
+# innbakt WASM-modul. Der finnes det garantert bokstavsekvenser som ser ut som
+# `AK` + 16 tegn; 26.07.2026 stoppet det hele speilingen paa en tilfeldig
+# variabelrekke inne i wasm-bindgen-limet. Et moenstersoek har ingen sjanse mot
+# slik kode, og en sperre som alltid slaar ut er en sperre folk laerer seg aa
+# overstyre - da er den verre enn ingen.
+#
+# Filene slippes likevel ikke inn ubesett: de maa staa i lista under. Legger
+# noen en NY fil i vendor/, stopper speilingen like fullt - men da paa noe som
+# faktisk betyr noe, i stedet for paa tilfeldig base64.
+# Rapier er Apache 2.0 (ikke MIT - lisensfila ligger ved siden av, slik Apache
+# 2.0 krever). Three.js, som ligger over i static/tobias/, er MIT.
+VENDOR_GODKJENT="static/tobias/vendor/rapier.js static/tobias/vendor/RAPIER-LICENSE.txt"
+for f in $(git diff --cached --name-only -- 'static/tobias/vendor/' || true); do
+  case " $VENDOR_GODKJENT " in
+    *" $f "*) ;;
+    *) bad "Ny fil i vendor/ som ikke er godkjent: $f"
+       say "    Legg den i VENDOR_GODKJENT i speil.sh naar du VET hva den er."
+       git reset >/dev/null; exit 1 ;;
+  esac
+done
+MISTENKT=$(git diff --cached -- . ':(exclude)static/tobias/vendor/' \
+  | grep -nE '^\+.*(gsk_[A-Za-z0-9]{20}|sk-[A-Za-z0-9]{20}|(PK|AK)[A-Z0-9]{16})' \
+  | head -5 || true)
 if [ -n "$MISTENKT" ]; then
   bad "Fant noe som ligner en noekkel. INGENTING pushes."
   printf '%s\n' "$MISTENKT" | sed 's/^/    /'

@@ -1,0 +1,48 @@
+<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0;height:100%;background:#0f131a;overflow:hidden}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+#s{position:fixed;left:8px;top:8px;color:#cfe9ff;font:12px monospace;z-index:9}</style>
+<body><div id="s">laster…</div>
+<script type="module">
+const s = document.getElementById('s');
+try {
+  const THREE = await import('/static/tobias/three.module.js');
+  const RAPIER = await import('/static/tobias/vendor/rapier.js');
+  await RAPIER.init();
+  const { Ragdoll } = await import('/static/tobias/fysikk/ragdoll.js');
+  const { Visning } = await import('/static/tobias/fysikk/visning.js');
+  const { Ansikt } = await import('/static/tobias/ansikt.js');
+  const { K } = await import('/static/tobias/konfig.js');
+  const { FYS } = await import('/static/tobias/fysikk/konfig.js');
+
+  const bredde = innerWidth / FYS.pikslerPerMeter;
+  const rag = new Ragdoll(RAPIER, bredde);
+  const vis = new Visning(THREE, RAPIER, rag, Ansikt, K.farge);
+  const r = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  r.setPixelRatio(Math.min(devicePixelRatio,2));
+  r.setSize(innerWidth, innerHeight, false);
+  document.body.appendChild(r.domElement);
+
+  let t0 = performance.now();
+  function frame(t) {
+    const dt = Math.min(0.05, (t - t0)/1000); t0 = t;
+    vis.merkForrige();
+    rag.steg(dt);
+    vis.synk();
+    r.render(vis.scene, vis.kamera);
+    const c = rag.massesenter();
+    window.__status = `${rag.tilstand}  com=(${c.x.toFixed(2)}, ${c.y.toFixed(2)})  fart=${rag.fart().toFixed(2)}`;
+    s.textContent = window.__status;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  window.__rag = rag;
+  window.__klar = true;
+  window.__kast = () => {
+    for (const [n,b] of Object.entries(rag.kropper)) {
+      b.applyImpulse({x: 7*b.mass(), y: 5*b.mass(), z:0}, true);
+    }
+    rag.kropper.torso.applyTorqueImpulse({x:0,y:0,z:-1.2}, true);
+  };
+} catch(e) { s.textContent = 'FEIL: ' + e; window.__klar = true; window.__status='FEIL '+e; }
+</script></body>
