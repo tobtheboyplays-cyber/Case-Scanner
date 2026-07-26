@@ -104,6 +104,16 @@ NIVAA_FYLKE = "(F)"
 MIN_ENDRING_PST = 15.0
 MIN_NIVAA = 20.0
 
+# Hele landet i SSBs regionkoder. Brukes til nivaasammenligning, ikke til aa
+# lage nasjonale saker.
+LANDET = "0"
+
+# Hvor mye Stavanger maa avvike fra landssnittet for at NIVAAET er en sak i seg
+# selv. Hoyere enn endringsterskelen med vilje: en kommune ligger nesten alltid
+# litt over eller under landet, saa 15 % ville gitt stoy ved hver eneste tabell.
+# 25 % er «dette er verdt en overskrift», ikke «dette er statistisk maalbart».
+MIN_AVVIK_PST = 25.0
+
 # Dimensjonsnavn som betyr TID. Har tabellen en slik dimensjon i tillegg til
 # tidsvariabelen, og vi eliminerer (summerer) den bort, sammenligner vi et
 # halvferdig aar med et helt aar. Tabell 12983 er akkurat den fellen: aarstall
@@ -387,6 +397,87 @@ def _hovedemner(rad: dict) -> set[str]:
     }
 
 
+
+def _nivaacase(rad, idx, geo, metric, hent, naa_p, etiketter, tabell_id, tittel_raa):
+    """Et sjokkerende NIVAA: Stavanger langt over eller under landssnittet.
+
+    Dette er den andre maaten et tall kan vaere en sak paa. Endringssporet
+    spor «har dette flyttet seg?»; dette sporet spor «er dette unormalt?».
+    En kommune som ligger 40 prosent over landet paa noe, er en sak selv om den
+    har ligget der i ti aar - og det er ofte de tallene som overrasker mest.
+
+    Krever hele landet i samme datakall (kode «0»). Mangler den, faar vi
+    ingenting - og det er greit, da er dette bare ikke en slik tabell.
+    """
+    if LANDET not in idx[geo]:
+        return None
+
+    beste = None
+    for metrikk in idx[metric]:
+        try:
+            landet = hent(LANDET, naa_p, metrikk)
+        except (ValueError, KeyError, IndexError):
+            continue
+        # Landstallet er summen for HELE Norge naar metrikken er et antall, og
+        # da er en kommune trivielt mye lavere - det er ikke en sak, det er
+        # aritmetikk. Vi krever derfor at kommunen ligger OVER landet, eller at
+        # landstallet er lite nok til at det aapenbart er et snitt/en rate.
+        if landet is None or abs(landet) < MIN_NIVAA:
+            continue
+        for kode, kommune in KOMMUNER.items():
+            if kode not in idx[geo]:
+                continue
+            try:
+                lokal = hent(kode, naa_p, metrikk)
+            except (ValueError, KeyError, IndexError):
+                continue
+            if lokal is None or abs(lokal) < MIN_NIVAA:
+                continue
+            avvik = _pst(lokal, landet)
+            if avvik is None or abs(avvik) < MIN_AVVIK_PST:
+                continue
+            # Ligger kommunen UNDER landet og landstallet er stort, er det nesten
+            # alltid fordi landstallet er en sum og kommunen en liten del av den.
+            # Da er «Stavanger 99 prosent under Norge» ren stoy.
+            if avvik < 0 and abs(landet) > abs(lokal) * 5:
+                continue
+            if beste is None or abs(avvik) > abs(beste[0]):
+                beste = (avvik, kode, kommune, lokal, landet,
+                         etiketter.get(metrikk, metrikk))
+
+    if beste is None:
+        return None
+    avvik, kode, kommune, lokal, landet, metric_navn = beste
+    retning = "høyere" if avvik > 0 else "lavere"
+
+    return Case(
+        key=f"ssb-nivaa:{tabell_id}:{kode}:{naa_p}",
+        title=f"{_kort(metric_navn, 48)}: {kommune} {abs(avvik):.0f} % {retning} enn landet",
+        score=min(12 + abs(avvik) / 3, 40),
+        geo="lokal",
+        topics=_tema_fra(f"{tittel_raa} {metric_navn}"),
+        angle=(
+            f"Hvorfor ligger {kommune} saa langt fra landssnittet? Sjekk om det "
+            f"gjelder hele Rogaland eller bare her, og finn noen som merker det."
+        ),
+        why=f"Nivaaet skiller seg fra landet i {naa_p}.",
+        signals=[],
+        created_at=datetime.now(UTC),
+        kind="data",
+        target_relevance="middels",
+        finding=(
+            f"{metric_navn} i {kommune}: {_tall(lokal)} i {naa_p}, mot "
+            f"{_tall(landet)} for hele landet - {abs(avvik):.0f} prosent "
+            f"{retning}. Kilde: SSB tabell {tabell_id}."
+        ),
+        metric_value=f"{'+' if avvik > 0 else '−'}{abs(avvik):.0f} % vs landet",
+        metric_period=naa_p,
+        data_source=f"SSB tabell {tabell_id} ({tittel_raa})",
+        data_url=f"https://www.ssb.no/statbank/table/{tabell_id}",
+        coverage_query=f"{kommune} {_kort(metric_navn, 40)}",
+    )
+
+
 def _synkende(tekst: str) -> tuple[int, ...]:
     """Sorteringsnokkel som gir nyeste dato foerst innenfor en stigende sortering."""
     return tuple(-ord(c) for c in tekst)
@@ -444,7 +535,12 @@ def _case(rad: dict, roller: tuple[str, str, str], data: dict, steg: int) -> Cas
                 beste = (pst, kode, kommune, naa, fjor, etiketter.get(metrikk, metrikk))
 
     if beste is None:
-        return None
+        # Ingen endring stor nok. MEN et tall kan vaere en sak uten aa ha
+        # flyttet seg: at Stavanger ligger langt over eller under landet er en
+        # overskrift i seg selv - «her tjener folk 12 prosent mer enn resten av
+        # landet» er ikke en endring, det er et nivaa. Foer dette fant
+        # soekesystemet ALDRI slike tall, uansett hvor sjokkerende de var.
+        return _nivaacase(rad, idx, geo, metric, hent, naa_p, etiketter, tabell_id, tittel_raa)
     pst, _kode, kommune, naa, fjor, metric_navn = beste
 
     retning = "opp" if pst > 0 else "ned"
@@ -509,7 +605,11 @@ def collect(temaer: list[str] | None = None) -> tuple[list[Case], list[str]]:
             geo, tid, metric = roller
             steg = _tidssteg(rad)
             regioner = meta["dimension"][geo]["category"]["index"]
-            koder = ",".join(k for k in KOMMUNER if k in regioner)
+            # «0» er hele landet. Vi ber om den i SAMME kall - det koster
+            # ingenting ekstra, og uten den kan vi bare se endring over tid, ikke
+            # om Stavanger ligger sjokkerende hoyt eller lavt.
+            onskede = [*KOMMUNER, LANDET]
+            koder = ",".join(k for k in onskede if k in regioner)
             metric_koder = ",".join(_hovedtall(meta["dimension"][metric]))
             time.sleep(0.4)  # 30 kall/min-taket hos SSB - vi ligger godt under
             data = _data(

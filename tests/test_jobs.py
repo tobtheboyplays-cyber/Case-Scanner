@@ -614,7 +614,13 @@ def test_journalisten_maa_selge_inn_vinkelen():
 
     e = prompts.EDITOR_SYSTEM
     assert "leserverdi" in e, "redaktøren svarer ikke på hvem som bryr seg"
-    assert "tomme abstraksjoner" in e
+    # «Unngå tomme abstraksjoner» var et råd modellen kunne tolke som den ville,
+    # og den leverte flate arbeidstitler likevel. Etter 26.07.2026 er det en
+    # navngitt forbudsliste — «Fokus på ...», «Setter søkelys på ...» — pluss tre
+    # harde krav hver tittel må oppfylle.
+    assert "FORBUDTE AAPNINGER" in e
+    assert "Setter soekelys paa" in e
+    assert "TRE KRAV TIL EN TITTEL" in e
 
 
 # ── Ting som vokser uten tak, og sider som blir for tunge ────────────────────

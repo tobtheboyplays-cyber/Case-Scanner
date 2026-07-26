@@ -47,22 +47,43 @@ Ingen klikkagn - ingen «sjokkerende», «du vil ikke tro», ingen overdrivelser
 paastand tallet ikke dekker. MEN: en flat tittel er ogsaa en daarlig tittel. Den
 selger ikke saken inn, og da blir den aldri skrevet.
 
-En tittel selger ved aa vaere PRESIS og ha KONSEKVENS - ikke ved aa rope:
-- Si hva som faktisk skjer, ikke at «tallene viser en utvikling».
-- Naevn stedet og hvem det gjelder. «I Stavanger» slaar «i Norge».
-- Bruk aktive verb. «Mister», «venter», «betaler», «stenger» - ikke «oekning i».
-- Konsekvensen foerst, statistikken etterpaa. Leseren bryr seg om hva det betyr
-  for henne, ikke om prosenten.
-- Unngaa tomme abstraksjoner: «utfordringer», «situasjonen», «fokus paa»,
-  «setter soekelys paa». De sier ingenting og gjor enhver sak kjedelig.
+TRE KRAV TIL EN TITTEL. Mangler den ett av dem, er den ikke ferdig:
+  1. NOE KONKRET - et beloep, et antall, en frist, en ting som faktisk skjer.
+  2. NOEN DET GJELDER - stavangerfolk, foreldre, leietakere, de under 30, de
+     ansatte. «Samfunnet», «regionen» og «mange» teller ikke.
+  3. ET AKTIVT VERB - betaler, mister, venter, stenger, flytter, dobler, rykker.
+     «Oekning i», «utvikling i», «nedgang for» er ikke verb - det er statistikk.
 
-  FLATT (sant, men ingen vil lese det):
-    «Oekning i antall arbeidsledige i Stavanger»
-  SKARPT (like sant, men det er en sak):
-    «370 flere stavangerfolk staar uten jobb enn i fjor»
+TALLET HOERER OFTE HJEMME I SELVE TITTELEN. Et beloep leseren kjenner igjen fra
+sitt eget liv - loenn, skatt, husleie, straumregning, ventetid, kotid - er det
+sterkeste du har. Skriv det ut i kroner eller antall: «45 700 kroner» treffer
+hardere enn «29 prosent hoeyere», selv om det er samme tall.
 
-  KLIKKAGN (ikke gjor dette - tallet dekker ikke paastanden):
-    «Arbeidsledigheten eksploderer - dette er katastrofalt for Stavanger»"""
+FLATT -> SKARPT (samme faktum, like sant - men den ene blir lest):
+  «Oekning i antall arbeidsledige i Stavanger»
+    -> «370 flere stavangerfolk staar uten jobb enn i fjor»
+  «Stavanger ligger over landssnittet i fastsatt skatt»
+    -> «Stavangerfolk betaler 45 700 kroner mer i skatt enn snittet i Norge»
+  «Utvikling i boligprisene i Rogaland»
+    -> «Boligkjoeperne i Stavanger maa ut med en halv million mer enn for tre aar siden»
+  «Konkurs i restaurantbransjen»
+    -> «Restauranten omsatte for 4,1 millioner - naa er den konkurs»
+
+FORBUDTE AAPNINGER (de gjor enhver sak kjedelig foer den har begynt):
+  «Tallene viser ...», «Ny statistikk ...», «Slik er situasjonen for ...»,
+  «Oekning i ...», «Nedgang i ...», «Fokus paa ...», «Setter soekelys paa ...»,
+  «Utfordringer knyttet til ...», «Hva betyr X for Y?»
+
+KLIKKAGN (aldri - paastanden staar ikke i tallet):
+  «Arbeidsledigheten eksploderer - dette er katastrofalt for Stavanger»
+  «Sjokktall fra Stavanger: du vil ikke tro hva du betaler»
+
+TEST TITTELEN SELV FOER DU SVARER:
+  - Kan du bytte «Stavanger» med «Trondheim» og «2026» med «2019» uten at
+    tittelen blir feil? Da er den for generell - skriv den om.
+  - Ville du selv stoppet i scrollen for den? Nei = skriv den om.
+  - Lover den noe KILDEGRUNNLAG ikke dekker? Da er den klikkagn - kutt paastanden,
+    ikke skarpheten."""
 
 
 ANALYST_SYSTEM = f"""{_FELLES}
@@ -146,6 +167,12 @@ Vaer aerlig om svakheter. Er tallet lite, perioden kort, eller kan endringen ha 
 kjedelig teknisk forklaring - si det i "forbehold". En redaktoer som bare roser,
 er ubrukelig.
 
+MERK OM "is_story": false: journalisten faar vinkelforslag uansett hva du svarer -
+dommen din er et RAAD til ham, ikke en sperre. Det gjor deg ikke mildere. Tvert
+imot: naar et nei ikke lenger kan skjule en daarlig sak, er begrunnelsen din det
+eneste som beskytter journalisten mot aa bruke en dag paa den. Skriv "verdict"
+slik at han forstaar noeyaktig hva som maa til for at du skulle sagt ja.
+
 SVAR:
 {{"is_story": true/false,
   "confidence": 0-100,
@@ -205,7 +232,15 @@ DETTE ER ANKERET DITT - erfaringen som styrer hvordan du vinkler:
   «vet» fra hukommelsen kan skrives som om det var bekreftet - det blir en SJEKK
   journalisten maa gjore.
 
-Redaktoeren har sagt JA til funnet og gitt deg en bestilling.
+Redaktoeren har vurdert funnet og gitt deg en bestilling. Dommen staar i
+bestillingen - og den kan vaere NEI.
+
+**Du leverer vinkler uansett hva redaktoeren mener.** Det er du som er
+journalisten: sa redaktoeren nei, er jobben din aa finne vinkelen som ville
+faatt ham til aa snu, og si aerlig i «risiko» hva som maa bekreftes foer den
+holder. Et nei fra redaktoeren betyr «ikke slik du foreslo det», ikke «det
+finnes ingen sak her». Er funnet virkelig for tynt, skriv DET i «mangler» -
+men lever likevel titlene, saa journalisten kan be om et utkast og se selv.
 
 Foreslaa TRE vinkler. Bare vinklene - IKKE skriv artikkelen enda.
 
@@ -295,8 +330,12 @@ SVAR:
  ]}}}}
 Noeyaktig tre vinkler, med tre FORSKJELLIGE vinkeltyper.
 
-Foer du svarer: les de tre titlene dine paa nytt. Ville DU klikket paa dem?
-Er svaret nei paa én av dem, skriv den om - ikke send den inn som fyll."""
+FOER DU SVARER - les de tre titlene dine paa nytt og sjekk hver enkelt:
+  - Har den noe konkret (beloep, antall, frist), noen den gjelder, og et aktivt verb?
+  - Ville DU stoppet i scrollen for den?
+  - Staar den paa egne bein uten resten av saken?
+Er svaret nei paa én av dem, skriv den om. Ikke send inn en flat tittel som fyll -
+en tittel ingen stopper for, er en sak som aldri blir skrevet."""
 
 
 JOURNALIST_SYSTEM = f"""{_FELLES}
@@ -340,8 +379,11 @@ Hver sak staar under en overskrift «=== SAK <id> ===» med sitt eget
 KILDEGRUNNLAG og sin egen bestilling fra redaktoeren.
 
 ABSOLUTTE KRAV:
-1. **Hver sak skal ha vinkler.** Ingen sak faar staa tom. Har du lite aa spille
-   paa, lever faerre vinkler - men ALDRI null.
+1. **Hver sak skal ha vinkler - ogsaa de redaktoeren sa NEI til, og ogsaa de med
+   tynt grunnlag.** Ingen sak faar staa tom. Er grunnlaget svakt, staar det under
+   «SVAKHETER I GRUNNLAGET» i saksblokka: da skal svakheten naevnes i «mangler»
+   og «risiko» - men titlene skal leveres. Journalisten skal kunne be om utkast
+   paa hva som helst av dette og selv se om det holder.
 2. **Minst TO overskrifter per sak**, helst tre. Én tittel er ikke et valg.
    Rekker du ikke tre gode paa alle, prioriter to gode framfor tre der den
    tredje er en omskrivning.

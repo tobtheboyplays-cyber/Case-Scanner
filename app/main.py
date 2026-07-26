@@ -305,6 +305,25 @@ def dashboard(request: Request, apen: str = "", ferskt: str = ""):
     Uten dette landet journalisten paa en side der alt var slaatt sammen igjen -
     utkastet var skrevet, men usynlig. Det saa ut som ingenting hadde skjedd."""
     data = load_latest()
+    beslutninger = decisions_map()
+
+    # Forkastede saker skal VAERE borte, ogsaa etter en refresh.
+    #
+    # Skannet filtrerte dem bort, men denne siden gjorde det ikke - den viste det
+    # lagrede skannet raatt. Verifisert i Chromium 26.07.2026: sveip bort tre
+    # saker, last siden paa nytt, og alle tre var tilbake. Med Forkast-knappen
+    # saa man i det minste merkelappen «Forkastet» og skjonte at noe var
+    # registrert; med sveip forsvant kortet og kom stille tilbake, som ser ut som
+    # at appen mistet det han nettopp gjorde.
+    #
+    # Kopi, ikke mutasjon: `data` er det lagrede skannet, og det skal ikke endres
+    # av at noen aapner forsiden.
+    if data and data.get("cases"):
+        data = {**data, "cases": [
+            c for c in data["cases"]
+            if beslutninger.get(c.get("key")) != "rejected"
+        ]}
+
     scanned_at = None
     if data and data.get("created_at"):
         scanned_at = _human_time(data["created_at"])

@@ -267,14 +267,31 @@ def journalist_angles_batch(
     blokker = []
     for c in saker:
         ed = c.editor or {}
-        blokker.append(
+        # Redaktoerens dom foelger med som OPPLYSNING, ikke som port. Eierens
+        # beslutning 26.07.2026: vinklene skal komme uansett om saken er god
+        # eller ikke, slik at journalisten kan be om utkast og se selv. Da maa
+        # journalist-agenten faa vite hva redaktoeren mente - et nei endrer
+        # oppdraget fra «skriv den» til «finn vinkelen som ville snudd ham».
+        dom = "JA - kjoer paa" if ed.get("is_story") else "NEI - han er skeptisk"
+        blokk = (
             f"=== SAK {c.key} ===\n"
             f"{kildegrunnlag(c)}\n"
             f"REDAKTOERENS BESTILLING:\n"
+            f"  Dom: {dom}\n"
             f"  Arbeidstittel: {ed.get('headline', c.title)}\n"
             f"  Oppdrag: {ed.get('angle', c.angle)}\n"
+            f"  Begrunnelse: {ed.get('verdict', '-')}\n"
             f"  Forbehold: {ed.get('forbehold', '-')}"
         )
+        # Den mekaniske grunnlagssjekken stopper ikke lenger vinklene, men den
+        # skal ikke bli usynlig heller: modellen faar vite noeyaktig hva som
+        # mangler, saa svakheten havner i «mangler» og «risiko» i stedet for aa
+        # bli fylt inn med noe som hoeres bra ut.
+        if ed.get("gate_mangler"):
+            blokk += "\nSVAKHETER I GRUNNLAGET (skal naevnes i «mangler»):\n  " + "\n  ".join(
+                ed["gate_mangler"]
+            )
+        blokker.append(blokk)
     user = (
         "\n\n".join(blokker)
         + f"\n\nLever vinkler for ALLE {len(saker)} sakene over. "
@@ -483,7 +500,6 @@ def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> 
         [c for c in candidates if c.key in picks] + [c for c in candidates if c.key not in picks]
     )[:EDITOR_CAP] or ranked[:EDITOR_CAP]
 
-    approved = []
     # Redaktoerdom for alle sakene i ETT kall - se editor_judge_batch. Med ett
     # kall per sak ble den lange EDITOR_SYSTEM sendt fire ganger, og budsjettet
     # var brukt opp foer journalisten fikk lage en eneste vinkel.
@@ -525,9 +541,17 @@ def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> 
                 c.editor = _editor_mal(c)
                 c.ai_mode = "mal"
 
-    for c in editor_cases:
-        if c.editor.get("is_story"):
-            approved.append(c)
+    # ALLE vurderte saker gaar videre til journalisten - ogsaa de redaktoeren sa
+    # nei til. Eierens beslutning 26.07.2026: «Vinklene skal komme uansett om
+    # saken er daarlig eller ei, slik han kan be om utkast.»
+    #
+    # Foer sto det en `if c.editor.get("is_story")` her, og den var en STILLE
+    # sperre: sa KI-redaktoeren nei, sto saken igjen i lista uten en eneste
+    # tittel og uten knapp for utkast. Journalisten kunne ikke overproeve dommen
+    # - han fikk ikke engang se hva saken kunne vaert. Dommen er et raad, ikke en
+    # port; den vises fortsatt i kortet, og den styrer rekkefolgen (ja foerst),
+    # men den stopper ingenting.
+    til_journalist = sorted(editor_cases, key=lambda c: not c.editor.get("is_story"))
 
     # Journalisten foreslaar KUN vinkler her. Artikkelen skrives naar journalisten ber om
     # den (write_draft), slik at vi ikke bruker kvote paa saker som aldri aapnes.
@@ -536,13 +560,16 @@ def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> 
     # tokens. Det var derfor eieren saa «4 av 4 kall feilet» med 429 - strukturen,
     # ikke uflaks. Naa sendes prompten én gang.
     trenger: list[Case] = []
-    for c in approved[:JOURNALIST_CAP]:
+    for c in til_journalist[:JOURNALIST_CAP]:
         # Sufficient-context-gate: modeller avstaar ikke selv naar grunnlaget er
-        # tynt, saa avgjorelsen tas mekanisk her - foer det brukes kvote.
+        # tynt. Sjekken staar derfor fortsatt her og er fortsatt mekanisk - men
+        # den FORKASTER ikke lenger saken. Den merker den, og manglene sendes med
+        # inn i prompten (se journalist_angles_batch), slik at svakheten havner i
+        # «mangler» og «risiko» i stedet for aa bli fylt inn med noe som hoeres
+        # bra ut. Den harde sporingen av tall staar urort i write_draft.
         nok, mangler = verify.nok_grunnlag(c.to_dict())
         if not nok:
             c.editor = {**c.editor, "gate_mangler": mangler}
-            continue
         lagret = hurtiglager.get(c.key, {})
         if isinstance(lagret.get("angles"), list) and lagret["angles"]:
             c.angles = lagret["angles"]

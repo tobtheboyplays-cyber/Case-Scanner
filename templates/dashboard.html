@@ -270,8 +270,14 @@
     </div>
 
     {% for case in data.cases %}
-    <article class="lead" id="sak-{{ case.key }}"
+    {# Sveip venstre for aa rydde bort. Med 15-20 saker per skann er det raskere
+       enn aa lete etter en knapp, og det er den samme bevegelsen han allerede
+       bruker under «Lagret». Knappen nederst gjor det samme - sveip er en
+       snarvei, ikke den eneste veien. #}
+    <article class="lead swipe-kort" id="sak-{{ case.key }}"
+             data-key="{{ case.key }}"
              data-cov="{{ case.coverage_status }}" data-geo="{{ case.geo }}">
+      <div class="swipe-merke swipe-venstre" aria-hidden="true">🗑 Fjern</div>
       <div class="lead-num">{{ loop.index }}</div>
       <div class="lead-body">
         <div class="lead-head">
@@ -334,7 +340,11 @@
         <div class="ai-block">
           {% if case.editor %}
           <details class="ai-editor">
-            <summary>🧭 KI-redaktør: {{ '✅ Sak' if case.editor.is_story else '⛔ Ikke sak' }}
+            {# Dommen er et RAAD, ikke en sperre - vinklene kommer uansett (eierens
+               beslutning 26.07.2026). «Ikke sak» leste seg som at saken var stengt;
+               «skeptisk» sier det den faktisk er: redaktoeren ville ikke prioritert
+               den, men du kan fortsatt be om utkast. #}
+            <summary>🧭 KI-redaktør: {{ '✅ Anbefaler' if case.editor.is_story else '🤨 Skeptisk' }}
               {% if case.editor.confidence %}({{ case.editor.confidence }}%){% endif %}
               {% if case.ai_mode == 'mal' %}<span class="ai-tag">demo</span>
               {% elif case.ai_mode == 'ko' %}<span class="ai-tag ai-ko">i kø</span>{% endif %}</summary>
@@ -347,8 +357,12 @@
             {% if case.editor.forbehold %}<p class="angle-risk">⚠ {{ case.editor.forbehold }}</p>{% endif %}
           </details>
           {% endif %}
+          {# Grunnlagssjekken stopper ikke lenger vinklene - den advarer. Foer sto
+             det «⛔ For tynt grunnlag til å skrive», og da fikk saken verken
+             titler eller utkastknapp. Nå får du titlene, men vet hva som mangler
+             før du ringer noen. #}
           {% if case.editor and case.editor.gate_mangler %}
-          <p class="gate-block">⛔ For tynt grunnlag til å skrive:
+          <p class="gate-block">⚠ Tynt grunnlag — sjekk dette selv først:
             {{ case.editor.gate_mangler|join(' · ') }}</p>
           {% endif %}
           {% if not case.angles %}
@@ -563,6 +577,28 @@
 </section>
 
 {% endif %}
+
+{# Bekreftelse for sletting. Eieren ba om «sikker?»-popup MED en «ikke vis
+   dette igjen»-boks - han vet at han blir lei den etter tjuende sak. Valget
+   lagres lokalt i nettleseren, ikke paa serveren: det er en preferanse for
+   HANS telefon, ikke en innstilling verktoyet skal huske for alle. #}
+<div id="fjern-dialog" class="fjern-dialog" hidden role="dialog" aria-modal="true"
+     aria-labelledby="fjern-h">
+  <div class="fjern-boks">
+    <p id="fjern-h" class="fjern-h">Fjerne denne saken?</p>
+    <p class="fjern-tittel"></p>
+    <p class="fjern-b">Den forsvinner fra radaren og kommer ikke tilbake ved
+      neste skann.</p>
+    <label class="fjern-huk">
+      <input type="checkbox" id="fjern-ikke-spor" />
+      <span>Ikke spør meg igjen</span>
+    </label>
+    <div class="fjern-knapper">
+      <button type="button" class="btn-small fjern-avbryt">Avbryt</button>
+      <button type="button" class="btn-small fjern-ja">Fjern</button>
+    </div>
+  </div>
+</div>
 
 <footer class="foot">
   <span>ⓘ Case-radar henter og analyserer åpne data fra SSB og andre offentlige kilder.</span>
@@ -780,6 +816,133 @@
     b.addEventListener('change', oppdaterGrupper);
   });
   oppdaterGrupper();
+
+
+  /* ── Sveip venstre for å rydde bort en sak ─────────────────────────────── */
+  /* Eieren: «Blir veldig rotete med scannen nå. Legg til en Tinder swipe på
+     alle sakene, så han kan rydde bort det han ikke vil ha.»
+
+     Samme bevegelse som under «Lagret», så den er allerede kjent. Kortet
+     forsvinner med en gang (det er det som gjør rydding rask), og POST-en går
+     i bakgrunnen — venter vi på serveren, føles hver sveip treg. Feiler den,
+     kommer kortet tilbake, for et kort som forsvant uten å bli lagret er en
+     løgn om hva som skjedde. */
+  (function () {
+    var dialog = document.getElementById('fjern-dialog');
+    if (!dialog) { return; }
+    var NOKKEL = 'caseradar-fjern-uten-sporsmal';
+    var venter = null;
+
+    function sporIkke() {
+      try { return localStorage.getItem(NOKKEL) === '1'; } catch (e) { return false; }
+    }
+
+    function fjern(kort) {
+      var key = kort.dataset.key;
+      kort.classList.add('sveipet-bort');
+      setTimeout(function () { kort.remove(); }, 240);
+      var d = new FormData();
+      d.append('tilbake', '/');
+      fetch('/leads/' + encodeURIComponent(key) + '/reject', { method: 'POST', body: d })
+        .catch(function () {
+          // Kom den ikke fram, skal saken tilbake. Alternativet er at han tror
+          // den er ryddet bort og ser den igjen ved neste skann.
+          kort.classList.remove('sveipet-bort');
+          kort.style.transform = '';
+        });
+    }
+
+    function spor(kort) {
+      if (sporIkke()) { fjern(kort); return; }
+      venter = kort;
+      var t = kort.querySelector('.lead-title');
+      dialog.querySelector('.fjern-tittel').textContent = t ? t.textContent.trim() : '';
+      dialog.querySelector('#fjern-ikke-spor').checked = false;
+      dialog.hidden = false;
+      dialog.querySelector('.fjern-ja').focus();
+    }
+
+    function lukk() { dialog.hidden = true; venter = null; }
+
+    dialog.querySelector('.fjern-avbryt').addEventListener('click', function () {
+      if (venter) { venter.style.transform = ''; }
+      lukk();
+    });
+    dialog.querySelector('.fjern-ja').addEventListener('click', function () {
+      if (dialog.querySelector('#fjern-ikke-spor').checked) {
+        try { localStorage.setItem(NOKKEL, '1'); } catch (e) { /* privat modus */ }
+      }
+      if (venter) { fjern(venter); }
+      lukk();
+    });
+    dialog.addEventListener('click', function (e) {
+      if (e.target === dialog) { if (venter) { venter.style.transform = ''; } lukk(); }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !dialog.hidden) {
+        if (venter) { venter.style.transform = ''; }
+        lukk();
+      }
+    });
+
+    document.querySelectorAll('.lead.swipe-kort').forEach(function (kort) {
+      var x0 = null, y0 = null, dx = 0, drar = false, laast = false;
+      var TERSKEL = 90;
+
+      function start(x, y) { x0 = x; y0 = y; dx = 0; drar = true; laast = false; }
+      function flytt(x, y, ev) {
+        if (!drar) { return; }
+        var ddx = x - x0, ddy = y - y0;
+        // Avgjør én gang om dette er en sidelengs sveip eller vanlig scrolling.
+        // Uten låsen «henger» kortet fast når man bare vil bla nedover.
+        if (!laast) {
+          if (Math.abs(ddy) > Math.abs(ddx) && Math.abs(ddy) > 10) { drar = false; return; }
+          if (Math.abs(ddx) > 10) {
+            laast = true;
+            kort.classList.add('drar');
+            // Fanger pekeren, slik at sveipen fortsetter selv om markøren
+            // forlater kortet på vei ut mot venstre.
+            if (ev.pointerId !== undefined && kort.setPointerCapture) {
+              try { kort.setPointerCapture(ev.pointerId); } catch (e) { /* ingen fangst */ }
+            }
+          } else { return; }
+        }
+        dx = Math.min(0, ddx);            /* bare venstre - hoyre betyr ingenting her */
+        kort.style.transform = 'translateX(' + dx + 'px) rotate(' + (dx / 34) + 'deg)';
+        kort.classList.toggle('mot-venstre', dx < -30);
+        if (ev.cancelable) { ev.preventDefault(); }
+      }
+      function slipp() {
+        if (!drar && !laast) { return; }
+        drar = false;
+        kort.classList.remove('drar', 'mot-venstre');
+        if (dx < -TERSKEL) { spor(kort); return; }
+        kort.style.transform = '';
+      }
+
+      /* Pointer-events, ikke touch-events. Med bare touchstart/touchmove gjorde
+         sveipen ingenting i det hele tatt med mus - verifisert i Chromium
+         26.07.2026. Journalisten er på telefon, men eieren tester på laptop, og
+         en funksjon som er usynlig der ser ut som en feil. Pointer dekker mus,
+         touch og penn i én kodesti; `touch-action: pan-y` i CSS-en sørger for at
+         nettleseren fortsatt eier den loddrette scrollingen. */
+      kort.addEventListener('pointerdown', function (e) {
+        if (e.button) { return; }                    /* bare venstre musetast */
+        // En sveip skal aldri starte oppå noe man kan trykke på - ellers blir
+        // «Lag utkast» og lenkene til kildene vanskelige å treffe.
+        if (e.target.closest('a, button, input, label, summary, form')) { return; }
+        start(e.clientX, e.clientY);
+      });
+      kort.addEventListener('pointermove', function (e) { flytt(e.clientX, e.clientY, e); });
+      kort.addEventListener('pointerup', slipp);
+      kort.addEventListener('pointercancel', slipp);
+      // Etter en sveip ligger det an til et klikk på det som var under fingeren.
+      // Uten dette åpner/lukker en sveip tilfeldige detaljer på veien.
+      kort.addEventListener('click', function (e) {
+        if (laast) { e.preventDefault(); e.stopPropagation(); laast = false; }
+      }, true);
+    });
+  })();
 
   document.querySelectorAll('.chip').forEach(function (chip) {
     chip.addEventListener('click', function () {
