@@ -338,3 +338,34 @@ def test_det_fulle_variabelnavnet_staar_fortsatt_i_funnet():
     assert sak is not None
     assert "Antall menn i kvalifiseringsprogram (antall)" in sak.finding
     assert "(antall)" not in sak.title
+
+
+# ── Fakta man skjonner ─────────────────────────────────────────────────────
+#
+# Eieren 26.07.2026: «Viktig at vi skjønner hva faktaen er, så kan gjerne
+# forenkle faktaen.»
+
+
+@pytest.mark.parametrize("verdi,vent", [
+    (40832836.0, "40,8 millioner (40 832 836)"),
+    (3031484.0, "3,0 millioner (3 031 484)"),
+    (34860.0, "34 860"),      # under en million: grupperingen holder
+    (65.0, "65"),
+])
+def test_store_tall_blir_lesbare(verdi, vent):
+    assert ssb_sok._lesbart(verdi) == vent
+
+
+def test_det_eksakte_tallet_folger_alltid_med():
+    """Journalisten skal PUBLISERE dette. En avrunding kan ikke siteres som
+    fasit, og han maa kunne finne igjen tallet hos SSB."""
+    assert "40 832 836" in ssb_sok._lesbart(40832836.0)
+
+
+def test_funnet_bruker_den_lesbare_formen():
+    sak = ssb_sok._case(RAD, ("Region", "Tid", "ContentsCode"),
+                        _data(["2025K2", "2026K2"], [34859737, 40832836,
+                                                     34859737, 40832836]), steg=1)
+    assert sak is not None
+    assert "40,8 millioner" in sak.finding
+    assert "40 832 836" in sak.finding

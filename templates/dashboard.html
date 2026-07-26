@@ -220,9 +220,16 @@
           {% endif %}
         </div>
 
-        {% if case.metric_value %}
+        {# Tallet er valgfritt. Stortinget har ingen maalbar stoerrelse - bare
+           en henvisning («Dokument 12:9 (2023-2024)») - og den la seg i
+           tall-feltet paa 30 px og brakk mobilvisningen. Naa staar den i den
+           lille graa linja, og kortet tegnes uten det store tallet i stedet
+           for at hele blokka forsvinner. #}
+        {% if case.metric_value or case.metric_period %}
         <div class="metric">
+          {% if case.metric_value %}
           <span class="metric-v cov-text-{{ case.coverage_status }}">{{ case.metric_value }}</span>
+          {% endif %}
           <span class="metric-cmp">{{ case.metric_period }}</span>
           {# Sparkline: et FORM-signal ved siden av tallet som allerede staar der
              med full presisjon. Ingen akser og ingen tall paa linja — tegner vi
@@ -735,12 +742,31 @@
    skanntidspunktet, så en refresh ikke gjentar beskjeden han allerede har lest.
    `role="status"` gjør at skjermlesere leser den uten å avbryte. #}
 {% if data and data.varsel and data.varsel.tittel %}
-<div class="varsel" id="varsel" role="status" aria-live="polite"
-     data-skann="{{ data.created_at }}" hidden>
-  <span class="varsel-ikon" aria-hidden="true">🔍</span>
-  <div>
+{# `viktig` = beskjeden svipper IKKE ut av seg selv, og faar en OK-knapp.
+   Eieren 26.07.2026: «legg til tydelig naar en scan kommer tom ... og at du maa
+   bytte tema. Du kan legge til en 'trykk ok' paa den popuppen.»
+
+   Et tomt skann er det ene utfallet der beskjeden er en HANDLING, ikke en
+   opplysning. Fem sekunder er nok til aa gaa glipp av den, og da staar han
+   igjen med en tom side uten aa vite hvorfor. `role="alertdialog"` gjor at
+   skjermlesere leser den med én gang i stedet for aa vente paa en pause. #}
+<div class="varsel{{ ' varsel-viktig' if data.varsel.viktig }}" id="varsel"
+     role="{{ 'alertdialog' if data.varsel.viktig else 'status' }}"
+     aria-live="{{ 'assertive' if data.varsel.viktig else 'polite' }}"
+     data-skann="{{ data.created_at }}"
+     {% if data.varsel.viktig %}data-viktig="1"{% endif %} hidden>
+  <span class="varsel-ikon" aria-hidden="true">{{ '🔍' if not data.varsel.viktig else '🫙' }}</span>
+  <div class="varsel-mid">
     <p class="varsel-tittel">{{ data.varsel.tittel }}</p>
     <p class="varsel-tekst">{{ data.varsel.tekst }}</p>
+    {% if data.varsel.viktig %}
+    <div class="varsel-knapper">
+      {% if data.varsel.handling == 'temaer' %}
+      <button class="btn-small varsel-tema" type="button" data-apne-temaer>Bytt tema</button>
+      {% endif %}
+      <button class="btn-small varsel-ok" type="button">OK</button>
+    </div>
+    {% endif %}
   </div>
   <button class="varsel-lukk" type="button" aria-label="Lukk">×</button>
   <span class="varsel-tid" aria-hidden="true"></span>
@@ -1488,8 +1514,17 @@
       requestAnimationFrame(function () { v.classList.add('inne'); });
     });
     localStorage.setItem(NOKKEL, v.dataset.skann || '');
-    timer = setTimeout(ut, 5000);
+    /* Et tomt skann blir staaende til han trykker OK. Alt annet svipper ut
+       etter fem sekunder som foer - beskjeden er da en opplysning, ikke en
+       handling han maa ta stilling til. */
+    if (!v.dataset.viktig) { timer = setTimeout(ut, 5000); }
     v.querySelector('.varsel-lukk').addEventListener('click', ut);
+    var ok = v.querySelector('.varsel-ok');
+    if (ok) { ok.addEventListener('click', ut); }
+    /* «Bytt tema» aapner den samme menyen som oeverst, og lukker beskjeden -
+       ellers ligger den over menyen han nettopp ba om. */
+    var tema = v.querySelector('.varsel-tema');
+    if (tema) { tema.addEventListener('click', ut); }
   })();
 
   /* Etter «Send» sender serveren oss til /#ideer. Fanebyttet er ren CSS via

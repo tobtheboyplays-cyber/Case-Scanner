@@ -163,8 +163,14 @@ def _case(sak: dict, benk: dict[str, dict], oppdatert: datetime) -> Case | None:
         created_at=datetime.now(tz=UTC),
         kind="hendelse",
         finding=funn,
-        metric_value=sak.get("henvisning", "") or "",
-        metric_period=oppdatert.date().isoformat(),
+        # `metric_value` er STORE TALL i malen (30-40 px). En henvisning som
+        # «Dokument 12:9 (2023-2024)» hoerer ikke hjemme der - den er en
+        # referanse, ikke et maal, og den brakk mobilvisningen (se
+        # static/style.css, .metric-v). Henvisningen staar i `metric_period`,
+        # som er den lille graa linja ved siden av.
+        metric_value="",
+        metric_period=(sak.get("henvisning") or "").strip()
+        or oppdatert.date().isoformat(),
         data_source="Stortinget (data.stortinget.no)",
         data_url=f"https://www.stortinget.no/no/Saker-og-publikasjoner/Saker/Sak/?p={sak_id}",
         coverage_query=f"Stortinget {tittel}",

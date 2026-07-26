@@ -44,6 +44,8 @@ from app.storage import (
     neste_i_rotasjon,
     ssb_utforsket,
 )
+from app.tall import lesbart as _lesbart
+from app.tall import skala as _skala
 
 KATALOG = "https://data.ssb.no/api/pxwebapi/v2/tables"
 
@@ -306,6 +308,27 @@ def _tall(v: float) -> str:
     if float(v).is_integer():
         return f"{int(v):,}".replace(",", " ")
     return f"{v:,.2f}".replace(",", " ").replace(".", ",")
+
+
+
+
+
+
+# Hvor mange dager en periode dekker. Bare disse to - halvaar og maaned finnes,
+# men er sjeldne nok til at det ikke er verdt aa gjette feil.
+
+# HENDELSER som skjer gjennom perioden, og som derfor kan regnes om til «per
+# uke». Dette er en ALLOWLIST, ikke en blokkliste, og det er et bevisst valg.
+#
+# Foerste utkast blokkerte det aabenbare (areal, timer) og slapp resten
+# gjennom. Da kom «Menn i kvalifiseringsprogram: 128 - det er i snitt 2,5 i
+# uka». Det er feil: 128 er hvor mange som ER i programmet, ikke hvor mange som
+# kommer til. En BEHOLDNING kan ikke deles paa uker.
+#
+# Forskjellen kan ikke leses ut av tallet, bare av hva det teller. Da er den
+# eneste aerlige loesningen aa liste opp det vi VET er hendelser, og tie i alle
+# andre tilfeller. En maalestokk som ikke stemmer er verre enn ingen.
+
 
 
 def _side(nokkel: str) -> int:
@@ -625,9 +648,12 @@ def _case(rad: dict, roller: tuple[str, str, str], data: dict, steg: int) -> Cas
     pst, _kode, kommune, naa, fjor, metric_navn, _vekt = beste
 
     retning = "opp" if pst > 0 else "ned"
+    skala = _skala(naa, naa_p, metric_navn)
     funn = (
-        f"{metric_navn} i {kommune}: {_tall(naa)} i {naa_p}, mot {_tall(fjor)} i "
-        f"{fjor_p} - {retning} {abs(pst):.0f} prosent. Kilde: SSB tabell {tabell_id}."
+        f"{metric_navn} i {kommune}: {_lesbart(naa)} i {naa_p}, mot "
+        f"{_lesbart(fjor)} i {fjor_p} - {retning} {abs(pst):.0f} prosent. "
+        + (f"{skala} " if skala else "")
+        + f"Kilde: SSB tabell {tabell_id}."
     )
     return Case(
         key=f"ssb-sok:{tabell_id}:{_kode}:{naa_p}",

@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import __version__, faner, jobs, llm, storage, trend, verify
+from app import __version__, faner, jobs, llm, storage, tall, trend, verify
 from app.agents import journalist_angles, run_workflow, write_draft
 from app.collectors import brreg, collect_all, coverage, ssb_kalender
 from app.config import (
@@ -281,13 +281,25 @@ def _varsel(cases: list[Case], temaer: list[str], antall_nye: int) -> dict:
     stoey - og da er vi tilbake til statuslinja ingen leste.
     """
     if not cases:
+        # `viktig` betyr: ikke svipp ut av seg selv. Eieren 26.07.2026: «maa
+        # ogsaa legge til tydelig naar en scan kommer tom ... og at du maa bytte
+        # tema. Du kan legge til en 'trykk ok' paa den popuppen.»
+        #
+        # Et tomt skann er det ENE utfallet der beskjeden er en handling og ikke
+        # en opplysning. Svipper den ut etter fem sekunder mens han ser en annen
+        # vei, sitter han igjen med en tom side og ingen anelse om hvorfor.
         return {
-            "tittel": "Søket ga ingen treff",
+            "tittel": "Skannet fant ingenting",
             "tekst": (
-                "Ingen nye funn innenfor disse temaene. Prøv flere temaer."
+                f"Ingen nye funn innenfor {'de valgte temaene' if temaer else 'noen av temaene'}. "
+                "Du må bytte tema for å lete et annet sted — eller fjerne alle "
+                "avhukinger for å lete bredt."
                 if temaer else
-                "Kildene svarte, men hadde ingenting nytt. Prøv igjen senere."
+                "Kildene svarte, men hadde ingenting nytt. Huk av flere temaer, "
+                "eller prøv igjen senere — SSB publiserer på faste datoer."
             ),
+            "viktig": True,
+            "handling": "temaer" if temaer else "",
         }
     if any(c.uendret for c in cases):
         return {
@@ -585,6 +597,13 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
             f"{len(cases)} sterkeste funnene paa nytt, merket «uendret» - "
             "SSB publiserer nye tall paa faste datoer (se «Kommer snart»)."
         )
+
+    # Oversettelsen av tallene skjer ETT sted, for ALLE kilder. Eieren
+    # 26.07.2026: «saa gjor at alle faktaene som du finner blir oversatt
+    # automatisk.» Ligger den her og ikke i hver kollektor, arver en ny kilde
+    # den uten aa gjore noe - og ingen framtidig okt kan glemme aa koble den paa.
+    for c in cases:
+        c.finding = tall.forenkle(c.finding)
 
     for c in cases:
         # Alle noekler er naa stabile (SSB-tabell + periode, eller orgnr), saa
