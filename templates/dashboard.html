@@ -307,8 +307,39 @@
         <div class="metric">
           <span class="metric-v cov-text-{{ case.coverage_status }}">{{ case.metric_value }}</span>
           <span class="metric-cmp">{{ case.metric_period }}</span>
+          {# Sparkline: et FORM-signal ved siden av tallet som allerede staar der
+             med full presisjon. Ingen akser og ingen tall paa linja — tegner vi
+             et diagram, later vi som om tre punkter er en analyse. #}
+          {% if case.trend and case.trend.punkter|length > 2 %}
+          <span class="gnist trend-{{ case.trend.retning }}"
+                title="{% for p in case.trend.punkter %}{{ p[0] }}: {{ p[1] }}{% if not loop.last %} · {% endif %}{% endfor %}">
+            <svg viewBox="0 0 96 24" width="96" height="24" aria-hidden="true"
+                 preserveAspectRatio="none">
+              <polyline points="{{ case.trend.punkter|sti }}" fill="none"
+                        stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          {% endif %}
         </div>
+        {% if case.trend and case.trend.tekst %}
+        <p class="trend-tekst trend-{{ case.trend.retning }}">
+          <span aria-hidden="true">{{ '↗' if case.trend.retning == 'opp' else '↘' }}</span>
+          {{ case.trend.tekst }}
+          <span class="trend-kilde">{{ case.trend.punkter[0][0] }}–{{ case.trend.punkter[-1][0] }}</span>
+        </p>
+        {% endif %}
+        {% endif %}
 
+        {# Oppfoelger: Aftenbladet eier premisset, bildene og kildene fra sist.
+           «Hva har skjedd siden?» er en ferdig bestilling, ikke et minus. #}
+        {% if case.oppfolger %}
+        <a class="oppfolger" href="{{ case.oppfolger.url }}" target="_blank" rel="noopener">
+          <span class="oppfolger-merke">🔁 OPPFØLGER</span>
+          <span class="oppfolger-tekst">Aftenbladet skrev
+            «{{ case.oppfolger.title }}» {{ case.oppfolger.date }} —
+            tallet er nytt, saken er kjent ↗</span>
+        </a>
         {% endif %}
 
         <h3 class="lead-title">{{ case.title }}</h3>

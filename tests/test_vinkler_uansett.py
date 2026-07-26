@@ -133,7 +133,12 @@ def test_ja_saker_prioriteres_naar_kvoten_ikke_rekker_alle(ki, monkeypatch):
 
     Merk at sak-0 og sak-1 har HØYEST score — uten prioriteringen ville de to
     vraket sakene tatt plassen fra de to redaktøren anbefalte."""
-    falsk = ki(is_story={"sak-0": False, "sak-1": False, "sak-2": True, "sak-3": True})
+    # Nøklene er LØPENUMRENE redaktøren faktisk ser, ikke `case.key`. Agentene
+    # merker sakene «SAK 1», «SAK 2» … og oversetter tilbake selv (agents._id_kart),
+    # fordi en gratismodell som skal gjenta «ssb-sok:05889:1103:2026K2» ordrett
+    # bommer — og da forsvant alle vinklene stille. Redaktøren får sakene i
+    # score-rekkefølge, så 1..4 er sak-0..sak-3.
+    falsk = ki(is_story={"1": False, "2": False, "3": True, "4": True})
     # Begge takene pinnes her. Testen skal måle PRIORITERINGEN, ikke hva
     # config-defaulten tilfeldigvis står på — den har endret seg tre ganger
     # (8 → 4 → 3) etter hvor mye Groq-kvoten tåler.

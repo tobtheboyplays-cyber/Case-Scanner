@@ -69,6 +69,18 @@ class Case:
     # Vist paa nytt fordi INGENTING hadde endret seg. Et blankt dashboard ser ut
     # som en feil; en merket gjenganger er et aerlig svar. Se main.run_scan.
     uendret: bool = False
+    # Aftenbladets EGEN artikkel om samme tema, eldre enn OPPFOLGER_MIN_DAGER.
+    # {title, url, date, dager}. Da er dekningen ikke et minus - den er en ferdig
+    # bestilling: «vi skrev X i januar, hva har skjedd siden?»
+    oppfolger: dict = field(default_factory=dict)
+    # {punkter, retning, antall, enhet, tekst} - se app/trend.py.
+    # «Tallet falt» er en notis; «tredje kvartal paa rad» er en sak.
+    trend: dict = field(default_factory=dict)
+    # [(periode, verdi)] fra kildens EGEN tidsserie, naar den foelger med i
+    # svaret. SSB sender fem perioder i samme kall - vi brukte bare de to siste
+    # og kastet resten. Uten dette ville trendlinja brukt maaneder paa aa fylle
+    # seg av seg selv; med den er den der foerste dag. Se main.run_scan.
+    serie: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -95,6 +107,8 @@ class Case:
             "angles": self.angles,
             "er_ny": self.er_ny,
             "uendret": self.uendret,
+            "oppfolger": self.oppfolger,
+            "trend": self.trend,
             "sources": [
                 {
                     "source": s.source,

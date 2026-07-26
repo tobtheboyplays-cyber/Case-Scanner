@@ -398,6 +398,27 @@ def _hovedemner(rad: dict) -> set[str]:
 
 
 
+
+def _serie(hent, kode: str, perioder: list[str], metric_navn: str,
+           etiketter: dict) -> list[list]:
+    """[[periode, verdi]] for kommunen og statistikkvariabelen vi valgte.
+
+    Fail-soft per punkt: en kube kan mangle enkelte perioder for en kommune, og
+    da skal linja bli kortere - ikke forsvinne."""
+    # Etikettene gaar den andre veien (kode -> navn); vi har navnet.
+    kode_for = {v: k for k, v in (etiketter or {}).items()}
+    metrikk = kode_for.get(metric_navn, metric_navn)
+    ut: list[list] = []
+    for p in perioder:
+        try:
+            v = hent(kode, p, metrikk)
+        except (ValueError, KeyError, IndexError):
+            continue
+        if v is not None:
+            ut.append([p, float(v)])
+    return ut
+
+
 def _nivaacase(rad, idx, geo, metric, hent, naa_p, etiketter, tabell_id, tittel_raa):
     """Et sjokkerende NIVAA: Stavanger langt over eller under landssnittet.
 
@@ -571,6 +592,10 @@ def _case(rad: dict, roller: tuple[str, str, str], data: dict, steg: int) -> Cas
         data_source=f"SSB tabell {tabell_id} ({tittel_raa})",
         data_url=f"https://www.ssb.no/statbank/table/{tabell_id}",
         coverage_query=f"{kommune} {metric_navn}",
+        # HELE tidsserien, ikke bare de to punktene vi regnet prosent av. Tallene
+        # ligger allerede i svaret; kastet vi dem, ville trendlinja brukt maaneder
+        # paa aa fylle seg av seg selv. Se app/trend.py og main.run_scan.
+        serie=_serie(hent, _kode, perioder, metric_navn, etiketter),
     )
 
 

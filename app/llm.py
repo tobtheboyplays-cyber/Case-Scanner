@@ -261,8 +261,63 @@ def _openai_konfig(navn: str) -> tuple[str, str, str] | None:
     return None
 
 
+def _berg(text: str):
+    """Redd det som er helt i et AVKORTET JSON-svar.
+
+    Naar `max_tokens` tar slutt midt i svaret, stopper modellen midt i et objekt.
+    Da er HELE svaret ubrukelig for `json.loads` - selv om de foerste fem
+    elementene i lista er komplette og helt fine.
+
+    Det var ikke teoretisk: analytikeren fikk atten funn og et fast tak paa 450
+    tokens, svaret ble kuttet, parsingen feilet, og kallet ble talt som mislykket
+    i hvert eneste skann. Det var «KI delvis» hos eieren 26.07.2026. Taket er
+    rettet naa, men bergingen blir staaende - et tak kan bli for lite igjen, og
+    da er fire vinkler bedre enn null.
+
+    Vi klipper tilbake til siste komplette element og lukker lista selv.
+    """
+    aapen = text.find("[")
+    if aapen == -1:
+        return None
+    dybde = 0
+    i_streng = False
+    hopp = False
+    siste_hele = -1
+    for i, ch in enumerate(text[aapen:], aapen):
+        if hopp:
+            hopp = False
+            continue
+        if ch == "\\" and i_streng:
+            hopp = True
+        elif ch == '"':
+            i_streng = not i_streng
+        elif not i_streng:
+            if ch in "{[":
+                dybde += 1
+            elif ch in "}]":
+                dybde -= 1
+                # Tilbake til dybde 1 betyr at vi staar rett etter et komplett
+                # element inne i den ytterste lista.
+                if dybde == 1 and ch == "}":
+                    siste_hele = i
+    if siste_hele == -1:
+        return None
+
+    try:
+        liste = json.loads(text[aapen : siste_hele + 1] + "]")
+    except json.JSONDecodeError:
+        return None
+
+    # Finn feltnavnet lista laa under ("saker", "picks"), saa den kan settes
+    # tilbake paa plass - kallerne slaar opp paa navnet.
+    m = re.search(r'"(\w+)"\s*:\s*$', text[:aapen].rstrip())
+    return {m.group(1): liste} if m else liste
+
+
 def _extract_json(text: str):
-    """Robust JSON-parsing: prov hele strengen, ellers forste {...} eller [...]."""
+    """Robust JSON-parsing: prov hele strengen, ellers forste {...} eller [...].
+
+    Til slutt: berg et avkortet svar i stedet for aa kaste alt (se `_berg`)."""
     text = text.strip()
     try:
         return json.loads(text)
@@ -273,8 +328,8 @@ def _extract_json(text: str):
         try:
             return json.loads(m.group(1))
         except json.JSONDecodeError:
-            return None
-    return None
+            pass
+    return _berg(text)
 
 
 # --- De tre kodeveiene -------------------------------------------------------

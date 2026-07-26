@@ -299,3 +299,26 @@ echo
 echo "  Sjekk alt:  bash sjekk-server.sh"
 echo "  Logg:       sudo docker logs -f case-radar"
 echo "  Stopp:      sudo docker rm -f case-radar case-radar-tunnel"
+
+# ── Morgenskann 07:00 ────────────────────────────────────────────────────────
+# Eieren 26.07.2026: «En ny scan klokka 0700 hver dag.»
+#
+# Installeres her og ikke i en manual, fordi en instruksjon noen maa huske aa
+# kjore er en instruksjon som ikke blir kjort. Idempotent: gamle linjer for
+# samme skript fjernes foerst, saa gjentatte deployer ikke stabler opp duplikater.
+if command -v crontab > /dev/null 2>&1; then
+  LINJE="7 * * * * bash $PWD/morgenskann.sh"
+  if crontab -l 2>/dev/null | grep -qF "$LINJE"; then
+    ok "Morgenskann: allerede satt opp (07:00 norsk tid)"
+  elif (crontab -l 2>/dev/null | grep -v 'case-radar.*morgenskann'; echo "$LINJE") | crontab - 2>/dev/null; then
+    ok "Morgenskann satt opp: skanner 07:00 norsk tid, hver dag"
+    echo "     Test med én gang:  bash morgenskann.sh --naa"
+    echo "     Logg:              tail ~/.case-radar-morgenskann.log"
+    echo "     Skru av:           crontab -l | grep -v morgenskann | crontab -"
+  else
+    warn "Fikk ikke satt opp morgenskann (crontab avviste). Kjor selv:"
+    warn "  (crontab -l 2>/dev/null; echo \"$LINJE\") | crontab -"
+  fi
+else
+  warn "crontab finnes ikke - morgenskannet 07:00 ble ikke satt opp"
+fi

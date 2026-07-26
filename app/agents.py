@@ -101,6 +101,29 @@ def kildegrunnlag(case: Case) -> str:
     lines.append(f"  Geografi: {'Stavanger/Rogaland' if case.geo == 'lokal' else 'nasjonal'}")
     lines.append(f"  Tema: {', '.join(case.topics) or 'ikke tagget'}")
 
+    # TREND foer dekning: dette er den sterkeste vinkelen paa siden av selve
+    # tallet. «Falt 17 %» er en notis; «tredje kvartal paa rad» er en sak. Én
+    # linje, fordi den skal koste nesten ingenting av minuttkvoten.
+    if case.trend and case.trend.get("tekst"):
+        serie = ", ".join(
+            f"{p} {v:g}" for p, v in case.trend.get("punkter", [])[-4:]
+        )
+        lines.append("")
+        lines.append("UTVIKLING OVER TID:")
+        lines.append(f"  {case.trend['tekst']} ({serie})")
+
+    # OPPFOELGER: Aftenbladet har skrevet om dette FOER. Modellen skal vite det,
+    # for da endres oppdraget fra «finn en sak» til «hva har skjedd siden sist?»
+    # - og det siste er en langt lettere artikkel aa faa paa trykk.
+    if case.oppfolger:
+        o = case.oppfolger
+        lines.append("")
+        lines.append("AFTENBLADET HAR SKREVET OM DETTE FOER:")
+        lines.append(f"  «{o.get('title', '')}» - {o.get('date', '')}")
+        lines.append(
+            f"  Det er {o.get('dager', 0)} dager siden. Tallet er nytt; saken er kjent."
+        )
+
     lines.append("")
     lines.append("DEKNING (hva andre allerede har skrevet om temaet):")
     if case.coverage_examples:
@@ -112,7 +135,10 @@ def kildegrunnlag(case: Case) -> str:
             lines.append(f"  - «{title}» - {src} {date}".rstrip())
             if url:
                 lines.append(f"    {url}")
-        lines.append(f"  Dekningsstatus: {case.coverage_status} (gronn=uskrevet, gul=delvis, rod=godt dekket)")
+        lines.append(
+            f"  Dekningsstatus: {case.coverage_status} "
+            "(gronn=uskrevet, gul=delvis, rod=godt dekket)"
+        )
     else:
         lines.append("  Ingen ferske treff funnet - temaet ser uskrevet ut.")
 
@@ -133,6 +159,12 @@ def kildegrunnlag(case: Case) -> str:
 # 26.07.2026 - de er saker paa lik linje med SSB-tallene, og skal rangeres av
 # samme oeye. Google Trends holdes utenfor; den er et signal, ikke et funn.
 ANALYSERBARE = ("data", "hendelse")
+
+# Hvor mange funn analytikeren faar rangere. Nedstroems rekker vi uansett bare
+# EDITOR_CAP (3) saker, saa aa be om en rangering av atten er tokens brukt paa et
+# svar ingen leser - og det var nettopp det som avkortet svaret og ga «KI delvis».
+# Aatte gir rikelig med kandidater til de tre plassene.
+ANALYST_MAKS_FUNN = 8
 
 
 def analyst_pick(
@@ -166,11 +198,23 @@ def analyst_pick(
     if not funn:
         return {}, "ingenting"
 
+    # Analytikeren fikk ALLE funnene - i et ekte skann 11-18 stykker - med et fast
+    # `max_tokens=450`. Ett svarelement er {id, score, reason}, altsaa 35-45
+    # tokens, saa 18 av dem er 700-800. Svaret ble avkortet midt i JSON-en,
+    # parsingen feilet, og kallet ble talt som MISLYKKET. Det var derfor eieren
+    # saa «KI delvis» skann etter skann 26.07.2026 - ikke uflaks, men aritmetikk.
+    #
+    # To ting fikser det: send bare de sterkeste funnene (nedstroems rekker vi
+    # uansett bare EDITOR_CAP saker), og la taket foelge antallet i stedet for aa
+    # staa fast.
+    rangert = sorted(funn, key=lambda c: c.score, reverse=True)[:ANALYST_MAKS_FUNN]
     payload = [
-        {"id": c.key, "finding": c.finding, "topics": c.topics, "geo": c.geo}
-        for c in funn
+        {"id": str(i), "finding": c.finding, "topics": c.topics, "geo": c.geo}
+        for i, c in enumerate(rangert, 1)
     ]
+    kart = _id_kart(rangert)
     user = "Funn:\n" + json.dumps(payload, ensure_ascii=False)
+    tak = min(900, max(300, 60 * len(payload) + 120))
 
     # Mekanisk fallback: alle funn, rangert etter storrelsen paa avviket. Den
     # brukes i alle utfall som ikke er "llm", saa saken aldri forsvinner bare
@@ -180,11 +224,11 @@ def analyst_pick(
         for c in funn
     }
 
-    if budsjett is not None and not budsjett.be_om(prompts.ANALYST_SYSTEM, user, 450):
+    if budsjett is not None and not budsjett.be_om(prompts.ANALYST_SYSTEM, user, tak):
         return reserve, "ko"
 
     result = llm.complete_json(
-        prompts.ANALYST_SYSTEM, user, model=llm.MODEL_ANALYST, max_tokens=450
+        prompts.ANALYST_SYSTEM, user, model=llm.MODEL_ANALYST, max_tokens=tak
     )
     # `isinstance`-vakten er ikke pynt: _extract_json kan returnere en LISTE hvis
     # modellen svarer med `[...]`, og da ville `result.get` kastet AttributeError
@@ -193,12 +237,68 @@ def analyst_pick(
     if isinstance(result, dict) and isinstance(result.get("picks"), list):
         picks = {}
         for p in result["picks"]:
-            if isinstance(p, dict) and p.get("id") and p.get("interesting", True):
-                picks[p["id"]] = {"score": p.get("score", 50), "reason": p.get("reason", "")}
+            if not isinstance(p, dict) or not p.get("interesting", True):
+                continue
+            # Ingen posisjons-fallback her, med vilje: analytikeren SKAL kunne
+            # utelate funn den ikke synes er interessante, saa plass nr. 3 i
+            # svaret er ikke noedvendigvis funn nr. 3 i lista.
+            key = _slaa_opp(p, kart)
+            if key:
+                picks[key] = {"score": p.get("score", 50), "reason": p.get("reason", "")}
         if picks:
             return picks, "llm"
 
     return reserve, "mal"
+
+
+# --- Id-ene agentene faar se -------------------------------------------------
+# Eieren 26.07.2026: «Ingen vinkler ble skrevet.»
+#
+# Grunnen sto her. Batch-agentene fikk sakene merket med den ekte noekkelen —
+# `ssb-sok:05889:1103:2026K2`, `brreg:konkurs:921456875` — og svaret ble matchet
+# EKSAKT mot den:
+#
+#     if key not in gyldige: continue
+#
+# Det er 25 tegn med kolon og siffer som en gratismodell skal gjenta ordrett for
+# hver eneste sak. Bommer den paa ETT tegn, faller vinklene for den saken ut
+# uten en lyd — og bommer den systematisk, kommer det ingen vinkler i det hele
+# tatt. Kallet gikk fint, saa ingenting ble talt som feil heller. Det var
+# usynlig fra utsiden.
+#
+# Loesningen er aa ikke be modellen om det: den ser «SAK 1», «SAK 2», «SAK 3»,
+# og vi oversetter tilbake selv. Ett siffer kan den ikke rote bort. Det er
+# billigere ogsaa — noeklene kostet tokens i hver eneste blokk.
+
+
+def _id_kart(saker: list[Case]) -> dict[str, str]:
+    """{det modellen ser: den ekte noekkelen}.
+
+    Baade loepenummeret og den ekte noekkelen godtas, saa et hurtiglagret svar
+    fra foer omleggingen fortsatt treffer."""
+    kart = {str(i): c.key for i, c in enumerate(saker, 1)}
+    kart.update({c.key: c.key for c in saker})
+    return kart
+
+
+def _slaa_opp(post: dict, kart: dict[str, str]) -> str:
+    """Finn hvilken sak et svarelement gjelder. Tom streng = kunne ikke avgjores.
+
+    Eksakt oppslag foerst, deretter et tall gjemt i en streng som «SAK 2» eller
+    «sak_3» — modeller pynter gjerne paa formatet.
+
+    **Ingen posisjons-fallback**, og det er et bevisst valg vi tok og saa forkastet.
+    «Element nr. 3 i svaret maa vaere sak nr. 3» ville reddet enda flere svar, men
+    en vinkel baerer et `headline_fact`. Fester vi det til feil sak, er det ikke en
+    tapt vinkel - det er et feil tall som ser riktig ut, paa vei mot trykk. Da er
+    det bedre aa miste vinkelen. Testene `test_oppdiktet_id_droppes` og
+    `test_vinkler_havner_paa_riktig_sak` vokter nettopp dette.
+    """
+    raa = str(post.get("id") or "").strip()
+    if raa in kart:
+        return kart[raa]
+    siffer = "".join(ch for ch in raa if ch.isdigit())
+    return kart.get(siffer, "")
 
 
 # --- Agent 2: Redaktor -------------------------------------------------------
@@ -224,11 +324,14 @@ def editor_judge_batch(
     if not saker:
         return {}, True
 
-    blokker = [f"=== SAK {c.key} ===\n{kildegrunnlag(c)}" for c in saker]
+    kart = _id_kart(saker)
+    blokker = [
+        f"=== SAK {i} ===\n{kildegrunnlag(c)}" for i, c in enumerate(saker, 1)
+    ]
     user = (
         "\n\n".join(blokker)
         + f"\n\nVurder ALLE {len(saker)} funnene over, hver for seg. "
-        "Bruk sakens id noeyaktig som den staar etter «=== SAK »."
+        "Bruk sakens id noeyaktig som den staar etter «=== SAK » (1, 2, 3 …)."
     )
     # Redaktoerdommen er sju korte felt per sak - rundt 200 tokens. 350 er
     # fortsatt romslig, og de 150 vi sparer per sak gaar til journalisten.
@@ -244,12 +347,11 @@ def editor_judge_batch(
         return {}, False
 
     ut: dict[str, dict] = {}
-    gyldige = {c.key for c in saker}
     for post in result["saker"]:
-        if not isinstance(post, dict):
+        if not isinstance(post, dict) or "is_story" not in post:
             continue
-        key = post.get("id")
-        if key not in gyldige or "is_story" not in post:
+        key = _slaa_opp(post, kart)
+        if not key or key in ut:
             continue
         # `mode` SIST, saa et modellsvar som inneholder feltet ikke kan overskrive
         # det - og dermed styre baade merkingen i UI og tellingen av vellykkede kall.
@@ -324,8 +426,9 @@ def journalist_angles_batch(
     if not saker:
         return {}, True
 
+    kart = _id_kart(saker)
     blokker = []
-    for c in saker:
+    for nr, c in enumerate(saker, 1):
         ed = c.editor or {}
         # Redaktoerens dom foelger med som OPPLYSNING, ikke som port. Eierens
         # beslutning 26.07.2026: vinklene skal komme uansett om saken er god
@@ -334,7 +437,7 @@ def journalist_angles_batch(
         # oppdraget fra «skriv den» til «finn vinkelen som ville snudd ham».
         dom = "JA - kjoer paa" if ed.get("is_story") else "NEI - han er skeptisk"
         blokk = (
-            f"=== SAK {c.key} ===\n"
+            f"=== SAK {nr} ===\n"
             f"{kildegrunnlag(c)}\n"
             f"REDAKTOERENS BESTILLING:\n"
             f"  Dom: {dom}\n"
@@ -355,7 +458,7 @@ def journalist_angles_batch(
     user = (
         "\n\n".join(blokker)
         + f"\n\nLever vinkler for ALLE {len(saker)} sakene over. "
-        "Bruk sakens id noeyaktig som den staar etter «=== SAK »."
+        "Bruk sakens id noeyaktig som den staar etter «=== SAK » (1, 2, 3 …)."
     )
     # Taket teller MED i tokenanslaget, saa et rundhaandet tak koster kvote selv
     # naar modellen svarer kort. Maalt paa ekte svar: en vinkel med tittel, pitch,
@@ -375,14 +478,11 @@ def journalist_angles_batch(
         return {}, False
 
     ut: dict[str, list[dict]] = {}
-    gyldige = {c.key for c in saker}
     for post in result["saker"]:
-        if not isinstance(post, dict):
+        if not isinstance(post, dict) or not isinstance(post.get("angles"), list):
             continue
-        key = post.get("id")
-        # Modellen kan finne paa en id. Da hoerer vinklene ingen steder hjemme,
-        # og aa gjette hvilken sak de gjaldt ville vaert verre enn aa droppe dem.
-        if key not in gyldige or not isinstance(post.get("angles"), list):
+        key = _slaa_opp(post, kart)
+        if not key or key in ut:
             continue
         rene = _uten_gjengangere(
             [a for a in post["angles"] if isinstance(a, dict) and a.get("title")]

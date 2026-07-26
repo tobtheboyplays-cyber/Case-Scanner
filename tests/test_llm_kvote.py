@@ -290,7 +290,11 @@ def test_ett_vellykket_kall_maskerer_ikke_lenger_at_resten_feilet(monkeypatch):
     # mislykket kall. (Før gjettet run_workflow på analytikerens utfall og
     # bommet — det var «KI: delvis» på et skann der alt gikk bra.)
     svar = iter([
-        {"picks": [{"id": "sak-0", "interesting": True, "score": 90, "reason": "r"}]},
+        # «1» er id-en analytikeren faktisk ser. Agentene merker sakene med
+        # loepenummer og oversetter tilbake selv - se agents._id_kart - fordi
+        # en modell som skal gjenta «ssb-sok:05889:1103:2026K2» ordrett bommer,
+        # og da falt vinklene stille bort.
+        {"picks": [{"id": "1", "interesting": True, "score": 90, "reason": "r"}]},
     ])
 
     def av_og_til(*a, **k):

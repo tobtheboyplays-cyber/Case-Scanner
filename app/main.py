@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import os
 import re
 import threading
 from calendar import monthrange
@@ -19,7 +20,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import __version__, jobs, llm, verify
+from app import __version__, jobs, llm, trend, verify
 from app.agents import run_workflow, write_draft
 from app.collectors import brreg, collect_all, coverage, ssb_kalender
 from app.config import (
@@ -43,8 +44,10 @@ from app.storage import (
     fullfor,
     gjenapne,
     gjenopprett,
+    lagre_maalinger,
     list_approved,
     load_latest,
+    maalinger_for,
     mark_seen,
     oppgaver,
     publisert_antall,
@@ -170,6 +173,9 @@ def kortkilde(navn: str) -> str:
 
 
 templates.env.filters["kortkilde"] = kortkilde
+# Sparkline-geometrien regnes i Python, ikke i Jinja: en SVG-punktliste bygget
+# med lopende min/max i en mal blir uleselig, og den ville vaert utestbar.
+templates.env.filters["sti"] = trend.sti
 
 
 # Hvor mange broennoeysund-hendelser som blir SAKER. Resten staar fortsatt i
@@ -183,10 +189,85 @@ HENDELSER_SOM_SAKER = 6
 # lavt med vilje: dette er et aerlig naest-beste svar, ikke et fullt skann.
 UENDRET_VISES = 5
 
+# Hvor gammel Aftenbladets egen artikkel maa vaere foer et nytt tall er en
+# OPPFOELGER og ikke en gjentakelse. Under dette har de nettopp skrevet om det,
+# og da er saken tatt. 60 dager er to maaneder - lenge nok til at «hva har skjedd
+# siden?» er et ekte spoersmaal.
+OPPFOLGER_MIN_DAGER = int(os.getenv("CASE_RADAR_OPPFOLGER_DAGER", "60"))
+
 # Konkurser, avviklinger og nyregistreringer er naeringsliv. Treffer temavalget
 # ingen av disse merkelappene, hoerer hendelsene ikke hjemme i lead-lista - de
 # staar fortsatt i «Kommer snart»-fanen.
 BRREG_DEMOGRAFI = {"jobb og okonomi", "uteliv og kultur", "bolig og leie"}
+
+
+# Ord som finnes i annenhver Stavanger-overskrift. Deler to tekster BARE disse,
+# handler de ikke om det samme - de er begge paa norsk og begge fra Rogaland.
+_TOMME_ORD = frozenset({
+    "stavanger", "sandnes", "rogaland", "aftenblad", "aftenbladet", "norge",
+    "norsk", "norske", "kommune", "kommunen", "fylke", "sier", "skal", "blir",
+    "etter", "flere", "mange", "nye", "ikke", "dette", "dermed", "mener",
+})
+
+
+def _ord(tekst: str) -> set[str]:
+    """Meningsbaerende ord, smaa bokstaver. Korte ord er stoppord i praksis."""
+    reint = "".join(ch if ch.isalnum() else " " for ch in (tekst or "").lower())
+    return {o for o in reint.split() if len(o) >= 5 and o not in _TOMME_ORD}
+
+
+# En artikkel eldre enn dette er ikke en oppfoelger, den er arkivmateriale.
+# Google News ga oss en sak fra 2015 (3878 dager) paa et byggetall fra i aar.
+OPPFOLGER_MAKS_DAGER = int(os.getenv("CASE_RADAR_OPPFOLGER_MAKS", "900"))
+
+
+def _er_oppfolger(c: Case, artikkel: dict) -> bool:
+    """Handler Aftenbladets gamle artikkel om SAMME sak som dette funnet?
+
+    Uten denne var oppfoelgeren verre enn ingenting. Maalt paa ekte data:
+
+        «Blaaveisen Blomster har gaatt konkurs»
+            -> «Omsetningen til Hafrsfjordbroa Blomster har ikke vaert hoeyere»
+        «Familiefasen (30-34 aar) i Stavanger ned 0,4 %»
+            -> «Slutt for India Tandoori Stavanger etter 34 aar»
+
+    Ingen av dem er oppfoelgere. Presenterer vi dem som det, sender vi
+    journalisten paa et blindspor med et loefte om at noen alt har gjort
+    forarbeidet - og det er dyrere enn aa ikke si noe.
+
+    Tre krav, og alle tre maa holde:
+      · gammel nok til aa vaere en oppfoelger og ikke en gjentakelse
+      · fersk nok til at «hva skjedde siden?» finnes som spoersmaal
+      · faktisk om det samme
+    """
+    dager = artikkel.get("dager", 0)
+    if not OPPFOLGER_MIN_DAGER <= dager <= OPPFOLGER_MAKS_DAGER:
+        return False
+
+    tittel = artikkel.get("title", "")
+
+    # Naeringslivshendelser: FORETAKSNAVNET maa staa i overskriften. «Et annet
+    # blomsterfirma i samme by» er ikke samme sak, og for en konkurs er den
+    # forvekslingen den dyreste vi kan gjore.
+    if c.kind == "hendelse":
+        navn = c.title.split(" har gaatt")[0].split(" er ")[0].strip()
+        kjerne = [o for o in _ord(navn) if o not in {"holding"}]
+        return bool(kjerne) and all(o in tittel.lower() for o in kjerne[:2])
+
+    # Tall: hvor mange felles ord som kreves, foelger hvor mange saken HAR.
+    #
+    # Fast «minst to» hoertes riktig ut og var maalbart feil: dekningssoeket for
+    # «Godkjente boliger» er to ord, saa artikkelen «3800 boliger i Stavanger og
+    # Sandnes staar tomme» falt ut - og det er en aapenbart god oppfoelger.
+    # Samtidig maa «Stavanger unge voksne befolkning tilflytting» kreve to, ellers
+    # slipper «Slutt for India Tandoori etter 34 aar» inn paa ordet «voksne».
+    #
+    # Halvparten av sakens egne ord, men aldri under ett og aldri over to.
+    sakens = _ord(c.coverage_query) | _ord(c.title)
+    if not sakens:
+        return False
+    kreves = max(1, min(2, (len(sakens) + 1) // 2))
+    return len(_ord(tittel) & sakens) >= kreves
 
 
 def _hendelse_tittel(h: dict) -> str:
@@ -353,7 +434,67 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
         c.coverage_examples = cov["examples"]
         if cov["status"] == "green":
             n_green += 1
+
+        # OPPFOELGER: Aftenbladet har skrevet om dette FOER, og det er lenge
+        # siden. Da er ikke dekningen et minus - det er den letteste publiserte
+        # saken som finnes. Avisa eier premisset, bildene og kildene fra sist,
+        # og «hva skjedde etterpaa?» er en ferdig bestilling.
+        #
+        # Kravet om alder er poenget: skrev de om det i forrige uke, er dette en
+        # gjentakelse, ikke en oppfoelger. Da skal den ligge unna.
+        egne = [e for e in cov.get("aftenbladet", []) if _er_oppfolger(c, e)]
+        if egne:
+            c.oppfolger = egne[0]
+    n_opp = sum(1 for c in cases if c.oppfolger)
     status.append(f"Dekningssjekk: {n_green}/{len(cases)} leads uskrevet (gronn)")
+    if n_opp:
+        status.append(
+            f"Oppfølgere: {n_opp} funn Aftenbladet har skrevet om før "
+            f"(eldre enn {OPPFOLGER_MIN_DAGER} dager - tallet er nytt, saken er kjent)"
+        )
+
+    # TRENDLINJE. Vi har allerede tallene; foer kastet vi dem mellom skann.
+    # Maalingen lagres per PERIODE, ikke per skann - se app/trend.py for hvorfor
+    # den forskjellen avgjor om linja beskriver statistikken eller knappetrykkene.
+    try:
+        punkter = []
+        serier: dict[str, str] = {}          # {sakens noekkel: seriens noekkel}
+        for c in cases:
+            periode = trend.periode_av(c.metric_period)
+            # KUN kildens egen tidsserie. `metric_value` ser ut som et tall vi
+            # kunne brukt, men er ofte PROSENTENDRINGEN («+154 %») mens serien er
+            # absolutte tall (kvadratmeter). Blandet vi dem, ble siste punkt 154
+            # der de foerste var 8893 og 5432 - og kortet fikk overskriften
+            # «opp 154 %» med «tredje kvartal paa rad med NEDGANG» under.
+            #
+            # Det er ikke en skjonnhetsfeil. Det er et feil tall som ser riktig
+            # ut, i et verktoy hvis eneste jobb er aa gi journalisten noe han kan
+            # trykke. Én kilde til linja, og bare én.
+            #
+            # SSB sender fem perioder i det samme svaret, saa serien gjor ogsaa at
+            # linja staar der FOERSTE gang han skanner - i stedet for aa trenge
+            # maaneder med morgenskann paa aa bygge seg selv opp.
+            if periode and len(c.serie) >= trend.MIN_PUNKTER:
+                nokkel = trend.serie_av(c.key, periode)
+                serier[c.key] = nokkel
+                for p, v in c.serie:
+                    punkter.append((nokkel, str(p), float(v)))
+        lagre_maalinger(punkter)
+
+        historikk = maalinger_for(sorted(set(serier.values())))
+        n_trend = 0
+        for c in cases:
+            linje = trend.beregn(historikk.get(serier.get(c.key, ""), []))
+            if linje:
+                c.trend = linje
+                if linje["tekst"]:
+                    n_trend += 1
+        if n_trend:
+            status.append(
+                f"Trend: {n_trend} funn har beveget seg samme vei flere perioder på rad"
+            )
+    except Exception as exc:  # noqa: BLE001 - en trendlinje skal aldri velte et skann
+        status.append(f"[FEIL] Trendlinje: {type(exc).__name__}")
 
     # Originalitet legges paa scoren, deretter sorteres alt samlet.
     finalize_scores(cases)

@@ -28,6 +28,7 @@ from urllib.parse import urlencode
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+
 from tests.nett import Nett
 
 
@@ -68,7 +69,14 @@ def koble_til(nett: Nett, monkeypatch) -> None:
     «kjorer» for alltid. Et helt skann hang i 240 sekunder på det.
     """
     from app.collectors import (
-        brreg, coverage, news_rss, reddit, ssb, ssb_flytting, ssb_kalender, ssb_sok,
+        brreg,
+        coverage,
+        news_rss,
+        reddit,
+        ssb,
+        ssb_flytting,
+        ssb_kalender,
+        ssb_sok,
     )
 
     for mod in (brreg, coverage, news_rss, reddit, ssb, ssb_flytting,
@@ -252,3 +260,64 @@ def test_forkastet_sak_kommer_ikke_tilbake_ved_neste_skann(app_uten_nett):
 
     html = skann(klient, [])
     assert noekler[0] not in html, "en forkastet sak kom tilbake"
+
+
+# ── 6. Trendlinja bygges opp over flere skann ──────────────────────────────
+
+
+def test_trendlinja_staar_der_paa_foerste_skann(app_uten_nett, monkeypatch):
+    """Trendlinja må virke FØRSTE gang han trykker, ikke om tre måneder.
+
+    Det var den opprinnelige innvendingen mot funksjonen: en linje som bygger
+    seg opp av ett punkt per skann er et løfte, ikke et verktøy. SSB sender hele
+    tidsserien i det samme svaret — vi brukte to punkter og kastet resten.
+
+    Alt mellom HTTP-svaret og setningen på sida er ekte kode her:
+    json-stat-parsingen, serieuttrekket, serienøkkelen, lagringen per periode,
+    trendberegningen og malen.
+    """
+    from tests import nett as N
+
+    klient, _ = app_uten_nett
+    # Fallende gjennom hele serien: fire år på rad ned.
+    monkeypatch.setattr(N, "BEFOLKNING", N.jsonstat(
+        {"1103": [1800, 1600, 1400, 1200], "11": [5000] * 4, "0": [50000] * 4},
+        ["2023", "2024", "2025", "2026"],
+    ), raising=False)
+
+    html = skann(klient, [])
+    assert "på rad med nedgang" in html, "trendsetningen nådde ikke sida"
+    assert "<polyline" in html, "sparklinen ble ikke tegnet"
+
+
+def test_trendlinja_tar_med_nye_perioder_over_flere_skann(app_uten_nett, monkeypatch):
+    """Serien fra kilden er starten; morgenskannene forlenger den.
+
+    Her flytter vinduet seg ett år per skann, slik SSB faktisk oppfører seg, og
+    det eldste punktet skal fortsatt ligge i linja etterpå — det er hele poenget
+    med å lagre per periode i stedet for per skann.
+    """
+    from tests import nett as N
+
+    klient, _ = app_uten_nett
+    aar = ["2022", "2023", "2024", "2025", "2026"]
+    html = ""
+    for i, verdi in enumerate((1400, 1200, 1000)):
+        monkeypatch.setattr(N, "BEFOLKNING", N.jsonstat(
+            {"1103": [1800, 1600, verdi], "11": [5000] * 3, "0": [50000] * 3},
+            aar[i : i + 3],
+        ), raising=False)
+        html = skann(klient, [])
+
+    assert "på rad med nedgang" in html
+    # 2022 kom bare med i FØRSTE skann. Ligger det fortsatt i linja, er
+    # historikken ekte og ikke bare siste svar tegnet opp.
+    assert "2022" in html, "det eldste punktet forsvant mellom skannene"
+
+
+def test_ett_skann_paastaar_ingen_trend(app_uten_nett):
+    """Grensen som gjør linja etterrettelig. Ett skann er ett punkt, og en
+    «trend» fra ett punkt ville vært ren oppdiktning."""
+    klient, _ = app_uten_nett
+    html = skann(klient, [])
+    assert "på rad med" not in html, html[:200]

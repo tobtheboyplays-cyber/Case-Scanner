@@ -183,6 +183,11 @@ def _make_case(probe: dict, series: dict, tids: list[str]) -> Case | None:
         data_source=f"SSB ({source_label})",
         data_url=f"https://www.ssb.no/statbank/table/{table}",
         coverage_query=probe.get("coverage_query", f"Stavanger {label}"),
+        # HELE tidsserien for Stavanger, ikke bare de to siste punktene. SSB
+        # sender fem perioder i det samme svaret; vi brukte to og kastet resten.
+        # Det er den forskjellen som avgjor om trendlinja er der foerste dag
+        # eller om den maa bygge seg opp over maaneder av morgenskann.
+        serie=[[t, float(v)] for t, v in local],
     )
 
 

@@ -502,6 +502,79 @@ def sette_verdier() -> dict[str, str]:
         conn.close()
 
 
+# ── Maalinger over tid ───────────────────────────────────────────────────────
+# «Tallet falt» er en notis. «Tredje kvartal paa rad at tallet faller» er en sak.
+# Forskjellen er historikk, og vi hadde allerede tallene - vi kastet dem bare.
+#
+# `seen.verdi` husker BARE siste avtrykk, fordi den skal svare paa «er dette nytt
+# eller det samme?». Her lagres selve TALLET per PERIODE i stedet: skanner
+# journalisten fem ganger samme dag, er det fortsatt ett punkt for 2026K1.
+# Perioden er noekkelen til at linja beskriver statistikken og ikke skannerytmen.
+
+MAKS_MAALINGER = 12   # ~3 aar med kvartalstall. Nok til en linje, ikke en logg.
+
+
+def _maalinger_tabell(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS maalinger ("
+        " key TEXT NOT NULL, periode TEXT NOT NULL, verdi REAL NOT NULL,"
+        " sett TEXT NOT NULL, PRIMARY KEY (key, periode))"
+    )
+
+
+def lagre_maalinger(punkter: list[tuple[str, str, float]]) -> None:
+    """`punkter` er [(key, periode, verdi)]. Samme periode overskrives.
+
+    SSB retter tall i ettertid; da skal linja vise den rettede verdien, ikke den
+    vi tilfeldigvis saa foerst."""
+    if not punkter:
+        return
+    conn = _connect()
+    try:
+        _maalinger_tabell(conn)
+        now = _now()
+        conn.executemany(
+            "INSERT INTO maalinger (key, periode, verdi, sett) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(key, periode) DO UPDATE SET verdi = excluded.verdi, "
+            "sett = excluded.sett",
+            [(k, p, float(v), now) for k, p, v in punkter],
+        )
+        # Klipp halen per noekkel. Uten dette vokser tabellen for alltid paa en
+        # boks som skal staa i aarevis.
+        for key in {k for k, _, _ in punkter}:
+            conn.execute(
+                "DELETE FROM maalinger WHERE key = ? AND periode NOT IN "
+                "(SELECT periode FROM maalinger WHERE key = ? "
+                " ORDER BY periode DESC LIMIT ?)",
+                (key, key, MAKS_MAALINGER),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def maalinger_for(keys: list[str]) -> dict[str, list[tuple[str, float]]]:
+    """{key: [(periode, verdi), ...]} sortert eldst foerst."""
+    if not keys or not os.path.exists(DB_PATH):
+        return {}
+    conn = _connect()
+    try:
+        _maalinger_tabell(conn)
+        plass = ",".join("?" * len(keys))
+        rows = conn.execute(
+            f"SELECT key, periode, verdi FROM maalinger WHERE key IN ({plass}) "
+            "ORDER BY key, periode",
+            keys,
+        ).fetchall()
+    finally:
+        conn.close()
+
+    ut: dict[str, list[tuple[str, float]]] = {}
+    for key, periode, verdi in rows:
+        ut.setdefault(key, []).append((periode, verdi))
+    return ut
+
+
 def seen_map() -> dict[str, str]:
     """{key: forste_gang_sett} uten aa registrere noe nytt."""
     if not os.path.exists(DB_PATH):

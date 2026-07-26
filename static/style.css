@@ -491,6 +491,40 @@ summary:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 1
   background: var(--line); color: var(--muted); padding: 4px 8px; border-radius: 6px;
   border: 1px solid var(--line); }
 
+/* ── Trendlinje ──────────────────────────────────────────────────────────────
+   «Tallet falt» er en notis. «Tredje kvartal paa rad at det faller» er en sak.
+   Linja er derfor et FORM-signal ved siden av tallet, ikke et diagram: ingen
+   akser, ingen rutenett, ingen tall paa selve linja — tallet staar allerede der
+   med full presisjon rett ved siden av.
+
+   Fargen baerer retningen, men ALDRI alene: teksten under sier «oppgang» eller
+   «nedgang» med ord, og pila gjentar det. Roedt og groent er nettopp det paret
+   flest fargeblinde ikke skiller. */
+.gnist { display: inline-flex; align-items: center; margin-left: 10px;
+  vertical-align: middle; opacity: .9; }
+.gnist svg { display: block; }
+.trend-opp { color: var(--green); }
+.trend-ned { color: var(--red); }
+.trend-flat { color: var(--muted); }
+.trend-tekst { margin: 6px 0 0; font-size: 13px; font-weight: 600;
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.trend-kilde { color: var(--muted); font-weight: 400; font-size: 11.5px;
+  font-variant-numeric: tabular-nums; }
+
+/* ── Oppfoelger ──────────────────────────────────────────────────────────────
+   Aftenbladet har skrevet om dette foer, og det er lenge siden. Da er dekningen
+   ikke et minus — det er den letteste publiserte saken som finnes: premisset,
+   bildene og kildene fra sist ligger der allerede. Derfor en egen boks og ikke
+   en graa fotnote. Den skal leses. */
+.oppfolger { display: block; margin: 10px 0 0; padding: 10px 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 10px; text-decoration: none; }
+.oppfolger:hover { border-color: var(--accent); }
+.oppfolger-merke { display: inline-block; font-size: 9.5px; font-weight: 800;
+  letter-spacing: .06em; color: var(--accent); margin-right: 8px; }
+.oppfolger-tekst { color: var(--text); font-size: 13px; line-height: 1.45; }
+
 /* ── Framdrift for utkast (nede til venstre) ─────────────────────────────────
    Ligger fast i hjornet slik at den er synlig uansett hvor langt ned i saken
    journalisten har scrollet. Uten dette var 10-30 sekunders skriving usynlig. */

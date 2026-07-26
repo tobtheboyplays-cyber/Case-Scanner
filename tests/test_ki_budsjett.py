@@ -9,6 +9,8 @@ disse testene vokter.
 
 from __future__ import annotations
 
+import re
+
 from datetime import UTC, datetime
 
 import pytest
@@ -20,6 +22,20 @@ from app.models import Case
 @pytest.fixture(autouse=True)
 def db(tmp_path, monkeypatch):
     monkeypatch.setattr(storage, "DB_PATH", str(tmp_path / "t.sqlite3"))
+
+
+
+def _blokker(user: str) -> list[tuple[str, str]]:
+    """[(id-en modellen ser, noekkelen som staar i blokka)] fra en samleprompt.
+
+    Attrappene bruker denne for aa oppfoere seg som en ekte modell: de kjenner
+    bare loepenummeret, og alt annet maa de lese ut av teksten de fikk."""
+    ut = []
+    for bit in user.split("=== SAK ")[1:]:
+        nr = bit.split(" ===")[0].strip()
+        m = re.search(r"(sak-\d+)", bit)
+        ut.append((nr, m.group(1) if m else nr))
+    return ut
 
 
 def lag_saker(n: int) -> list[Case]:
@@ -35,7 +51,11 @@ def lag_saker(n: int) -> list[Case]:
             why="Tallet har flyttet seg.",
             signals=[],
             created_at=datetime.now(UTC),
-            finding=f"Tallet gikk opp {i} prosent i Stavanger",
+            # Noekkelen staar I FUNNET, ikke bare i `key`. Da kan attrappen
+            # under lese den ut av blokka den faktisk fikk - noeyaktig som en
+            # ekte modell ville gjort - og testen kan bevise at vinkelen havnet
+            # paa saken den ble skrevet for.
+            finding=f"Tallet for sak-{i} gikk opp {i} prosent i Stavanger",
             coverage_status="green",
             data_source="SSB tabell 12345",
             data_url="https://data.ssb.no/x",
@@ -239,15 +259,19 @@ class TellendeKI(FalskKI):
     def __call__(self, system, user, *, model, max_tokens=1500, si=None):
         self.kall += 1
         if "=== SAK" in user:
-            ider = [linje.split("=== SAK ")[1].split(" ===")[0]
-                    for linje in user.splitlines() if linje.startswith("=== SAK ")]
+            # Agentene merker sakene «SAK 1», «SAK 2» … og oversetter tilbake
+            # selv - se agents._id_kart. En ekte modell ser ALDRI den ekte
+            # noekkelen, saa attrappen skal ikke gjore det heller. Den leser
+            # noekkelen ut av selve BLOKKA, akkurat som modellen ville gjort,
+            # og legger den i faktumet. Da beviser testen under at vinkelen
+            # havnet paa saken den ble skrevet for.
             return {"saker": [
-                {"id": i, "angles": [
-                    {"title": f"Overskrift A for {i}", "headline_fact": f"a{i}",
+                {"id": nr, "angles": [
+                    {"title": f"Overskrift A for {nokkel}", "headline_fact": f"a {nokkel}",
                      "kort": "k", "vinkel": "uventet", "pitch": "p"},
-                    {"title": f"Overskrift B for {i}", "headline_fact": f"b{i}",
+                    {"title": f"Overskrift B for {nokkel}", "headline_fact": f"b {nokkel}",
                      "kort": "k", "vinkel": "konsekvens", "pitch": "p"},
-                ]} for i in ider
+                ]} for nr, nokkel in _blokker(user)
             ]}
         if max_tokens == 800:
             return {"is_story": True, "confidence": 80, "headline": "H",
@@ -342,7 +366,11 @@ def test_takene_holder_seg_under_groqs_minuttak():
     # Romsligere enn et ekte kildegrunnlag, så testen ikke gir falsk trygghet.
     kilde = "=== SAK ssb-sok:12345:1103:2026K2 ===\n" + ("x" * 1100)
 
-    analytiker = llm.anslaa_tokens(prompts.ANALYST_SYSTEM, "Funn:\n" + "y" * 800, 450)
+    # Analytikertaket foelger nå ANTALLET funn. Det faste 450 var for lite for
+    # atten funn: svaret ble avkortet, JSON-en ugyldig, og kallet talt som
+    # mislykket i hvert eneste skann - «KI delvis» hos eieren 26.07.2026.
+    analyst_tak = min(900, max(300, 60 * agents.ANALYST_MAKS_FUNN + 120))
+    analytiker = llm.anslaa_tokens(prompts.ANALYST_SYSTEM, "Funn:\n" + "y" * 800, analyst_tak)
     redaktor = llm.anslaa_tokens(
         prompts.EDITOR_BATCH_SYSTEM,
         "\n\n".join([kilde] * EDITOR_CAP),
@@ -367,3 +395,84 @@ def test_takene_holder_seg_under_groqs_minuttak():
         f"Bare {GROQ_TPM - sum_ett_skann} tokens klaring — for tynt. "
         "Ett ekstra langt tabellnavn spiser den."
     )
+
+
+# ── Id-ene modellen faktisk klarer å gjenta ─────────────────────────────────
+
+
+def test_agentene_ber_aldri_modellen_gjenta_den_ekte_nokkelen():
+    """Eieren 26.07.2026: «Ingen vinkler ble skrevet.»
+
+    Sakene ble merket med `case.key` — `ssb-sok:05889:1103:2026K2` — og svaret
+    ble matchet eksakt mot den. Det er 25 tegn med kolon og siffer som en
+    gratismodell skal gjenta ordrett for hver sak. Bommer den på ett tegn,
+    faller vinklene ut uten en lyd, og kallet telles som vellykket.
+
+    Nå ser modellen «SAK 1». Denne testen leser prompten og krever at nøkkelen
+    IKKE står som id — den er lett å legge tilbake ved et uhell."""
+    saker = lag_saker(3)
+    for c in saker:
+        c.editor = {"is_story": True, "headline": "H", "angle": "A", "verdict": "V"}
+
+    sett = {}
+
+    def fang(system, user, *, model, max_tokens=1500, si=None):
+        sett["user"] = user
+        return {"saker": []}
+
+    agents.llm.complete_json, gammel = fang, agents.llm.complete_json
+    try:
+        agents.journalist_angles_batch(saker)
+        overskrifter = [x for x in sett["user"].splitlines() if x.startswith("=== SAK ")]
+        assert overskrifter == ["=== SAK 1 ===", "=== SAK 2 ===", "=== SAK 3 ==="], overskrifter
+
+        agents.editor_judge_batch(saker)
+        overskrifter = [x for x in sett["user"].splitlines() if x.startswith("=== SAK ")]
+        assert overskrifter == ["=== SAK 1 ===", "=== SAK 2 ===", "=== SAK 3 ==="], overskrifter
+    finally:
+        agents.llm.complete_json = gammel
+
+
+def test_slurvete_id_fra_modellen_treffer_likevel(samle_ki, monkeypatch):
+    """Modeller pynter på formatet: «SAK 2», «sak_2», « 2 ». Alle betyr sak 2,
+    og å kaste vinkelen for et mellomrom ville vært den samme feilen på nytt."""
+    saker = lag_saker(3)
+    for c in saker:
+        c.editor = {"is_story": True, "headline": "H", "angle": "A", "verdict": "V"}
+
+    def slurvete(system, user, *, model, max_tokens=1500, si=None):
+        return {"saker": [
+            {"id": "SAK 1", "angles": [{"title": "A", "headline_fact": "f"}]},
+            {"id": " 2 ", "angles": [{"title": "B", "headline_fact": "f"}]},
+            {"id": "sak_3", "angles": [{"title": "C", "headline_fact": "f"}]},
+        ]}
+
+    monkeypatch.setattr(agents.llm, "complete_json", slurvete)
+    vinkler, ok = agents.journalist_angles_batch(saker)
+    assert ok
+    assert set(vinkler) == {"sak-0", "sak-1", "sak-2"}, vinkler
+
+
+def test_avkortet_svar_berges_i_stedet_for_aa_kastes():
+    """Tar `max_tokens` slutt midt i svaret, er hele JSON-en ugyldig — også de
+    fire vinklene som var ferdige. Før ble alt kastet og kallet talt som
+    mislykket; det var «KI delvis» skann etter skann."""
+    from app import llm
+
+    avkortet = (
+        '{"saker": [{"id": "1", "angles": [{"title": "Ferdig vinkel"}]},'
+        ' {"id": "2", "angles": [{"title": "Også ferdig"}]},'
+        ' {"id": "3", "angles": [{"title": "Halv v'
+    )
+    berget = llm._extract_json(avkortet)
+    assert isinstance(berget, dict), berget
+    assert [s["id"] for s in berget["saker"]] == ["1", "2"], berget
+
+
+def test_bergingen_finner_ikke_paa_data():
+    """En berging som gjetter er verre enn ingen. Er ingenting komplett, skal
+    den si nei — ikke levere et halvt objekt med tomme felt."""
+    from app import llm
+
+    assert llm._extract_json('{"saker": [{"id": "1", "ang') is None
+    assert llm._extract_json("ikke json i det hele tatt") is None
