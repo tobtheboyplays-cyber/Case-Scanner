@@ -20,8 +20,8 @@ from fastapi.templating import Jinja2Templates
 
 from app import __version__, jobs, llm, verify
 from app.agents import run_workflow, write_draft
-from app.collectors import collect_all, coverage, ssb_kalender
-from app.config import ENABLE_AI, TEMAER, temagrupper
+from app.collectors import brreg, collect_all, coverage, ssb_kalender
+from app.config import ENABLE_AI, ENABLE_BRREG, TEMAER, temagrupper
 from app.models import Case
 from app.planner import build_plan
 from app.scoring import build_cases, finalize_scores
@@ -39,6 +39,7 @@ from app.storage import (
     list_approved,
     load_latest,
     mark_seen,
+    sette_verdier,
     oppgaver,
     reject_lead,
     save_scan,
@@ -192,6 +193,16 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
     except Exception as exc:  # noqa: BLE001
         kommende, _ = [], status.append(f"[FEIL] SSB-kalender: {exc}")
 
+    # Naeringslivet: hva som aapner og hva som gaar under. Hendelser, ikke tall -
+    # saker journalisten kan ringe paa i dag. Egen try av samme grunn som over.
+    hendelser: list[dict] = []
+    if ENABLE_BRREG:
+        try:
+            hendelser, br_status = brreg.collect()
+            status.extend(br_status)
+        except Exception as exc:  # noqa: BLE001
+            status.append(f"[FEIL] Brønnøysund: {exc}")
+
     # Nytt siden sist: samme kilder gir de samme funnene om igjen. Vi markerer hva
     # som ikke er sett foer, skjuler det journalisten allerede har forkastet, og loefter
     # det nye oeverst - saa et nytt soek faktisk gir noe nytt.
@@ -199,6 +210,26 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
     tidligere = seen_map()
     beslutninger = decisions_map()
     cases = [c for c in cases if beslutninger.get(c.key) != "rejected"]
+
+    # «Trykker jeg soek igjen, skal nye tall dukke opp - aldri de samme.»
+    #
+    # De faste SSB-probene (config.SSB_PROBES) spor de SAMME tabellene hver gang,
+    # og flyttetallene likesaa. Uten dette kom de samme fem funnene tilbake ved
+    # hvert eneste skann, med identiske tall, og druknet det som faktisk var nytt.
+    #
+    # Vi sammenligner avtrykket av selve TALLET, ikke bare noekkelen: samme sak
+    # med nytt tall er en ny sak og skal fram. Samme sak med samme tall er noe
+    # journalisten allerede har sett, og da er det stoy.
+    avtrykk = {c.key: f"{c.metric_value}|{c.metric_period}|{c.finding}" for c in cases}
+    sett_verdier = sette_verdier()
+    uendret = sum(1 for c in cases if sett_verdier.get(c.key) == avtrykk[c.key])
+    cases = [c for c in cases if sett_verdier.get(c.key) != avtrykk[c.key]]
+    if uendret:
+        status.append(
+            f"Skjult: {uendret} funn med uendret tall siden sist "
+            "(samme sak, samme tall - kommer tilbake naar SSB oppdaterer)"
+        )
+
     for c in cases:
         # Gjenbruks-leadene fra soesteravisene faar ALDRI «ny»-loeftet, og det er
         # ikke en smakssak. Noekkelen deres er laget av overskriften
@@ -216,7 +247,7 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
     # publisert, uansett hvor godt den scorer.
     RANG = {"data": 0, "grasrot": 1, "schibsted": 2}
     cases.sort(key=lambda c: (RANG.get(c.kind, 1), not c.er_ny, -c.score))
-    mark_seen(for_dette_skannet)
+    mark_seen(for_dette_skannet, avtrykk)
     antall_nye = sum(1 for c in cases if c.er_ny)
     status.append(
         f"Nytt siden sist: {antall_nye} av {len(cases)} leads"
@@ -242,6 +273,7 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
         "antall_nye": antall_nye,
         "topic_trends": _case_topic_trends(cases),
         "kommende": kommende,
+        "hendelser": hendelser,
         "ai_mode": ai_mode,
         # Grunnen hoerer hjemme ved siden av varselet, ikke nederst under
         # «Kildestatus» der ingen leter naar noe ser rart ut. Merk at den nå

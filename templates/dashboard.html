@@ -38,9 +38,16 @@
         {# Gruppert, ikke én lang liste: 24 avkryssingsbokser i strekk er en vegg
            man ikke leser. Gruppene foelger SSBs egen inndeling, oversatt til ord
            en journalist bruker. #}
+        {# Gruppeboksen krysser av hele gruppa. Med 25 temaer er «alt om folk»
+           ett trykk i stedet for fem. Den viser ogsaa tilstanden: helt av, helt
+           paa, eller delvis (indeterminate) - saa man ser hva som er valgt uten
+           aa telle boksene under. #}
         {% for gruppe, navn_liste in temagrupper.items() %}
-        <p class="tema-gruppe">{{ gruppe }}</p>
-        <div class="tema-liste">
+        <label class="tema-gruppe">
+          <input type="checkbox" class="tema-gruppeboks" data-gruppe="{{ gruppe }}" />
+          <span>{{ gruppe }}</span>
+        </label>
+        <div class="tema-liste" data-gruppe="{{ gruppe }}">
           {% for navn in navn_liste %}
           <label class="tema-valg">
             <input type="checkbox" name="tema" value="{{ navn }}"
@@ -58,7 +65,7 @@
           <button type="button" class="btn-small tema-alle">Velg alle</button>
           <button type="button" class="btn-small tema-ingen">Nullstill</button>
         </div>
-        <button type="submit" class="btn-scan skann-start">🛰 Start skann</button>
+        <button type="submit" class="btn-scan skann-start">🔍 Søk</button>
       </form>
     </details>
     <p class="last-scan">{% if scanned_at %}Sist skannet: {{ scanned_at }}
@@ -92,21 +99,14 @@
    sier ingenting om nettopp dette tallet - «Hva betyr tallet i praksis for
    Stavanger?» er en mal, ikke en journalists vinkel. Det skal staa tydelig,
    ikke gjemmes bak en liten «demo»-brikke. #}
-{% if data and data.ai_mode and data.ai_mode != 'llm' %}
-<section class="ki-av{{ ' ki-delvis' if data.ai_mode == 'llm-delvis' }}">
-  {% if data.ai_mode == 'llm-delvis' %}
-    {% set r = data.ai_regnskap or {} %}
-    <p class="ki-av-h">⚠️ KI-en rakk ikke alt — {{ r.feilet }} av {{ r.forsokt }} kall feilet</p>
-    <p class="ki-av-b">
-      Sakene merket <span class="ai-tag">demo</span> har <strong>maler</strong>, ikke
-      journalistens vinkler. Resten er ekte.
-      {% if data.ai_feil %}<br /><span class="ki-av-feil">{{ data.ai_feil }}</span>{% endif %}
-    </p>
-    <p class="ki-av-b">
-      Skjer dette ofte, er gratis-kvoten for liten til antall saker. Skann færre
-      temaer om gangen, eller vent et minutt og trykk «Skann nå» igjen.
-    </p>
-  {% else %}
+{# «llm-delvis» har ikke lenger sitt eget alarmpanel. Eieren ba om at advarselen
+   skulle bort, og etter at vinklene ble samlet i ETT kall er den langt mindre
+   aktuell - det var seks separate kall mot minuttkvoten som skapte den.
+   Saker uten ekte vinkler er fortsatt merket «i kø» eller «demo» paa selve
+   kortet, saa ingenting utgir seg for aa vaere journalistens arbeid. Vi bytter
+   et gult panel mot en merkelapp der den hoerer hjemme. #}
+{% if data and data.ai_mode and data.ai_mode not in ('llm', 'llm-delvis') %}
+<section class="ki-av">
     <p class="ki-av-h">⚠️ KI-en er AV — vinklene under er maler, ikke journalistens</p>
     <p class="ki-av-b">
       {% if data.ai_mode == 'llm-feilet' %}
@@ -124,7 +124,6 @@
       kjører. Sett nøkkelen på serveren:
       <code>cd ~/case-radar &amp;&amp; bash deploy.sh --ask</code>
     </p>
-  {% endif %}
 </section>
 {% endif %}
 
@@ -171,14 +170,42 @@
 
 
 <section class="page" style="padding-bottom:0">
-{% if data and data.kommende %}
+{% if data and (data.kommende or data.hendelser) %}
   {# Sammenslaatt som standard. Panelet er nyttig, men det skal ikke staa mellom
      journalisten og saksforslagene naar han aapner appen paa mobil. #}
   <details class="panel forsprang">
     <summary>
-      <h2>⏳ Kommer snart ({{ data.kommende|length }})</h2>
-      <span class="panel-sub">SSB slipper disse kl. 08.00 — ring kilden før.</span>
+      <h2>⏳ Kommer snart ({{ data.kommende|length + (data.hendelser|length if data.hendelser else 0) }})</h2>
+      <span class="panel-sub">SSB-tall som ikke er sluppet, og hva som åpner og stenger i byen.</span>
     </summary>
+
+    {# Naeringslivet foerst: en konkurs eller en nyaapning er en sak man kan
+       ringe paa I DAG, mens SSB-varslene er noe man forbereder seg paa. #}
+    {% if data.hendelser %}
+    <p class="komm-h">🏪 Åpner og stenger — siste 45 dager</p>
+    {% for h in data.hendelser[:8] %}
+      <div class="hend">
+        <span class="hend-ikon" aria-hidden="true">{{ {'konkurs':'💥','avvikling':'📉','nytt':'✨'}[h.type] }}</span>
+        <div class="hend-mid">
+          <a class="hend-navn" href="{{ h.lenke }}" target="_blank" rel="noopener">{{ h.navn }}</a>
+          <div class="hend-meta">
+            <span class="hend-type hend-{{ h.type }}">{{ {'konkurs':'Konkurs','avvikling':'Under avvikling','nytt':'Nytt foretak'}[h.type] }}</span>
+            <span>{{ h.kommune }}</span>
+            {% if h.publikum %}<span class="tag">{{ h.publikum }}</span>{% endif %}
+            {% if h.ansatte %}<span>{{ h.ansatte }} ansatte</span>{% endif %}
+            <span>{{ h.dato }}</span>
+          </div>
+          {% if h.bransje %}<p class="hend-bransje">{{ h.bransje }}</p>{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+    <p class="komm-note">Kilde: Brønnøysundregistrene. Et registrert foretak er
+      ikke det samme som en åpen dør — ring og sjekk før du skriver.</p>
+    {% endif %}
+
+    {% if data.kommende %}
+    <p class="komm-h">📊 SSB slipper disse kl. 08.00 — ring kilden før</p>
+    {% endif %}
     {% for v in data.kommende[:5] %}
       <div class="komm">
         <div class="komm-when">{{ v.dager_til }}<span>dager</span></div>
@@ -685,11 +712,38 @@
     );
   }
   document.querySelectorAll('.tema-alle').forEach(function (knapp) {
-    knapp.addEventListener('click', function () { settAlle(knapp, true); });
+    knapp.addEventListener('click', function () { settAlle(knapp, true); oppdaterGrupper(); });
   });
   document.querySelectorAll('.tema-ingen').forEach(function (knapp) {
-    knapp.addEventListener('click', function () { settAlle(knapp, false); });
+    knapp.addEventListener('click', function () { settAlle(knapp, false); oppdaterGrupper(); });
   });
+
+  /* Gruppeboksene: ett trykk krysser av hele «Folk», «Penger» osv. Med 25
+     temaer er fem trykk per gruppe unødvendig arbeid. Boksen viser også
+     tilstanden — delvis avkrysset gir indeterminate, så man ser hva som er
+     valgt uten å telle. */
+  function temaerIGruppe(gruppe) {
+    var boks = document.querySelector('.tema-liste[data-gruppe="' + gruppe + '"]');
+    return boks ? Array.prototype.slice.call(boks.querySelectorAll('input[name="tema"]')) : [];
+  }
+  function oppdaterGrupper() {
+    document.querySelectorAll('.tema-gruppeboks').forEach(function (g) {
+      var barn = temaerIGruppe(g.dataset.gruppe);
+      var paa = barn.filter(function (b) { return b.checked; }).length;
+      g.checked = barn.length > 0 && paa === barn.length;
+      g.indeterminate = paa > 0 && paa < barn.length;
+    });
+  }
+  document.querySelectorAll('.tema-gruppeboks').forEach(function (g) {
+    g.addEventListener('change', function () {
+      temaerIGruppe(g.dataset.gruppe).forEach(function (b) { b.checked = g.checked; });
+      g.indeterminate = false;
+    });
+  });
+  document.querySelectorAll('input[name="tema"]').forEach(function (b) {
+    b.addEventListener('change', oppdaterGrupper);
+  });
+  oppdaterGrupper();
 
   document.querySelectorAll('.chip').forEach(function (chip) {
     chip.addEventListener('click', function () {

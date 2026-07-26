@@ -310,15 +310,20 @@ def test_alt_lykkes_gir_ren_llm(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "x")
 
     def alltid(system, user, **k):
+        """Redaktoer og journalist kjoerer naa SAMLET - alle sakene i ett kall.
+        Fakeen maa svare i samleformat, ellers matcher den ingen sak og alt ser
+        ut som feil."""
         llm._sett_feil(None)
-        if "vinkler" in system.lower() or "TITTEL" in system:
-            return {"angles": [
-                {"vinkel": "uventet", "title": f"T{i}", "headline_fact": f"F{i}"}
-                for i in range(3)
-            ]}
+        ider = [linje.split("=== SAK ")[1].split(" ===")[0]
+                for linje in user.splitlines() if linje.startswith("=== SAK ")]
         if "picks" in system.lower() or "analytiker" in system.lower():
             return {"picks": [{"id": "k0", "interesting": True, "score": 80}]}
-        return {"is_story": True, "headline": "H", "angle": "A", "verdict": "V"}
+        if "IDEMOETE" in system:                       # journalisten, samlet
+            return {"saker": [{"id": i, "angles": [
+                {"vinkel": "uventet", "title": f"T{i}-{n}", "headline_fact": f"F{i}-{n}"}
+                for n in range(3)]} for i in ider]}
+        return {"saker": [{"id": i, "is_story": True, "headline": "H",
+                           "angle": "A", "verdict": "V"} for i in ider]}
 
     monkeypatch.setattr(agents.llm, "complete_json", alltid)
     r = agents.run_workflow([_sak(i) for i in range(3)])

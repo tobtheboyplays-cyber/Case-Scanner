@@ -412,21 +412,54 @@ def calendar_month(year: int, month: int) -> dict[str, list[dict]]:
 # faktisk er NYTT - og la det gamle synke.
 
 
-def mark_seen(keys: list[str]) -> dict[str, str]:
-    """Registrer saker som sett. Returnerer {key: forste_gang_sett} for ALLE."""
+def _seen_tabell(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS seen (key TEXT PRIMARY KEY, first_seen TEXT NOT NULL)"
+    )
+    # `verdi` er avtrykket av selve TALLET forrige gang vi saa saken. Lagt til
+    # med ALTER saa eksisterende databaser oppgraderes uten tap.
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(seen)")}
+    if "verdi" not in cols:
+        conn.execute("ALTER TABLE seen ADD COLUMN verdi TEXT NOT NULL DEFAULT ''")
+
+
+def mark_seen(keys: list[str], verdier: dict[str, str] | None = None) -> dict[str, str]:
+    """Registrer saker som sett. Returnerer {key: forste_gang_sett} for ALLE.
+
+    `verdier` er {key: avtrykk-av-tallet}. Avtrykket oppdateres hver gang, mens
+    `first_seen` staar - vi vil vite baade naar saken dukket opp foerste gang og
+    hva tallet var sist."""
     conn = _connect()
     try:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS seen (key TEXT PRIMARY KEY, first_seen TEXT NOT NULL)"
-        )
+        _seen_tabell(conn)
         now = _now()
+        v = verdier or {}
         conn.executemany(
-            "INSERT OR IGNORE INTO seen (key, first_seen) VALUES (?, ?)",
-            [(k, now) for k in keys],
+            "INSERT INTO seen (key, first_seen, verdi) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET verdi = excluded.verdi",
+            [(k, now, v.get(k, "")) for k in keys],
         )
         conn.commit()
         rows = conn.execute("SELECT key, first_seen FROM seen").fetchall()
         return {k: v for k, v in rows}
+    finally:
+        conn.close()
+
+
+def sette_verdier() -> dict[str, str]:
+    """{key: avtrykk-av-tallet-sist-vi-saa-det}.
+
+    Dette er svaret paa «trykker jeg soek igjen, skal jeg faa NYE tall». De faste
+    SSB-probene spor de samme tabellene hver gang, saa uten dette kom de samme
+    fem funnene tilbake ved hvert skann - med identiske tall - og druknet det som
+    faktisk var nytt."""
+    if not os.path.exists(DB_PATH):
+        return {}
+    conn = _connect()
+    try:
+        _seen_tabell(conn)
+        rows = conn.execute("SELECT key, verdi FROM seen").fetchall()
+        return {k: v for k, v in rows if v}
     finally:
         conn.close()
 
@@ -437,9 +470,7 @@ def seen_map() -> dict[str, str]:
         return {}
     conn = _connect()
     try:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS seen (key TEXT PRIMARY KEY, first_seen TEXT NOT NULL)"
-        )
+        _seen_tabell(conn)
         rows = conn.execute("SELECT key, first_seen FROM seen").fetchall()
         return {k: v for k, v in rows}
     finally:

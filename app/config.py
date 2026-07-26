@@ -425,10 +425,27 @@ AFTENBLADET_NAME = "Stavanger Aftenblad"
 ENABLE_COVERAGE = os.getenv("CASE_RADAR_ENABLE_COVERAGE", "true").lower() == "true"
 ENABLE_SSB = os.getenv("CASE_RADAR_ENABLE_SSB", "true").lower() == "true"
 
+# === Broennoeysundregistrene: hva som aapner og hva som gaar under ===========
+# Aapent API, ingen noekkel, ingen kvote. Gir HENDELSER (konkurser, avviklinger,
+# nyregistrerte foretak) i stedet for tall - saker journalisten kan ringe paa i
+# dag. Fire kall per skann (to kommuner x to spoerringer). Se app/collectors/brreg.py.
+ENABLE_BRREG = os.getenv("CASE_RADAR_ENABLE_BRREG", "true").lower() == "true"
+
 # === KI-arbeidsflyt (kostnadskontroll: cap antall KI-kall per skann) ===
 ENABLE_AI = os.getenv("CASE_RADAR_ENABLE_AI", "true").lower() == "true"
-EDITOR_CAP = int(os.getenv("CASE_RADAR_EDITOR_CAP", "8"))       # redaktor vurderer topp N
-JOURNALIST_CAP = int(os.getenv("CASE_RADAR_JOURNALIST_CAP", "6"))  # utkast paa topp N godkjente
+# Fire, ikke aatte (eierens beslutning 26.07.2026). Redaktoeren vurderer én sak
+# per kall, saa dette tallet er DIREKTE antall KI-kall mot minuttkvoten. Med
+# aatte traff skannet taket og journalisten fikk «4 av 4 kall feilet».
+#
+# Fire saker per trykk er ikke mindre verktoy - det er en annen rytme: han
+# trykker «Skann naa» igjen, og fordi ekte KI-svar lagres per sak (storage.
+# ki_lagre) bruker neste skann hele budsjettet paa de NESTE fire. Koen toemmer
+# seg, og hver sak faar ordentlige vinkler i stedet for at alle blir halve.
+EDITOR_CAP = int(os.getenv("CASE_RADAR_EDITOR_CAP", "4"))
+# Vinklene lages i ETT samlet kall for alle godkjente saker, saa dette tallet
+# koster ikke kall - bare tokens i det ene kallet. Det foelger EDITOR_CAP fordi
+# en sak uten redaktoerdom uansett ikke kommer hit.
+JOURNALIST_CAP = int(os.getenv("CASE_RADAR_JOURNALIST_CAP", "4"))
 
 # Tokenbudsjett for ETT skann. Groqs gratis-nivaa gir 12 000 tokens i minuttet
 # (llama-3.3-70b-versatile, console.groq.com/docs/rate-limits, hentet 26.07.2026),

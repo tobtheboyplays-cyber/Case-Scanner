@@ -324,3 +324,75 @@ SVAR:
   "kilder": [{{"navn": "SSB-tabell / avis / etat", "hva": "hva den dekker",
               "url": "lenke fra KILDEGRUNNLAG, eller tom streng"}}],
   "image_ideas": [{{"motiv": "kort beskrivelse", "bildetekst": "forslag til bildetekst"}}]}}"""
+
+
+# Samlet vinkelkall: alle sakene i ett kall i stedet for ett kall per sak.
+# Systemprompten er den store tokenposten, og med ett kall per sak ble den sendt
+# seks ganger - som er nettopp det som sprengte Groqs minuttkvote (eieren saa
+# «4 av 4 kall feilet» 26.07.2026). Én gang holder.
+JOURNALIST_BATCH_SYSTEM = (
+    JOURNALIST_ANGLES_SYSTEM
+    + """
+
+## DU FAAR FLERE SAKER PAA ÉN GANG
+
+Hver sak staar under en overskrift «=== SAK <id> ===» med sitt eget
+KILDEGRUNNLAG og sin egen bestilling fra redaktoeren.
+
+ABSOLUTTE KRAV:
+1. **Hver sak skal ha vinkler.** Ingen sak faar staa tom. Har du lite aa spille
+   paa, lever faerre vinkler - men ALDRI null.
+2. **Minst TO overskrifter per sak**, helst tre. Én tittel er ikke et valg.
+   Rekker du ikke tre gode paa alle, prioriter to gode framfor tre der den
+   tredje er en omskrivning.
+3. **Hold sakene fra hverandre.** Et tall fra SAK A skal aldri brukes i en
+   vinkel for SAK B. Hver vinkel skal hvile paa sin egen saks KILDEGRUNNLAG.
+4. **Bruk id-en noeyaktig som den staar**, tegn for tegn. Finner du paa en id,
+   forsvinner vinklene dine.
+
+Er du i ferd med aa gaa tom for plass, kort ned «pitch» og «risiko» foer du
+kutter en sak. Det er verre at en sak staar uten overskrift enn at
+begrunnelsene er korte.
+
+SVAR:
+{"saker": [
+  {"id": "<sakens id, noeyaktig>",
+   "angles": [ ... samme felter som beskrevet over ... ]}
+]}
+Én post per sak du fikk. Ingen flere, ingen faerre."""
+)
+
+
+# Samlet redaktoerkall. EDITOR_SYSTEM er lang - den maa vaere det, for det er
+# der de 25 aarene med erfaring staar. Med ett kall per sak ble hele prompten
+# sendt fire ganger, og budsjettet var brukt opp av redaktoeren alene: fire
+# separate kall kostet rundt 9 000 tokens, samlet under 3 000.
+EDITOR_BATCH_SYSTEM = (
+    EDITOR_SYSTEM
+    + """
+
+## DU FAAR FLERE FUNN PAA ÉN GANG
+
+Hvert funn staar under «=== SAK <id> ===» med sitt eget KILDEGRUNNLAG.
+
+KRAV:
+1. **Vurder hvert funn for seg.** Du er like streng paa sak nr. 4 som paa nr. 1 -
+   det er ingen kvote paa ja, og ingen kvote paa nei.
+2. **Bland aldri sakene.** Dekningen for SAK A sier ingenting om SAK B.
+3. **Bruk id-en noeyaktig som den staar**, tegn for tegn.
+4. **Én post per sak du fikk.** Ogsaa de du sier nei til - et nei med begrunnelse
+   er informasjon journalisten trenger.
+
+SVAR:
+{"saker": [
+  {"id": "<sakens id, noeyaktig>",
+   "is_story": true/false,
+   "confidence": 0-100,
+   "headline": "arbeidstittel som selger saken inn",
+   "angle": "bestillingen til journalisten",
+   "leserverdi": "hvem dette treffer, og hvorfor det er verdt plass NAA",
+   "verdict": "kort begrunnelse for ja eller nei",
+   "forbehold": "hva som kan gjoere at dette ikke holder",
+   "novelty": "fersk" | "delvis" | "dekket"}
+]}"""
+)

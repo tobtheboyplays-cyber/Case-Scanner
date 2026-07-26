@@ -53,20 +53,21 @@ class FalskKI:
         self.kall = 0
 
     def __call__(self, system, user, *, model, max_tokens=1500, si=None):
-        # Skiller på max_tokens, ikke på ord i prompten: 800 = redaktør,
-        # 1400 = vinkler, 1200 = analytiker. Entydig, og testen brekker ikke
-        # neste gang en prompt omformuleres.
+        """Redaktoer og journalist kjoerer SAMLET: alle sakene i ett kall.
+        Vi skiller paa «IDEMOETE» i prompten (journalisten) mot resten."""
         self.kall += 1
-        if max_tokens == 800:
-            return {"is_story": True, "confidence": 80, "headline": "H",
-                    "angle": "A", "verdict": "V", "forbehold": "", "novelty": "fersk"}
-        if max_tokens == 1400:
-            return {"angles": [
-                {"title": f"Vinkel {i}", "kort": "k", "headline_fact": f"faktum {i}",
-                 "vinkel": "uventet", "styrke": 70}
-                for i in range(3)
-            ]}
-        return {"picks": []}
+        ider = [linje.split("=== SAK ")[1].split(" ===")[0]
+                for linje in user.splitlines() if linje.startswith("=== SAK ")]
+        if not ider:
+            return {"picks": []}                       # analytikeren
+        if "IDEMOETE" in system:
+            return {"saker": [{"id": i, "angles": [
+                {"title": f"Vinkel {n} for {i}", "kort": "k",
+                 "headline_fact": f"faktum {n} {i}", "vinkel": "uventet", "styrke": 70}
+                for n in range(3)]} for i in ider]}
+        return {"saker": [{"id": i, "is_story": True, "confidence": 80,
+                           "headline": "H", "angle": "A", "verdict": "V",
+                           "forbehold": "", "novelty": "fersk"} for i in ider]}
 
 
 @pytest.fixture()
@@ -103,14 +104,14 @@ def test_uten_budsjett_er_alt_lov():
 def test_skannet_stopper_for_kvotetaket(ki, monkeypatch):
     """12 000 tokens i minuttet er Groqs gratis-tak. Et skann skal ikke komme
     i nærheten av det — det var nettopp derfor 429-en traff."""
-    monkeypatch.setattr(agents, "KI_BUDSJETT_TOKENS", 9000)
+    monkeypatch.setattr(agents, "KI_BUDSJETT_TOKENS", 3000)
     saker = lag_saker(12)
     regnskap = run_workflow(saker)
 
     assert regnskap["i_ko"] > 0, "12 saker på 9 000 tokens skal gi kø"
     # Grovt anslag per kall er ~1 000-3 000 tokens; med budsjettet skal vi ligge
     # langt under 12 000 uansett hvordan anslaget bommer i den ene retningen.
-    assert ki.kall <= 8, f"{ki.kall} kall er for mange for ett skann"
+    assert ki.kall <= 3, f"{ki.kall} kall - samlekallene slo ikke inn"
 
 
 def test_saker_i_ko_merkes_ko_og_ikke_mal(ki, monkeypatch):
@@ -138,7 +139,7 @@ def test_saker_i_ko_merkes_ko_og_ikke_mal(ki, monkeypatch):
 def test_andre_skann_bruker_kvoten_paa_nye_saker(ki, monkeypatch):
     """Selve kravet. Uten hurtiglageret ville skann nr. 2 kjørt de samme
     topp-sakene om igjen, og køen aldri tømt seg."""
-    monkeypatch.setattr(agents, "KI_BUDSJETT_TOKENS", 6000)
+    monkeypatch.setattr(agents, "KI_BUDSJETT_TOKENS", 3000)
 
     forste = lag_saker(10)
     r1 = run_workflow(forste)
@@ -159,7 +160,7 @@ def test_andre_skann_bruker_kvoten_paa_nye_saker(ki, monkeypatch):
 def test_koen_tommes_til_slutt(ki, monkeypatch):
     """Trykker han nok ganger, skal alt til slutt ha ekte KI. Et system der køen
     aldri blir tom, er verre enn ingen kø."""
-    monkeypatch.setattr(agents, "KI_BUDSJETT_TOKENS", 6000)
+    monkeypatch.setattr(agents, "KI_BUDSJETT_TOKENS", 3000)
     for _ in range(12):
         saker = lag_saker(8)
         regnskap = run_workflow(saker)
@@ -209,3 +210,90 @@ def test_hurtiglageret_vokser_ikke_i_det_uendelige():
         storage.ki_lagre(f"k{i}", editor={"is_story": True})
     igjen = storage.ki_hent([f"k{i}" for i in range(storage.KI_CACHE_MAKS + 25)])
     assert len(igjen) <= storage.KI_CACHE_MAKS
+
+
+# ── Ett kall for alle sakene ─────────────────────────────────────────────────
+
+
+class TellendeKI(FalskKI):
+    """Som FalskKI, men svarer i samleformat og teller kallene."""
+
+    def __call__(self, system, user, *, model, max_tokens=1500, si=None):
+        self.kall += 1
+        if "=== SAK" in user:
+            ider = [linje.split("=== SAK ")[1].split(" ===")[0]
+                    for linje in user.splitlines() if linje.startswith("=== SAK ")]
+            return {"saker": [
+                {"id": i, "angles": [
+                    {"title": f"Overskrift A for {i}", "headline_fact": f"a{i}",
+                     "kort": "k", "vinkel": "uventet", "pitch": "p"},
+                    {"title": f"Overskrift B for {i}", "headline_fact": f"b{i}",
+                     "kort": "k", "vinkel": "konsekvens", "pitch": "p"},
+                ]} for i in ider
+            ]}
+        if max_tokens == 800:
+            return {"is_story": True, "confidence": 80, "headline": "H",
+                    "angle": "A", "verdict": "V", "forbehold": "", "novelty": "fersk"}
+        return {"picks": []}
+
+
+@pytest.fixture()
+def samle_ki(monkeypatch):
+    falsk = TellendeKI()
+    monkeypatch.setattr(agents.llm, "complete_json", falsk)
+    monkeypatch.setattr(agents.llm, "has_llm", lambda: True)
+    monkeypatch.setattr(agents.llm, "last_error", lambda: None)
+    return falsk
+
+
+def test_alle_saker_far_minst_to_overskrifter(samle_ki):
+    """Eierens krav 26.07.2026: «minimum 2 overskrifter per fakta», og vinkler
+    på ALLE temaene — ikke bare de første som fikk plass i kvoten."""
+    saker = lag_saker(4)
+    run_workflow(saker)
+
+    med_vinkler = [c for c in saker if c.angles]
+    assert med_vinkler, "ingen saker fikk vinkler i det hele tatt"
+    for c in med_vinkler:
+        assert len(c.angles) >= 2, f"{c.key} fikk bare {len(c.angles)} overskrift(er)"
+        assert len({a["title"] for a in c.angles}) == len(c.angles)
+
+
+def test_vinkler_koster_ett_kall_uansett_antall_saker(samle_ki):
+    """Kjernen i fiksen. Før var det ett kall PER sak, så seks saker ga seks
+    kall mot et minuttak på 12 000 tokens — det var derfor eieren så «4 av 4
+    kall feilet» med 429. Nå sendes systemprompten én gang."""
+    run_workflow(lag_saker(4))
+    # 1 analytiker + 4 redaktør + 1 samlet vinkelkall = 6.
+    # Med gammel struktur ville det vært 1 + 4 + 4 = 9.
+    assert samle_ki.kall <= 6, f"{samle_ki.kall} kall - samlekallet slo ikke inn"
+
+
+def test_vinkler_havner_paa_riktig_sak(samle_ki):
+    """Med flere saker i ett svar er id-koblingen det som kan gå galt. En vinkel
+    på feil sak er verre enn ingen vinkel — den bygger på feil tall."""
+    saker = lag_saker(4)
+    run_workflow(saker)
+    for c in saker:
+        for a in c.angles:
+            assert c.key in a["headline_fact"], (
+                f"{c.key} fikk en vinkel som hører til en annen sak: {a}"
+            )
+
+
+def test_oppdiktet_id_droppes(monkeypatch):
+    """Finner modellen på en id, hører vinklene ingen steder hjemme. Å gjette
+    hvilken sak de gjaldt ville vært verre enn å droppe dem."""
+    def rar(system, user, *, model, max_tokens=1500, si=None):
+        if "=== SAK" in user:
+            return {"saker": [{"id": "finnes-ikke", "angles": [{"title": "T"}]}]}
+        if max_tokens == 800:
+            return {"is_story": True, "headline": "H", "angle": "A", "verdict": "V"}
+        return {"picks": []}
+
+    monkeypatch.setattr(agents.llm, "complete_json", rar)
+    monkeypatch.setattr(agents.llm, "has_llm", lambda: True)
+    monkeypatch.setattr(agents.llm, "last_error", lambda: None)
+    saker = lag_saker(2)
+    run_workflow(saker)
+    assert all(c.angles == [] for c in saker)

@@ -144,6 +144,54 @@ def analyst_pick(cases: list[Case], budsjett: Budsjett | None = None) -> dict[st
 
 
 # --- Agent 2: Redaktor -------------------------------------------------------
+def editor_judge_batch(
+    saker: list[Case], budsjett: Budsjett | None = None
+) -> dict[str, dict]:
+    """Redaktoerdom for ALLE sakene i ETT kall. Returnerer {sakskey: dom}.
+
+    Samme grunn som for vinklene, og oppdaget paa samme maate: EDITOR_SYSTEM er
+    lang - den maa vaere det, for det er der redaktoerens 25 aars erfaring staar.
+    Med ett kall per sak ble hele den prompten sendt fire ganger, og da var
+    budsjettet brukt opp av redaktoeren alene. Journalisten fikk aldri slippe
+    til, og sakene sto uten vinkler.
+
+    Maalt: fire separate redaktoerkall kostet rundt 9 000 tokens - hele
+    skannbudsjettet. Samlet koster de under 3 000.
+    """
+    if not saker:
+        return {}
+
+    blokker = [f"=== SAK {c.key} ===\n{kildegrunnlag(c)}" for c in saker]
+    user = (
+        "\n\n".join(blokker)
+        + f"\n\nVurder ALLE {len(saker)} funnene over, hver for seg. "
+        "Bruk sakens id noeyaktig som den staar etter «=== SAK »."
+    )
+    tak = max(1000, 500 * len(saker))
+
+    if budsjett is not None and not budsjett.be_om(prompts.EDITOR_BATCH_SYSTEM, user, tak):
+        return {}
+
+    result = llm.complete_json(
+        prompts.EDITOR_BATCH_SYSTEM, user, model=llm.MODEL_EDITOR, max_tokens=tak
+    )
+    if not isinstance(result, dict) or not isinstance(result.get("saker"), list):
+        return {}
+
+    ut: dict[str, dict] = {}
+    gyldige = {c.key for c in saker}
+    for post in result["saker"]:
+        if not isinstance(post, dict):
+            continue
+        key = post.get("id")
+        if key not in gyldige or "is_story" not in post:
+            continue
+        # `mode` SIST, saa et modellsvar som inneholder feltet ikke kan overskrive
+        # det - og dermed styre baade merkingen i UI og tellingen av vellykkede kall.
+        ut[key] = {**{k: v for k, v in post.items() if k != "id"}, "mode": "llm"}
+    return ut
+
+
 def editor_judge(case: Case, budsjett: Budsjett | None = None) -> dict:
     """Porten: kan dette baere en sak? Kjoeres FOER journalisten bruker tid."""
     user = (
@@ -188,6 +236,77 @@ def _editor_mal(case: Case) -> dict:
 
 
 # --- Agent 3: Journalist -----------------------------------------------------
+def journalist_angles_batch(
+    saker: list[Case], budsjett: Budsjett | None = None
+) -> dict[str, list[dict]]:
+    """Vinkler for ALLE sakene i ETT kall. Returnerer {sakskey: [vinkler]}.
+
+    Dette er fiksen paa det eieren saa 26.07.2026: «KI-en rakk ikke alt - 4 av 4
+    kall feilet», med `Groq (gratis): kvotetak (429)`.
+
+    Aarsaken var strukturen, ikke uflaks. Ett kall PER SAK betyr seks kall mot et
+    minuttak paa 12 000 tokens, og hvert kall sender hele systemprompten paa nytt.
+    Systemprompten er den store posten - den er lang nettopp fordi den maa vaere
+    det. Seks ganger den samme prompten er fem ganger sloesing.
+
+    Med ett samlet kall sendes prompten én gang, og alle sakene faar vinkler for
+    prisen av den dyreste enkeltsaken. Da rekker kvoten hele veien, og
+    journalisten faar minst to overskrifter per funn - som var kravet.
+    """
+    if not saker:
+        return {}
+
+    blokker = []
+    for c in saker:
+        ed = c.editor or {}
+        blokker.append(
+            f"=== SAK {c.key} ===\n"
+            f"{kildegrunnlag(c)}\n"
+            f"REDAKTOERENS BESTILLING:\n"
+            f"  Arbeidstittel: {ed.get('headline', c.title)}\n"
+            f"  Oppdrag: {ed.get('angle', c.angle)}\n"
+            f"  Forbehold: {ed.get('forbehold', '-')}"
+        )
+    user = (
+        "\n\n".join(blokker)
+        + f"\n\nLever vinkler for ALLE {len(saker)} sakene over. "
+        "Bruk sakens id noeyaktig som den staar etter «=== SAK »."
+    )
+    # Rundt 900 tokens per sak til svaret, med et gulv saa én sak ikke blir
+    # kvalt av et for lite tak.
+    tak = max(1600, 900 * len(saker))
+
+    if budsjett is not None and not budsjett.be_om(
+        prompts.JOURNALIST_BATCH_SYSTEM, user, tak
+    ):
+        return {}
+
+    result = llm.complete_json(
+        prompts.JOURNALIST_BATCH_SYSTEM, user, model=llm.MODEL_ANALYST, max_tokens=tak
+    )
+    if not isinstance(result, dict) or not isinstance(result.get("saker"), list):
+        return {}
+
+    ut: dict[str, list[dict]] = {}
+    gyldige = {c.key for c in saker}
+    for post in result["saker"]:
+        if not isinstance(post, dict):
+            continue
+        key = post.get("id")
+        # Modellen kan finne paa en id. Da hoerer vinklene ingen steder hjemme,
+        # og aa gjette hvilken sak de gjaldt ville vaert verre enn aa droppe dem.
+        if key not in gyldige or not isinstance(post.get("angles"), list):
+            continue
+        rene = _uten_gjengangere(
+            [a for a in post["angles"] if isinstance(a, dict) and a.get("title")]
+        )
+        if rene:
+            for a in rene:
+                a["mode"] = "llm"
+            ut[key] = rene[:3]
+    return ut
+
+
 def journalist_angles(
     case: Case, editor: dict, budsjett: Budsjett | None = None
 ) -> list[dict]:
@@ -357,7 +476,11 @@ def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> 
     )[:EDITOR_CAP] or ranked[:EDITOR_CAP]
 
     approved = []
-    for nr, c in enumerate(editor_cases, 1):
+    # Redaktoerdom for alle sakene i ETT kall - se editor_judge_batch. Med ett
+    # kall per sak ble den lange EDITOR_SYSTEM sendt fire ganger, og budsjettet
+    # var brukt opp foer journalisten fikk lage en eneste vinkel.
+    maa_vurderes: list[Case] = []
+    for c in editor_cases:
         lagret = hurtiglager.get(c.key, {})
         if isinstance(lagret.get("editor"), dict):
             # Ekte dom fra et tidligere skann. Gratis - og det er nettopp derfor
@@ -367,22 +490,44 @@ def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> 
             c.ai_mode = "llm"
             regnskap["gjenbrukt"] += 1
         else:
-            melde(f"Redaktøren vurderer {nr} av {len(editor_cases)}: {c.title[:50]}")
-            c.editor = editor_judge(c, budsjett)
-            c.ai_mode = c.editor.get("mode", "mal")
-            if c.ai_mode == "llm":
-                storage.ki_lagre(c.key, editor=c.editor)
+            maa_vurderes.append(c)
+
+    if maa_vurderes:
+        melde(f"Redaktøren vurderer {len(maa_vurderes)} funn")
+        ko_for = budsjett.i_ko
+        dommer = editor_judge_batch(maa_vurderes, budsjett)
+        for c in maa_vurderes:
+            dom = dommer.get(c.key)
+            if dom:
+                c.editor = dom
+                c.ai_mode = "llm"
+                storage.ki_lagre(c.key, editor=dom)
                 tell(True)
-            elif c.ai_mode != "ko":
+            elif budsjett.i_ko > ko_for:
+                # Ikke forsoekt - budsjettet var brukt opp. Malen brukes bare som
+                # PORT (slipper saken videre), og merkes «ko» saa UI-et sier
+                # «trykk igjen» og ikke «dette er alt du faar».
+                c.editor = {**_editor_mal(c), "mode": "ko"}
+                c.ai_mode = "ko"
+            else:
+                c.editor = _editor_mal(c)
+                c.ai_mode = "mal"
                 tell(False)
+
+    for c in editor_cases:
         if c.editor.get("is_story"):
             approved.append(c)
 
     # Journalisten foreslaar KUN vinkler her. Artikkelen skrives naar journalisten ber om
     # den (write_draft), slik at vi ikke bruker kvote paa saker som aldri aapnes.
-    for nr, c in enumerate(approved[:JOURNALIST_CAP], 1):
+    # Vinkler for ALLE sakene i ETT kall. Foer var det ett kall per sak, og med
+    # seks saker ble systemprompten sendt seks ganger mot et minuttak paa 12 000
+    # tokens. Det var derfor eieren saa «4 av 4 kall feilet» med 429 - strukturen,
+    # ikke uflaks. Naa sendes prompten én gang.
+    trenger: list[Case] = []
+    for c in approved[:JOURNALIST_CAP]:
         # Sufficient-context-gate: modeller avstaar ikke selv naar grunnlaget er
-        # tynt, saa avgjorelsen tas mekanisk her - foer det brukes tid paa vinkler.
+        # tynt, saa avgjorelsen tas mekanisk her - foer det brukes kvote.
         nok, mangler = verify.nok_grunnlag(c.to_dict())
         if not nok:
             c.editor = {**c.editor, "gate_mangler": mangler}
@@ -393,24 +538,25 @@ def run_workflow(cases: list[Case], si: Callable[[str], None] | None = None) -> 
             c.ai_mode = "llm"
             regnskap["gjenbrukt"] += 1
             continue
+        trenger.append(c)
 
-        melde(f"Journalisten lager vinkler {nr} av {min(len(approved), JOURNALIST_CAP)}")
-        # Koen telles FOER kallet, saa vi kan skille «ikke forsoekt» fra «forsoekt
-        # og feilet». Begge gir tom vinkelliste, men de betyr helt forskjellige
-        # ting for journalisten: ko = trykk igjen, feilet = noe er galt.
+    if trenger:
+        melde(f"Journalisten lager vinkler for {len(trenger)} saker")
         ko_for = budsjett.i_ko
-        c.angles = journalist_angles(c, c.editor, budsjett)
-        if c.angles:
-            c.ai_mode = "llm"
-            storage.ki_lagre(c.key, angles=c.angles)
-            tell(True)
-        elif budsjett.i_ko > ko_for:
-            c.ai_mode = "ko"
-        else:
-            # Saken merkes etter det SVAKESTE leddet: uten vinkler er den ikke
-            # «KI» selv om redaktoren tilfeldigvis kom gjennom.
-            c.ai_mode = "mal"
-            tell(False)
+        vinkler = journalist_angles_batch(trenger, budsjett)
+        for c in trenger:
+            c.angles = vinkler.get(c.key, [])
+            if c.angles:
+                c.ai_mode = "llm"
+                storage.ki_lagre(c.key, angles=c.angles)
+                tell(True)
+            elif budsjett.i_ko > ko_for:
+                c.ai_mode = "ko"
+            else:
+                # Saken merkes etter det SVAKESTE leddet: uten vinkler er den
+                # ikke «KI» selv om redaktoren tilfeldigvis kom gjennom.
+                c.ai_mode = "mal"
+                tell(False)
 
     regnskap["i_ko"] = budsjett.i_ko
     if not has_key:

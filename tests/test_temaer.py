@@ -226,6 +226,7 @@ def test_skannet_forteller_hvilke_temaer_som_ble_brukt(klient, monkeypatch):
     monkeypatch.setattr(m, "run_workflow", lambda c, si=None: {
         "mode": "mal", "forsokt": 0, "lyktes": 0, "feilet": 0, "feil": ""})
     monkeypatch.setattr(m.ssb_kalender, "collect", lambda **k: ([], []))
+    monkeypatch.setattr(m.brreg, "collect", lambda *a, **k: ([], []))
 
     res = m.run_scan()
     assert any("Temaer: helse" in s for s in res["status"]), res["status"]

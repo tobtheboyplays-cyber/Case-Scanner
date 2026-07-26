@@ -22,11 +22,11 @@ from app import storage
 from app.models import Case
 
 
-def sak(key: str, kind: str, score: float) -> Case:
+def sak(key: str, kind: str, score: float, verdi: str = "") -> Case:
     return Case(
         key=key, title=key, kind=kind, geo="lokal", score=score,
         topics=[], angle="", why="", signals=[], created_at=datetime.now(UTC),
-        coverage_status="green",
+        coverage_status="green", metric_value=verdi or key,
     )
 
 
@@ -46,6 +46,7 @@ def scan(tmp_path, monkeypatch):
             "mode": "mal", "forsokt": 0, "lyktes": 0, "feilet": 0,
             "gjenbrukt": 0, "i_ko": 0, "feil": ""})
         monkeypatch.setattr(m.ssb_kalender, "collect", lambda **k: ([], []))
+        monkeypatch.setattr(m.brreg, "collect", lambda *a, **k: ([], []))
         return [c["key"] for c in m.run_scan()["cases"]]
 
     return kjor
@@ -62,26 +63,44 @@ def test_ssb_funn_ligger_foran_gjenbruk_fra_soesteraviser(scan):
     assert rekkefolge[0] == "ssb:12345", f"gjenbruk kom først: {rekkefolge}"
 
 
-def test_gjenbrukssaker_regnes_aldri_som_nye(scan, tmp_path, monkeypatch):
+def test_gjenbrukssaker_regnes_aldri_som_nye(scan):
     """Selve feilen. Nøkkelen deres er laget av overskriften, så de er «aldri
     sett før» ved hvert skann. Hadde de fått ny-løftet, ville de ligget øverst
     for alltid — uansett hvor mange ganger han trykket søk."""
     import app.main as m
 
-    forste = scan([sak("ssb:1", "data", 10.0)])
-    assert forste  # ssb-saken er ny i første skann
+    scan([sak("ssb:1", "data", 10.0, verdi="+1 %")])
 
-    # Andre skann: SSB-saken er sett før, Schibsted-saken har fersk overskrift.
-    data = m.load_latest()
-    andre_kjoring = scan([
-        sak("ssb:1", "data", 10.0),
+    # Andre skann: SSB-saken har NYTT tall (ellers skjules den som uendret), og
+    # Schibsted-saken har fersk overskrift.
+    andre = scan([
+        sak("ssb:1", "data", 10.0, verdi="+9 %"),
         sak("schibsted:Aftenposten:Helt fersk overskrift", "schibsted", 90.0),
     ])
     lagret = {c["key"]: c for c in m.load_latest()["cases"]}
     assert lagret["schibsted:Aftenposten:Helt fersk overskrift"]["er_ny"] is False, \
         "gjenbrukssaken ble merket NY — da tar RSS-churn over forsiden"
-    assert andre_kjoring[0] == "ssb:1", f"SSB-funnet mistet førsteplassen: {andre_kjoring}"
-    assert data is not None
+    assert andre[0] == "ssb:1", f"SSB-funnet mistet førsteplassen: {andre}"
+
+
+def test_uendret_tall_kommer_ikke_tilbake(scan):
+    """Eieren 26.07.2026: «når man trykker søk igjen skal nye tall dukke opp,
+    aldri den samme».
+
+    De faste SSB-probene spør de SAMME tabellene hver gang. Uten dette kom de
+    samme fem funnene tilbake ved hvert skann, med identiske tall, og druknet
+    det som faktisk var nytt."""
+    scan([sak("ssb:fast", "data", 10.0, verdi="+3 %")])
+    andre = scan([sak("ssb:fast", "data", 10.0, verdi="+3 %")])
+    assert andre == [], f"samme sak med samme tall kom tilbake: {andre}"
+
+
+def test_samme_sak_med_nytt_tall_er_en_ny_sak(scan):
+    """Grensen som gjør filteret trygt: det er TALLET som må være uendret, ikke
+    saken. Publiserer SSB nye tall for samme tabell, skal den fram igjen."""
+    scan([sak("ssb:fast", "data", 10.0, verdi="+3 %")])
+    andre = scan([sak("ssb:fast", "data", 10.0, verdi="+31 %")])
+    assert andre == ["ssb:fast"], f"nytt tall ble skjult: {andre}"
 
 
 def test_nytt_ssb_funn_slaar_et_gammelt(scan):

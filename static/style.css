@@ -1205,13 +1205,21 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
    ellipse gjorde «skatt og kommunekasse» til «skatt og kommu…», og da maa man
    gjette hva man huker av. */
 .tema-navn { line-height: 1.25; }
+/* Gruppeoverskriften er nå en avkryssingsboks: ett trykk tar hele «Folk». */
 .tema-gruppe {
-  margin: 12px 0 3px;
+  display: flex; align-items: center; gap: 8px;
+  margin: 14px 0 4px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: .09em;
   text-transform: uppercase;
   color: var(--faint);
+  cursor: pointer;
+  min-height: 28px;
+}
+.tema-gruppe:hover { color: var(--text); }
+.tema-gruppeboks {
+  width: 15px; height: 15px; accent-color: var(--accent); flex: 0 0 auto; cursor: pointer;
 }
 .tema-gruppe:first-of-type { margin-top: 2px; }
 .tema-note { margin: 10px 0 0; font-size: 10.5px; line-height: 1.4; color: var(--faint); }
@@ -1331,3 +1339,28 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .skann-meny > summary { font-weight: 600; }
 /* Start-knappen nederst i menyen er full bredde - den er målet med hele boksen. */
 .skann-start { width: 100%; margin-top: 12px; }
+
+/* ── Næringslivshendelser fra Brønnøysund ────────────────────────────────── */
+/* En konkurs eller nyåpning er en sak man kan ringe på I DAG. Derfor står de
+   først i «Kommer snart», foran SSB-varslene man bare forbereder seg på. */
+.komm-h {
+  margin: 14px 0 8px; font-size: 11px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
+}
+.komm-h:first-of-type { margin-top: 4px; }
+.hend { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.hend:first-of-type { border-top: 0; }
+.hend-ikon { font-size: 18px; line-height: 1.3; flex: none; }
+.hend-mid { min-width: 0; flex: 1; }
+.hend-navn { color: var(--text); font-size: 14px; font-weight: 600; text-decoration: none; }
+.hend-navn:hover { color: var(--accent); text-decoration: underline; }
+.hend-meta {
+  display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px;
+  font-size: 11.5px; color: var(--faint); align-items: center;
+}
+.hend-type { font-weight: 700; }
+.hend-konkurs { color: var(--red); }
+.hend-avvikling { color: var(--amber); }
+.hend-nytt { color: var(--green); }
+.hend-bransje { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.komm-note { margin: 10px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--faint); }
