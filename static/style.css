@@ -1929,9 +1929,49 @@ a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px
 .btn-scan, .tema-meny > summary.btn-scan {
   height: auto; min-height: 56px; padding: 16px 30px;
 }
+/* Og wrapperen: `.tema-meny { height: 44px }` laaste HELE <details>-elementet,
+   ikke bare knappen. Summary ble 56 px og stakk 12 px ut av sin egen boks -
+   derfor la den seg oppaa linja under i stedet for aa skyve den ned. Kommentaren
+   over regelen sa til og med at elementet «ikke skal ha hoeyde». */
+.skann-meny { height: auto; }
 
 /* 2) `hidden` er et UA-satt `display: none` — og `.varsel { display: flex }`
       slår det. Varselet ble derfor ALDRI borte: verken etter fem sekunder eller
       ved neste sidelast. Det så helt riktig ut i JS-en; feilen lå i at CSS-en
       vant over attributtet. */
 .varsel[hidden] { display: none; }
+
+/* ── Toppraden paa én linje ──────────────────────────────────────────────────
+   Eieren 26.07.2026, med skjermbilde: «fiks sånn at dette er på linje.»
+
+   Tre navigasjonsknapper med full tekst pluss skann-knappen er ~536 px. En
+   telefon er 414. Raden brøt, og hovedhandlingen havnet alene på linja under —
+   som var akkurat det som fikk den til å se ut som en ettertanke.
+
+   Under 560 px faller ordene bort og ikonet står igjen. Navnet ligger i
+   `aria-label` og `title`, så ingenting er tapt for skjermlesere. */
+/* De fire knappene i sin egen rad som ALDRI brytes. «Sist skannet …» sto som
+   femte element i samme flex-rad og holdt seg på plass bare fordi `width: 100%`
+   tvang en linjebrytning - med `nowrap` ville den lagt seg ved siden av
+   knappene i stedet for under dem. Egen rad, eget ansvar. */
+.top-actions { display: block; }
+.nav-rad { display: flex; align-items: center; justify-content: flex-end;
+  gap: 8px; flex-wrap: nowrap; }
+.btn-ghost, .btn-approved-link {
+  display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.nav-tall { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--text);
+  font-variant-numeric: tabular-nums; }
+
+@media (max-width: 560px) {
+  .nav-navn { display: none; }
+  .btn-ghost, .btn-approved-link { padding: 0 13px; gap: 5px; font-size: 16px; }
+  /* Hovedhandlingen skal fortsatt være størst i raden, men den trenger ikke
+     30 px luft på hver side når den står ved siden av tre ikoner. */
+  .btn-scan, .tema-meny > summary.btn-scan { padding: 14px 20px; font-size: 16px; }
+  .top-actions { gap: 7px; }
+}
+
+/* Menyen er festet til knappen. Uten dette ville en `nowrap`-rad presset den
+   åpne temaboksen ut i intet i stedet for å legge den under knappen. */
+.skann-meny { position: relative; }

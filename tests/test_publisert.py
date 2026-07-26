@@ -149,10 +149,24 @@ def test_lenka_staar_i_menyen_paa_alle_sidene(klient):
 def test_telleren_i_menyen_stemmer(klient):
     storage.save_scan({"cases": [], "plan": {}, "status": [], "summary": {},
                        "ai_mode": "mal"})
-    assert "Publisert (" not in klient.get("/").text
+    # Telleren er en egen brikke ved siden av ikonet, ikke «(2)» i teksten:
+    # toppraden skal staa paa ÉN linje ogsaa paa en 414 px telefon, og da faller
+    # ordet «Publisert» bort under 560 px mens tallet blir staaende. Test derfor
+    # paa selve brikka, ikke paa en formulering som bare finnes paa store skjermer.
+    import re
+
+    def teller(html: str) -> str | None:
+        m = re.search(r'href="/publisert".*?</a>', html, re.S)
+        assert m, "fant ikke lenka til Publisert i det hele tatt"
+        t = re.search(r'class="nav-tall">(\d+)<', m.group(0))
+        return t.group(1) if t else None
+
+    assert teller(klient.get("/").text) is None, "tellerbrikka sto der uten saker"
     legg_inn(klient, "https://x.no/a")
     legg_inn(klient, "https://x.no/b")
-    assert "Publisert (2)" in klient.get("/").text
+    assert teller(klient.get("/").text) == "2"
+    # Navnet skal fortsatt finnes for skjermlesere og for brede skjermer.
+    assert "Publisert" in klient.get("/").text
 
 
 def test_tabellen_lages_paa_en_gammel_database(tmp_path, monkeypatch):

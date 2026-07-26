@@ -21,9 +21,20 @@
     </div>
   </div>
   <div class="top-actions">
-    <a class="btn-ghost" href="/kalender">🗓 Kalender</a>
-    <a class="btn-ghost" href="/publisert">📰 Publisert{% if publisert_antall %} ({{ publisert_antall }}){% endif %}</a>
-    <a class="btn-approved-link" href="/godkjente">📁 Lagret{% if approved_count %} ({{ approved_count }}){% endif %}</a>
+    <div class="nav-rad">
+    {# Ikon + tekst paa brede skjermer, ikon + tall paa smale. Eieren 26.07.2026,
+       med skjermbilde: «fiks saann at dette er paa linje.»
+
+       Med full tekst er raden ~536 px bred, og en telefon er 414. Da brot den,
+       og «Skann naa» - hovedhandlingen - havnet paa egen linje under. Navnene
+       ligger i `aria-label` og `title`, saa de er ikke tapt: skjermlesere leser
+       dem, og et langt trykk viser dem. #}
+    <a class="btn-ghost" href="/kalender" title="Kalender" aria-label="Kalender">
+      <span aria-hidden="true">🗓</span><span class="nav-navn">Kalender</span></a>
+    <a class="btn-ghost" href="/publisert" title="Publisert" aria-label="Publisert{% if publisert_antall %}, {{ publisert_antall }} saker{% endif %}">
+      <span aria-hidden="true">📰</span><span class="nav-navn">Publisert</span>{% if publisert_antall %}<span class="nav-tall">{{ publisert_antall }}</span>{% endif %}</a>
+    <a class="btn-approved-link" href="/godkjente" title="Lagret" aria-label="Lagret{% if approved_count %}, {{ approved_count }} saker{% endif %}">
+      <span aria-hidden="true">📁</span><span class="nav-navn">Lagret</span>{% if approved_count %}<span class="nav-tall">{{ approved_count }}</span>{% endif %}</a>
     {# Ett valg, én knapp. Foer laa temaene i én meny og «Skann naa» i en annen
        knapp ved siden av, saa man kunne skanne uten aa ha sett paa temaene i det
        hele tatt - og da var menyen bare pynt. Naa er de samme handling: aapne,
@@ -69,6 +80,7 @@
         <button type="submit" class="btn-scan skann-start">🔍 Søk</button>
       </form>
     </details>
+    </div>
     <p class="last-scan">{% if scanned_at %}Sist skannet: {{ scanned_at }}
       {% if data and data.ai_mode %}· KI:
         {%- if data.ai_mode == 'llm' %} på
