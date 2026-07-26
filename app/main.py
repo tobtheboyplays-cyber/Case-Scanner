@@ -200,8 +200,22 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
     beslutninger = decisions_map()
     cases = [c for c in cases if beslutninger.get(c.key) != "rejected"]
     for c in cases:
-        c.er_ny = c.key not in tidligere
-    cases.sort(key=lambda c: (not c.er_ny, -c.score))
+        # Gjenbruks-leadene fra soesteravisene faar ALDRI «ny»-loeftet, og det er
+        # ikke en smakssak. Noekkelen deres er laget av overskriften
+        # (schibsted.py: «schibsted:<avis>:<tittel>»), og RSS-feeder bytter
+        # overskrifter hele tiden - saa de er teknisk «aldri sett foer» ved hvert
+        # eneste skann. Med er_ny som PRIMAER sorteringsnoekkel la de seg dermed
+        # oeverst hver gang, mens SSB-funnene - som har stabile noekler og er hele
+        # poenget med verktoyet - sank ned saa snart de var sett én gang.
+        #
+        # «Ny» skal bety «verktoyet fant noe nytt», ikke «avisa byttet forside».
+        c.er_ny = c.kind != "schibsted" and c.key not in tidligere
+
+    # Egne datafunn foer gjenbrukte avissaker. Originalitet er hele forspranget:
+    # et SSB-tall ingen har skrevet om slaar en Aftenposten-sak som allerede er
+    # publisert, uansett hvor godt den scorer.
+    RANG = {"data": 0, "grasrot": 1, "schibsted": 2}
+    cases.sort(key=lambda c: (RANG.get(c.kind, 1), not c.er_ny, -c.score))
     mark_seen(for_dette_skannet)
     antall_nye = sum(1 for c in cases if c.er_ny)
     status.append(
