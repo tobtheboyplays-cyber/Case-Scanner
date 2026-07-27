@@ -100,7 +100,7 @@ class Tobias {
 
     const merke = document.createElement("span");
     merke.className = "tobias-merke";
-    merke.textContent = "Tobias";
+    merke.textContent = "Botias";
     boks.appendChild(merke);
 
     const boble = document.createElement("span");

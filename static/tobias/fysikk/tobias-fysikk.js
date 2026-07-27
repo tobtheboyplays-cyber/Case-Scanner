@@ -132,7 +132,7 @@ class FysikkTobias {
   _byggMerke() {
     const m = document.createElement("span");
     m.className = "tobias-merke tobias-merke-fri";
-    m.textContent = "Tobias";
+    m.textContent = "Botias";
     m.setAttribute("aria-hidden", "true");   // ren pynt; ingen skal hoere den
     document.body.appendChild(m);
     this.merke = m;
