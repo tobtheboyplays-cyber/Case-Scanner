@@ -31,6 +31,16 @@ avisers oppslag.
 | Google Calendar | Planlegger | ⚙️ valgfritt (krever egen nøkkel) |
 | Flere SSB-tabeller, politilogg, arrangement | — | 🔜 lett å utvide i `config.py` |
 
+## Dokumentasjon
+
+| Fil | Hva |
+|---|---|
+| `docs/KILDER.md`, `docs/KILDEREGELEN.md` | Hvilke kilder, og regelen for hva som slipper inn |
+| `docs/SOKESYSTEMET.md` | Hvordan skannet fungerer |
+| `docs/LENKA.md` | To repoer: hvorfor speilingen finnes |
+| `docs/TESTREGELEN.md` | Hva som må være grønt |
+| **`docs/TOBIAS_FYSIKK.md`** | **Aktiv ragdoll — oppskriften. Les den før du rører `static/tobias/fysikk/`** |
+
 ## Kom i gang
 
 ```bash
