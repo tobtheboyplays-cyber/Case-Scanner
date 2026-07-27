@@ -31,6 +31,23 @@ export const UTTRYKK = {
   PANIC: "PANIC",
   SMUG: "SMUG",
   HAPPY: "HAPPY",
+  /* ## Fem til - eieren 27.07.2026: «Gjor han soetere flere fjes»
+   *
+   * Hvert av dem svarer paa noe som FAKTISK skjer i fysikken, ikke paa en
+   * tilfeldig stemning. Det er forskjellen paa at han uttrykker seg og at han
+   * bare bytter bilde:
+   *
+   *   SVIMMEL  - han har rullet rundt (maalt spinn), og ser det slik ut
+   *   GLIS     - han landet paa beina etter aa ha vaert kastet
+   *   HJERTE   - noen tok forsiktig paa ham og slapp uten aa kaste
+   *   AU       - en hard kollisjon (maalt anslagsfart)
+   *   BLUNK    - han har akkurat gjort noe han er fornoeyd med
+   */
+  SVIMMEL: "SVIMMEL",
+  GLIS: "GLIS",
+  HJERTE: "HJERTE",
+  AU: "AU",
+  BLUNK: "BLUNK",
 };
 
 export class Ansikt {
@@ -95,6 +112,11 @@ export class Ansikt {
     else if (u === UTTRYKK.SMUG) this._lurt(c, lukket);
     else if (u === UTTRYKK.HAPPY) this._glad(c, lukket);
     else if (u === UTTRYKK.CURIOUS) this._nysgjerrig(c, lukket);
+    else if (u === UTTRYKK.SVIMMEL) this._svimmel(c);
+    else if (u === UTTRYKK.GLIS) this._glis(c, lukket);
+    else if (u === UTTRYKK.HJERTE) this._hjerte(c);
+    else if (u === UTTRYKK.AU) this._au(c);
+    else if (u === UTTRYKK.BLUNK) this._blunker(c);
     else this._normal(c, lukket);
 
     this.tekstur.needsUpdate = true;
@@ -147,6 +169,87 @@ export class Ansikt {
     c.lineWidth = 8;
     c.beginPath();
     c.arc(128, 172, 12, 0, Math.PI * 2);
+    c.stroke();
+  }
+
+  /* ── De fem nye ─────────────────────────────────────────────────────────
+   *
+   * Alle holder seg til husreglene i denne fila: bare streker og enkle former,
+   * ingen sammenklemte ellipser (de leser som feil), og alt paa samme glodende
+   * lys. En «@_@» tegnet med to spiraler ville sett ut som stoy paa et display
+   * paa 256 piksler; to ringer i ring gjor samme jobben og leses med én gang.
+   */
+
+  /* @_@ - han har rullet rundt. */
+  _svimmel(c) {
+    c.lineWidth = 6;
+    for (const x of [86, 170]) {
+      c.beginPath(); c.arc(x, 106, 24, 0, Math.PI * 2); c.stroke();
+      c.beginPath(); c.arc(x, 106, 11, 0, Math.PI * 2); c.stroke();
+    }
+    /* Boelgemunn: ikke lei seg, bare ute av stand til aa bestemme seg. */
+    c.lineWidth = 8;
+    c.beginPath();
+    c.moveTo(100, 174);
+    c.quadraticCurveTo(114, 160, 128, 174);
+    c.quadraticCurveTo(142, 188, 156, 174);
+    c.stroke();
+  }
+
+  /* Bredt glis med synlige tenner-streker. Han landet paa beina. */
+  _glis(c, lukket) {
+    this._oye(c, 86, 100, 25, lukket, 1.1);
+    this._oye(c, 170, 100, 25, lukket, 1.1);
+    c.lineWidth = 10;
+    c.beginPath();
+    c.moveTo(88, 158);
+    c.quadraticCurveTo(128, 206, 168, 158);
+    c.closePath();
+    c.stroke();
+    /* Én strek paa tvers gjor det til et glis og ikke en aapen munn. */
+    c.lineWidth = 6;
+    c.beginPath(); c.moveTo(97, 165); c.lineTo(159, 165); c.stroke();
+  }
+
+  /* To hjerter i stedet for oyne. Noen tok forsiktig paa ham. */
+  _hjerte(c) {
+    const tegnHjerte = (x, y, s) => {
+      c.beginPath();
+      c.moveTo(x, y + s * 0.85);
+      c.bezierCurveTo(x - s * 1.4, y - s * 0.25, x - s * 0.55, y - s * 1.1, x, y - s * 0.32);
+      c.bezierCurveTo(x + s * 0.55, y - s * 1.1, x + s * 1.4, y - s * 0.25, x, y + s * 0.85);
+      c.fill();
+    };
+    tegnHjerte(86, 106, 26);
+    tegnHjerte(170, 106, 26);
+    c.lineWidth = 9;
+    c.beginPath();
+    c.moveTo(104, 168);
+    c.quadraticCurveTo(128, 192, 152, 168);
+    c.stroke();
+  }
+
+  /* >_< - han smalt i noe. */
+  _au(c) {
+    c.lineWidth = 9;
+    /* Sammenknepne oyne, tegnet som to vinkler. */
+    c.beginPath(); c.moveTo(66, 92); c.lineTo(104, 108); c.lineTo(66, 124); c.stroke();
+    c.beginPath(); c.moveTo(190, 92); c.lineTo(152, 108); c.lineTo(190, 124); c.stroke();
+    c.lineWidth = 8;
+    c.beginPath();
+    c.moveTo(106, 180);
+    c.quadraticCurveTo(128, 162, 150, 180);
+    c.stroke();
+  }
+
+  /* ^_- Han er fornoeyd med seg selv. Ett oye lukket. */
+  _blunker(c) {
+    this._oye(c, 86, 104, 26, 0);
+    this._oye(c, 170, 106, 26, 1);          // lukket = strek
+    c.lineWidth = 9;
+    c.beginPath();
+    c.moveTo(100, 166);
+    c.quadraticCurveTo(128, 196, 156, 170);
     c.stroke();
   }
 

@@ -125,7 +125,11 @@ export function byggSkjelett(RAPIER, verden, x0, y0) {
     const rbd = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(x0 + (d.x || 0), y0 + d.y, d.z || 0)
       .setLinearDamping(FYS.demping.lineaer)
-      .setAngularDamping(FYS.demping.vinkel)
+      /* Armene demper mer enn resten - se `FYS.demping.vinkelArm` for maalingen
+       * som ligger bak. Beina maa IKKE ha det: hoy demping der gjor skrittet
+       * tregt og han slutter aa gaa. */
+      .setAngularDamping(GRUPPE[navn] === "arm" || GRUPPE[navn] === "haand"
+        ? FYS.demping.vinkelArm : FYS.demping.vinkel)
       /* Kontinuerlig kollisjonsdeteksjon paa de smaa, raske delene: uten den
        * kan en haand som kastes gaa TVERS GJENNOM gulvet paa én frame. */
       .setCcdEnabled(true);

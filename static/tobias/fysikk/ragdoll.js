@@ -113,13 +113,48 @@ export class Ragdoll {
     return { x: x / m, y: y / m, z: z / m, masse: m };
   }
 
+  /* Laveste punkt paa en kasse, gitt rotasjonen. For hver lokal akse regnes
+   * hvor mye av den som peker nedover i verden; summen er hvor langt kassens
+   * hjorne stikker under senteret.
+   *
+   * ## Hvorfor dette ikke kan gjores med senterhoyden
+   *
+   * Foerste utgave sa «foten er paa gulvet hvis senteret er under 0.075 m».
+   * Foten er en kasse paa 0.068 x 0.035 x 0.092 - flat naar han staar, men
+   * roteres den 90° i ankelen staar han paa taa, og da ligger senteret paa 0.092
+   * selv om tuppen er nede i gulvet.
+   *
+   * Maalt 27.07.2026 etter at han var loeftet og satt ned: foettene paa 0.090 m,
+   * altsaa «i lufta» etter den gamle regelen - mens han i praksis sto paa
+   * taatuppene. Konsekvensen var alvorlig: ingen stoette betyr ingen balanse,
+   * ingen balanse betyr FALLER, og FALLER halverer kreftene hans. Han ble
+   * staaende og dirre uten aa komme seg opp.
+   *
+   * Naa maales det som faktisk avgjor det: hvor lavt kommer foten. */
+  _lavestePunkt(navn) {
+    const rb = this.kropper[navn];
+    const p = rb.translation();
+    const q = rb.rotation();
+    const d = FYS.deler[navn];
+    if (!d.boks) return p.y - (d.r + (d.h || 0));
+    /* Verdens y-komponent av hver lokale akse, fra kvaternionen. */
+    const ax = Math.abs(2 * (q.x * q.y + q.w * q.z));
+    const ay = Math.abs(1 - 2 * (q.x * q.x + q.z * q.z));
+    const az = Math.abs(2 * (q.y * q.z - q.w * q.x));
+    return p.y - (d.boks[0] * ax + d.boks[1] * ay + d.boks[2] * az);
+  }
+
   /* Hvor foettene staar, og om de i det hele tatt roerer bakken. */
   stoette() {
     const p = [];
     for (const f of FOETTER) {
-      const t = this.kropper[f].translation();
-      /* Foten er 0.035 hoy; under 0.075 regnes den som paa gulvet. */
-      if (t.y < 0.075) p.push({ navn: f, x: t.x, z: t.z });
+      /* 0.03 m slingringsmonn: solveren lar kontakter ligge noen millimeter fra
+       * hverandre, og en fot som saa vidt letter i et skritt skal ikke telle som
+       * at han mistet bakken. */
+      if (this._lavestePunkt(f) < 0.03) {
+        const t = this.kropper[f].translation();
+        p.push({ navn: f, x: t.x, z: t.z });
+      }
     }
     if (!p.length) return null;
     const x = p.reduce((a, b) => a + b.x, 0) / p.length;
@@ -167,8 +202,36 @@ export class Ragdoll {
       return this.nedeTid > 0.9 ? FYSISK.REISER : FYSISK.NEDE;
     }
 
+    /* ## AA FALLE BETYR AA BEVEGE SEG NEDOVER
+     *
+     * Eieren 27.07.2026: «Sekundet jeg holder han opp aa setter han ned, saa
+     * begynner armene hans aa riste overalt og han mister kontroll.»
+     *
+     * Maalt, og det var en selvlaasende loekke:
+     *
+     *   Settes han ned med beina foldet, blir foettene staaende paa 0.090 m der
+     *   de normalt ligger paa 0.031. Da finner `stoette()` ingen fot,
+     *   `balansefeil()` er null, og tilstanden ble FALLER. FALLER setter styrken
+     *   til 0.45 - og med under halv kraft klarer ikke beina aa rette seg ut,
+     *   saa foettene naar aldri gulvet, saa tilstanden blir FALLER igjen.
+     *
+     *   Han sto slik i fem maalte sekunder: «i fritt fall» mens han i praksis
+     *   satt paa knaerne, med torsoen dirrende mellom 0.226 og 0.271 m fordi en
+     *   halvsterk PD-regulator og tyngdekraften dro mot hverandre. Dirringen er
+     *   nettopp ristingen eieren saa.
+     *
+     * Feilen var i ORDET. «Ingen fot paa bakken» ble lest som «faller», men det
+     * betyr bare at han hviler paa noe annet enn foettene - knaerne, rumpa,
+     * ryggen. Faller gjor han bare hvis han faktisk er paa vei ned.
+     *
+     * Naa avgjor farten det. Er han paa vei ned, faller han. Er han ikke det,
+     * LIGGER han - og da tar gjenreisningen over, som den skal. Ingen stilling
+     * kan lenger holde ham fanget. */
     const feil = this.balansefeil();
-    if (feil === null) return FYSISK.FALLER;
+    if (feil === null) {
+      if (this.kropper.torso.linvel().y < -0.6) return FYSISK.FALLER;
+      return this.nedeTid > 0.9 ? FYSISK.REISER : FYSISK.NEDE;
+    }
     const a = Math.abs(feil);
     if (a > FYS.balanse.fall) return FYSISK.FALLER;
     if (a > FYS.balanse.snuble) return FYSISK.SNUBLER;
@@ -319,13 +382,63 @@ export class Ragdoll {
     const v = g.rb.linvel();
     const maalX = g.maal.x + g.dx;
     const maalY = g.maal.y + g.dy;
-    const m = g.rb.mass();
-    let fx = ((maalX - p.x) * FYS.grep.stivhet - v.x * FYS.grep.demping) * m;
-    let fy = ((maalY - p.y) * FYS.grep.stivhet - v.y * FYS.grep.demping) * m;
-    const l = Math.hypot(fx, fy);
-    const tak = FYS.grep.maksKraft * m;
-    if (l > tak) { fx *= tak / l; fy *= tak / l; }
-    g.rb.applyImpulse({ x: fx * dt, y: fy * dt, z: 0 }, true);
+    /* ## Aa loefte ham etter haanda
+     *
+     * Eieren 27.07.2026: «Jeg kunne ikke loefte han saa hoyt. Vil at jeg skal
+     * kunne dra han over hele skjermen.»
+     *
+     * To utkast, og begge feilene er verdt aa kjenne:
+     *
+     * 1. Taket var `maksKraft * massen til den GREPNE delen`. Griper man haanden
+     *    er den 0.08 kg, saa taket ble 7.2 N - mens kroppen veier 7 kg og drar
+     *    98 N nedover. Haanden kunne altsaa aldri loefte ham. Griper man torsoen
+     *    gikk det saavidt, og DET er grunnen til at det virket tilfeldig hva som
+     *    lot seg loefte.
+     *
+     * 2. Saa satte jeg taket til hele kroppsmassen. Det ga 627 N paa en haand
+     *    paa 0.08 kg - 7800 m/s². Maalt: spinn 1843 rad/s. Ragdollen eksploderte.
+     *
+     * Riktig stoerrelse er AKSELERASJON, ikke kraft. Et tak i m/s² betyr det
+     * samme for en haand og for en torso, og ingen del kan skytes av gaarde.
+     *
+     * Men da mangler fortsatt loeftet: en haand som akselererer oppover drar
+     * ikke med seg resten gjennom leddene - solveren har ikke iterasjoner nok
+     * til aa fore 98 N gjennom en kjede paa fire ledd. Derfor faar resten av
+     * kroppen den samme akselerasjonen, dempet mot sin egen fart. Det er samme
+     * grep som `kast.kroppAndel`, og av samme grunn: leddene alene rekker ikke. */
+    let ax = (maalX - p.x) * FYS.grep.stivhet - v.x * FYS.grep.demping;
+    let ay = (maalY - p.y) * FYS.grep.stivhet - v.y * FYS.grep.demping;
+    const l = Math.hypot(ax, ay);
+    if (l > FYS.grep.maksAkse) {
+      ax *= FYS.grep.maksAkse / l;
+      ay *= FYS.grep.maksAkse / l;
+    }
+    g.rb.applyImpulse(
+      { x: ax * g.rb.mass() * dt, y: ay * g.rb.mass() * dt, z: 0 }, true);
+
+    /* Resten av kroppen skal BAERE seg selv, ikke bli loeftet.
+     *
+     * Foerste forsok ga hele kroppen den samme akselerasjonen som haanden. Da
+     * ble han loeftet hoyt nok - men benken fanget bieffekten: torsoen endte
+     * paa 1.71 m mens haanden man holdt i var paa 1.57. Kroppen RED paa haanden
+     * i stedet for aa henge under den, og det er feil i seg selv.
+     *
+     * Naa faar resten to ting, og ingen av dem er et loeft: nesten hele sin
+     * egen vekt kansellert, saa leddene bare trenger aa baere resten - og en
+     * drag mot HAANDENS fart, saa kroppen foelger med naar man drar. Da henger
+     * han fortsatt under det man holder i, slik en dukke gjor. */
+    const baer = -FYS.tyngde * FYS.grep.baereAndel;
+    for (const [navn, b] of Object.entries(this.kropper)) {
+      if (navn === g.del) continue;
+      const bv = b.linvel();
+      const bm = b.mass();
+      b.applyImpulse({
+        x: (ax * FYS.grep.folgeAndel
+            + (v.x - bv.x) * FYS.grep.kroppDemping) * bm * dt,
+        y: (baer + (v.y - bv.y) * FYS.grep.kroppDemping) * bm * dt,
+        z: 0,
+      }, true);
+    }
   }
 
   /* ── Dytt: brukt av debugpanelet og av klikk ────────────────────────────── */
@@ -390,7 +503,18 @@ export class Ragdoll {
       [FYSISK.NEDE]: 0.25, [FYSISK.FALLER]: 0.45, [FYSISK.SNUBLER]: 0.7,
       [FYSISK.I_LUFTA]: 0.35, [FYSISK.GREPET]: 0.5, [FYSISK.REISER]: 0.9,
     }[this.tilstand] ?? 1.0;
-    this.styrke += (maalStyrke - this.styrke) * Math.min(1, h * 4);
+    /* ## Kraften slippes fort, men hentes langsomt
+     *
+     * Symmetrisk overgang ga et rykk: slipper man ham etter aa ha holdt ham,
+     * gaar styrken fra 0.5 til 1.0 paa et kvart sekund, og hele kroppen snapper
+     * mot posituren paa én gang. Maalt 27.07.2026: 10.1 rad/s spinn i det
+     * oyeblikket, mot 0.5 naar han staar rolig.
+     *
+     * Nå mister han kontrollen raskt - fysikken SKAL vinne umiddelbart naar noe
+     * skjer - men tar den tilbake over drygt et halvt sekund. Det er ogsaa mer
+     * sant for en som holder paa aa finne igjen balansen. */
+    const rate = maalStyrke < this.styrke ? 4 : 1.6;
+    this.styrke += (maalStyrke - this.styrke) * Math.min(1, h * rate);
 
     const maal = this._byggMaalpositur();
     draModPositur(this.kropper, maal, this.styrke, h);
@@ -415,7 +539,28 @@ export class Ragdoll {
       * Math.min(1, h / FYS.gange.snuTid);
 
     this.verden.step(this.hendelser);
+    this._klemSpinn();
     this._lesSmell();
+  }
+
+  /* Ingen kroppsdel faar snurre fortere enn `FYS.maksSpinn`.
+   *
+   * Maalt i torturtesten 27.07.2026: under de hardeste kastene naadde en del
+   * 308 rad/s - 49 omdreininger i sekundet. Det er ikke fysikk lenger; det er
+   * en grå sky paa skjermen. Verre er det at en tynn kapsel som snurrer saa
+   * fort kan rekke aa gaa tvers gjennom gulvet mellom to steg selv med CCD paa.
+   *
+   * Dette er en KLEMME og ikke en demping: den gjor ingenting saa lenge han er
+   * innenfor, og fjerner bare det som uansett ikke kunne vises. */
+  _klemSpinn() {
+    const maks = FYS.maksSpinn;
+    for (const rb of Object.values(this.kropper)) {
+      const w = rb.angvel();
+      const l = Math.hypot(w.x, w.y, w.z);
+      if (l <= maks) continue;
+      const k = maks / l;
+      rb.setAngvel({ x: w.x * k, y: w.y * k, z: w.z * k }, true);
+    }
   }
 
   /* Eieren §12: «Maal collision impulse.» Vi leser kontakthendelsene og tar

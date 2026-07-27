@@ -141,6 +141,13 @@ export const FYS = {
     hofte:    { type: "kule", grense: 1.50 },
     kne:      { type: "hengsel", akse: [1, 0, 0], min: -0.05, maks: 2.2 },
     ankel:    { type: "kule", grense: 0.55 },
+    /* Strikken som holder kulelenkene innenfor omraadet sitt. Samme enheter og
+     * samme stabilitetsregel som PD-regulatoren: `grenseStivhet` i rad/s²,
+     * `grenseDemping` i rad/s (kd ≈ 2*sqrt(kp)), `grenseTak` i newtonmeter.
+     * Uten demping og tak sparker den smaa lemmer i bane - se `holdLeddgrenser`. */
+    grenseStivhet: 900,
+    grenseDemping: 60,
+    grenseTak: 8,
   },
 
   /* ── Active ragdoll: PD-regulatoren ──────────────────────────────────────
@@ -226,7 +233,30 @@ export const FYS = {
   grep: {
     stivhet: 260,           // hvor hardt pekeren drar i kroppsdelen
     demping: 22,
-    maksKraft: 90,          // saa fingeren ikke kan rive ham i stykker
+    /* Tak i AKSELERASJON (m/s²), ikke i newton. Et krafttak maa skaleres med
+     * massen til den delen man tilfeldigvis grep i, og da blir en haand paa
+     * 0.08 kg ute av stand til aa loefte 7 kg mens en torso klarer det. Et
+     * akselerasjonstak betyr det samme for begge. */
+    maksAkse: 95,
+    /* Resten av kroppen faar baare-hjelp, ikke loeft: `baereAndel` av sin egen
+     * vekt kansellert, saa leddene bare trenger aa holde resten, pluss en drag
+     * mot haandens fart saa han foelger med. Uten dette rekker ikke leddene aa
+     * fore 98 N gjennom en kjede paa fire ledd; med FULL loeftehjelp rir han
+     * derimot oppaa haanden i stedet for aa henge under den. */
+    /* Maalt 27.07.2026 over et rutenett: de to kravene - «loeft ham over hele
+     * skjermen» og «han skal henge UNDER det du holder i» - trekker mot
+     * hverandre, og de kan ikke begge loeses med ett tall.
+     *
+     *   baereAndel  0.86 -> henger fint, men naar bare halve skjermen
+     *   baereAndel  0.99 -> naar toppen, men rir OPPAA haanden
+     *
+     * De skiller lag naar man ser at de handler om hver sin ting: hvor mye han
+     * SIGER naar man holder ham stille, og hvor godt han FOELGER naar man drar
+     * fort. `baereAndel` styrer det foerste (10 % av vekta blir igjen, saa han
+     * synker til leddene stopper ham), `kroppDemping` det andre. */
+    baereAndel: 0.90,
+    folgeAndel: 0.30,
+    kroppDemping: 12,
   },
 
   /* ── Kast ────────────────────────────────────────────────────────────────
@@ -256,7 +286,29 @@ export const FYS = {
   /* ── Demping per kropp ─────────────────────────────────────────────────── */
   /* Vinkeldempingen tar bort dirringen som ellers ligger igjen naar han staar
    * stille. Maalt: torsofarten falt fra 1,8 til under 0,3 m/s. */
-  demping: { lineaer: 0.35, vinkel: 4.0 },
+  demping: {
+    lineaer: 0.35,
+    vinkel: 4.0,
+    /* ## Armene demper mer enn resten
+     *
+     * Da armstivheten ble satt ned for at de skulle HENGE i stedet for aa
+     * holdes nede med makt, ble de ogsaa trege til aa falle til ro. Maalt over
+     * 40 sekunder med 20 Hz sampling: median 0.70 rad/s, men 9.9 % av tida laa
+     * en underarm eller haand over 4 rad/s, med topper paa 10.8. Det leses som
+     * flagring - nettopp det eieren klaget paa.
+     *
+     * Loesningen er IKKE aa gjore dem stive igjen; da mister man svingen naar
+     * han gaar. Hoyere vinkeldemping paa selve KROPPEN tar bort ettersvingen
+     * uten aa gjore leddet stivere: han svinger like fritt, men roer seg til ro
+     * fortere naar han stopper. */
+    vinkelArm: 9.0,
+  },
+
+  /* Ingen kroppsdel skal snurre fortere enn dette. Under de hardeste kastene i
+   * torturtesten ble det maalt 308 rad/s - 49 omdreininger i sekundet. Det er
+   * ikke fysikk lenger, det er visuell suppe, og en tynn kapsel som snurrer saa
+   * fort kan dessuten gaa tvers gjennom gulvet mellom to steg. */
+  maksSpinn: 34,
 
   /* ── Sammenstoet ────────────────────────────────────────────────────────
    * Eieren §12. Terskler paa impulsen fra kollisjonen. */

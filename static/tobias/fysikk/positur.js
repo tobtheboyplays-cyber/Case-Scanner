@@ -149,6 +149,23 @@ export function draModPositur(kropper, maal, styrke, dt) {
  * hvorfor). I stedet dyttes barnet tilbake naar vinkelen mellom det og
  * forelderen blir for stor - som en gummistrikk, ikke som en vegg.
  */
+/* ## Strikken maa foelge de samme reglene som regulatoren
+ *
+ * Foerste utgave regnet momentet som `over * 14` - absolutte newtonmeter, uten
+ * treghetsskalering og uten tak. For torsoen er det harmloest. For en haand er
+ * det ikke: haanden er en kule paa 0.08 kg med treghetsmoment 1e-4, saa 35 Nm
+ * blir 350 000 rad/s² - og siden strikken ikke har noen demping, sparker den
+ * haanden forbi grensen paa den andre sida og gjor det igjen.
+ *
+ * Maalt 27.07.2026: begge hendene snurret vedvarende i 1000-3100 rad/s mens han
+ * bare sto der. Det er nettopp «armene hans begynner aa riste overalt» - og det
+ * var IKKE griping som utloeste det. Det ble synlig da armstivheten ble satt
+ * ned for at armene skulle henge naturlig: med svakere regulator drev haanden
+ * utenfor grensen, og da tok den udempede strikken over.
+ *
+ * Naa gjelder de samme tre reglene som i `draModPositur`: skaler med treghets-
+ * momentet saa tallene betyr det samme for alle ledd, demp mot den relative
+ * farten saa den ikke kan pumpe, og sett et tak. */
 export function holdLeddgrenser(ledd, kropper, dt) {
   for (const l of ledd) {
     const spek = FYS.ledd[l.type];
@@ -162,9 +179,18 @@ export function holdLeddgrenser(ledd, kropper, dt) {
     /* Bare det som er UTENFOR grensen straffes. Da merkes ingenting saa lenge
      * han holder seg innenfor, og strikken strammer gradvis. */
     const over = v - spek.grense;
-    const k = -(over * 14) / v;
-    b.applyTorqueImpulse({
-      x: rel.x * k * dt, y: rel.y * k * dt, z: rel.z * k * dt,
-    }, true);
+    const I = tregleik(b);
+    const w = b.angvel();
+    const wf = f.angvel();
+    const k = -(over * FYS.ledd.grenseStivhet) / v;
+    let mx = (rel.x * k - (w.x - wf.x) * FYS.ledd.grenseDemping) * I;
+    let my = (rel.y * k - (w.y - wf.y) * FYS.ledd.grenseDemping) * I;
+    let mz = (rel.z * k - (w.z - wf.z) * FYS.ledd.grenseDemping) * I;
+    const lm = Math.hypot(mx, my, mz);
+    if (lm > FYS.ledd.grenseTak) {
+      const s = FYS.ledd.grenseTak / lm;
+      mx *= s; my *= s; mz *= s;
+    }
+    b.applyTorqueImpulse({ x: mx * dt, y: my * dt, z: mz * dt }, true);
   }
 }

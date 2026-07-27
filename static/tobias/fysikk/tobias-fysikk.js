@@ -110,6 +110,9 @@ class FysikkTobias {
 
     this.kjorer = true;
     this.forrige = performance.now();
+    /* Ogsaa foerste gang gaar han inn fra kanten - ikke bare naar han er kastet
+     * ut. Han skal aldri VAERE der plutselig. */
+    this._entre(true);
     this._sloyfe = this._sloyfe.bind(this);
     requestAnimationFrame(this._sloyfe);
     return this;
@@ -185,7 +188,7 @@ class FysikkTobias {
        * box er utenfor: despawn.» Uten dette blir en robot som ble kastet for
        * hardt borte for godt, og journalisten sitter igjen med en tom side og
        * et lerret som simulerer fjorten kropper i det tomme rommet. */
-      if (!this.pekerNede && this.rag.heltUtenfor(1.2)) this._komTilbake();
+      if (!this.pekerNede && this.rag.heltUtenfor(1.2)) this._entre();
     } catch (e) {
       /* Tre paa rad, saa gir vi opp og rydder. En paaskeegg-robot skal aldri
        * kunne holde en journalist ute fra sidene sine ved aa kaste hver frame. */
@@ -196,18 +199,39 @@ class FysikkTobias {
     }
   }
 
-  /* Han kommer tilbake etter en pause, et tilfeldig sted, og faller ned i
-   * bildet. Ingen animasjon: kroppene flyttes til utgangsstillingen og
-   * tyngdekraften gjor resten - derfor lander han ulikt hver gang. */
-  _komTilbake() {
+  /* ## Han GAAR INN. Han spretter ikke opp.
+   *
+   * Eieren 27.07.2026: «I tillegg saa spannet han bare midt paa skjermen jeg
+   * vil at han skal gaa inn.»
+   *
+   * Foerste utgave satte ham rett ned et tilfeldig sted midt i bildet. Det er
+   * det billigste man kan gjore, og det ser ut som en feil - en figur som
+   * plutselig ER der, uten aa ha kommet noe sted fra.
+   *
+   * Naa settes han utenfor kanten, i gulvhoyde, og faar beskjed om aa gaa inn.
+   * Selve inngangen er ikke skrevet noe sted: det er den samme gangen som ellers,
+   * og derfor snubler han av og til paa vei inn - noe ingen har programmert. */
+  _entre(foerstegang = false) {
     if (this._venter) return;
     this._venter = true;
     this.rag.stoppGange();
-    setTimeout(() => {
+    const start = () => {
       this._venter = false;
       if (!this.kjorer) return;
-      this.rag.plasser(0.6 + Math.random() * Math.max(0.2, this.bredde - 1.2), 0.9);
-    }, 2200 + Math.random() * 3000);
+      /* Fra venstre eller hoyre, tilfeldig. `kant` er godt utenfor lerretet. */
+      const fraVenstre = Math.random() < 0.5;
+      const kant = fraVenstre ? -0.55 : this.bredde + 0.55;
+      this.rag.plasser(kant, 0.05);
+      this.rag.retning = fraVenstre ? Math.PI / 2 : -Math.PI / 2;
+      this.rag.retningMaal = this.rag.retning;
+      /* Et stykke inn i bildet, saa turen inn faktisk synes. */
+      const inn = fraVenstre
+        ? 0.8 + Math.random() * Math.max(0.2, this.bredde * 0.35)
+        : this.bredde - 0.8 - Math.random() * Math.max(0.2, this.bredde * 0.35);
+      this.rag.gaaMot(inn);
+    };
+    if (foerstegang) start();
+    else setTimeout(start, 2200 + Math.random() * 3000);
   }
 
   /* ── Pekeren ───────────────────────────────────────────────────────────── */
@@ -242,6 +266,7 @@ class FysikkTobias {
       document.body.classList.add("tobias-holdes");
       this.lerret.setPointerCapture?.(e.pointerId);
       this.rag.stoppGange();
+      this.liv.roert();                      // han vaakner naar noen tar i ham
       this.rag.grip(del, this.vis.tilVerden(e.clientX, e.clientY));
       e.preventDefault();
     };
