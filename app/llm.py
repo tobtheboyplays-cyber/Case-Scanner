@@ -60,6 +60,16 @@ GEMINI_MODEL = os.getenv("CASE_RADAR_GEMINI_MODEL", "gemini-3.6-flash")
 
 # --- OpenAI-kompatible leverandorer -----------------------------------------
 GROQ_MODEL = os.getenv("CASE_RADAR_GROQ_MODEL", "llama-3.3-70b-versatile")
+# ## Reservemodellen er ikke pynt — den er selve loesningen paa kvotetaket
+#
+# Groqs grenser gjelder PER MODELL (console.groq.com/docs/rate-limits, hentet
+# 27.07.2026). Er 70b-modellen full, har 8b-modellen fortsatt hele sin egen
+# boette. Foer dette ga et 429 paa den store modellen maler til journalisten,
+# selv om en litt mindre modell kunne svart med det samme.
+#
+# 8b skriver noe kortere vinkler enn 70b. Det er en billig pris mot alternativet,
+# som er ingen vinkler i det hele tatt.
+GROQ_MODEL_RESERVE = os.getenv("CASE_RADAR_GROQ_MODEL_RESERVE", "llama-3.1-8b-instant")
 OPENROUTER_MODEL = os.getenv(
     "CASE_RADAR_OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"
 )
@@ -138,6 +148,32 @@ def last_error() -> str | None:
 
 def _sett_feil(melding: str | None) -> None:
     _traad.feil = melding
+    if melding is None:
+        _traad.kvote_vent = None
+
+
+def _sett_kvote_vent(sekunder: float | None) -> None:
+    _traad.kvote_vent = sekunder
+
+
+def kvote_vent() -> float | None:
+    """Hvor lenge leverandoren ba oss vente sist vi fikk 429, i sekunder.
+
+    Skillet mellom minutt og doegn ligger her. Er tallet lite, aapner kvota av
+    seg selv om et oeyeblikk og ingen trenger aa gjoere noe. Er det stort, er
+    doegnkvota brukt opp — og da er «vent litt» et daarlig raad."""
+    return getattr(_traad, "kvote_vent", None)
+
+
+# Over dette regnes 429-en som et DOEGNTAK og ikke et minuttak. Groq sender
+# sekunder ved minuttgrensa og timer ved doegngrensa, saa fem minutter skiller
+# dem med god margin.
+DOGNTAK_GRENSE = 300.0
+
+
+def er_dogntak() -> bool:
+    v = kvote_vent()
+    return v is not None and v >= DOGNTAK_GRENSE
 
 
 # --- Kvotestyring ------------------------------------------------------------
@@ -432,9 +468,28 @@ def _openai_chat(navn: str, system: str, user: str, *, max_tokens: int) -> str:
     _KVOTER[navn].fasit(_gjenstaende_tokens(resp))
 
     if resp.status_code == 429:
-        raise KvoteSprengt(
-            _retry_after(resp), f"{provider_label(navn)}: kvotetak naadd (429)"
-        )
+        vent = _retry_after(resp)
+        # Groqs grenser er per modell. Er den store full, har den lille sin egen
+        # boette — og et kortere svar slaar ingen svar.
+        if navn == "groq" and model != GROQ_MODEL_RESERVE and GROQ_MODEL_RESERVE:
+            body["model"] = GROQ_MODEL_RESERVE
+            resp = httpx.post(
+                f"{base}/chat/completions", json=body, headers=headers, timeout=90
+            )
+            if resp.status_code == 400:
+                body.pop("response_format", None)
+                resp = httpx.post(
+                    f"{base}/chat/completions", json=body, headers=headers, timeout=90
+                )
+        if resp.status_code == 429:
+            _sett_kvote_vent(max(vent, _retry_after(resp)))
+            raise KvoteSprengt(
+                vent,
+                f"{provider_label(navn)}: kvotetak naadd (429) paa baade "
+                f"{model} og {GROQ_MODEL_RESERVE}"
+                if navn == "groq" else f"{provider_label(navn)}: kvotetak naadd (429)",
+            )
+        _sett_kvote_vent(None)
 
     resp.raise_for_status()
     data = resp.json()

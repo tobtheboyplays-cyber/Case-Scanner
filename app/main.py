@@ -729,6 +729,11 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
         # settes OGSAA ved «llm-delvis» - foer kastet vi feilinfoen bort i det
         # oyeblikket ett kall lyktes, selv om ti feilet.
         "ai_feil": ai_regnskap.get("feil", ""),
+        # Et 429 som aapner om 8 sekunder og et som aapner om 6 timer er to helt
+        # ulike beskjeder. Foer sa varselet «kvotetak» til begge, og raadet var
+        # det samme — «sett noekkelen» — selv naar noekkelen var satt.
+        "ai_dogntak": llm.er_dogntak(),
+        "ai_vent": llm.kvote_vent(),
         "ai_regnskap": ai_regnskap,
         # Ett kort varsel som svipper inn ved siden av skjermen naar skannet ikke
         # ga noe nytt. Eieren 26.07.2026: «ikke la en beskjed om at soeket ikke
@@ -781,6 +786,10 @@ def _kanskje_etterfyll(ai_mode: str, feil: str, payload: dict) -> None:
     if not ENABLE_AI or ai_mode != "llm-feilet":
         return
     if "429" not in feil and "kvotetak" not in feil:
+        return
+    if llm.er_dogntak():
+        # Doegnkvota nullstilles ikke om sytti sekunder. Aa proeve igjen da er
+        # bare aa banke paa en doer som er laast til i morgen.
         return
     noekler = [c.get("key") for c in payload.get("cases", [])[:ETTERFYLL_SAKER]]
     noekler = [k for k in noekler if k]

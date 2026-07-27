@@ -150,11 +150,28 @@
         Ingen KI-nøkkel er satt på serveren.
       {% endif %}
     </p>
+    {# ## Rådet må passe til problemet
+       27.07.2026 sto det «Nøkkelen finnes» og rett under «Sett nøkkelen på
+       serveren». Det er en blindvei: den eneste tingen han ble bedt om å gjøre
+       var allerede gjort. Nå får hvert av de tre problemene sitt eget råd. #}
     <p class="ki-av-b">
       Derfor ligner de tre forslagene på hverandre — malene kan bare peke på hva
-      som må undersøkes. Ekte, ulike vinkler kommer først når journalist-agenten
-      kjører. Sett nøkkelen på serveren:
-      <code>cd ~/case-radar &amp;&amp; bash deploy.sh --ask</code>
+      som må undersøkes.
+      {% if data.ai_mode == 'llm-feilet' and data.ai_dogntak %}
+        <strong>Døgnkvoten hos leverandøren er brukt opp</strong> — den åpner
+        igjen om ca. {{ (data.ai_vent / 3600) | round | int }} timer. Vil du ha
+        ekte vinkler før det, trengs en nøkkel med større kvote. OpenRouter er
+        gratis og virker som reserve:
+        <code>cd ~/case-radar &amp;&amp; bash deploy.sh --ask</code>
+      {% elif data.ai_mode == 'llm-feilet' %}
+        Dette var <strong>minuttkvoten</strong>, ikke nøkkelen. Appen henter
+        vinklene selv når vinduet er ledig igjen — eller trykk «Lag vinkler» på
+        et kort med én gang. Du trenger ikke gjøre noe på serveren.
+      {% else %}
+        Ekte, ulike vinkler kommer først når journalist-agenten kjører. Sett
+        nøkkelen på serveren:
+        <code>cd ~/case-radar &amp;&amp; bash deploy.sh --ask</code>
+      {% endif %}
     </p>
 </section>
 {% endif %}

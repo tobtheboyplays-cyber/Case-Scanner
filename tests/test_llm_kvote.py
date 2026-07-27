@@ -58,12 +58,24 @@ def _429(retry_after: str | None = "3", tekst: str = "") -> FalsktSvar:
     return FalsktSvar(429, {}, {"retry-after": retry_after} if retry_after else {}, tekst)
 
 
+# ## Hvorfor testene under bruker TO 429-er for aa naa ventinga
+#
+# 27.07.2026 fikk Groq-kallet en reservemodell: kvotene der gjelder per modell,
+# saa er 70b full, har 8b sin egen boette. Det betyr at ETT 429 ikke lenger
+# foerer til venting — det foerer til et nytt forsoek paa den mindre modellen,
+# med det samme. Ventinga er det som skjer naar BEGGE er fulle, og det er
+# nettopp den rekkefoelgen som er poenget: proev det raske foerst, vent bare
+# naar du maa.
+def _begge_fulle(retry_after: str | None = "3", tekst: str = "") -> list[FalsktSvar]:
+    return [_429(retry_after, tekst), _429(retry_after, tekst)]
+
+
 # ── 429 er en beskjed om å vente, ikke en feil ───────────────────────────────
 
 
 def test_429_gir_retry_med_leverandorens_egen_ventetid(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "x")
-    svar = [_429("2"), _ok()]
+    svar = [*_begge_fulle("2"), _ok()]
     ventet = []
     monkeypatch.setattr("httpx.post", lambda *a, **k: svar.pop(0))
     monkeypatch.setattr(llm.time, "sleep", ventet.append)
@@ -76,7 +88,7 @@ def test_429_gir_retry_med_leverandorens_egen_ventetid(monkeypatch):
 def test_retry_after_leses_fra_teksten_naar_headeren_mangler(monkeypatch):
     """Groq skriver «Please try again in 7.5s» i kroppen. Den er like god."""
     monkeypatch.setenv("GROQ_API_KEY", "x")
-    svar = [_429(None, "Rate limit reached. Please try again in 7.5s"), _ok()]
+    svar = [*_begge_fulle(None, "Rate limit reached. Please try again in 7.5s"), _ok()]
     ventet = []
     monkeypatch.setattr("httpx.post", lambda *a, **k: svar.pop(0))
     monkeypatch.setattr(llm.time, "sleep", ventet.append)
@@ -88,7 +100,7 @@ def test_retry_after_leses_fra_teksten_naar_headeren_mangler(monkeypatch):
 def test_vi_venter_aldri_lenger_enn_taket(monkeypatch):
     """Et skann som står stille i ti minutter er ikke et skann."""
     monkeypatch.setenv("GROQ_API_KEY", "x")
-    svar = [_429("600"), _ok()]
+    svar = [*_begge_fulle("600"), _ok()]
     ventet = []
     monkeypatch.setattr("httpx.post", lambda *a, **k: svar.pop(0))
     monkeypatch.setattr(llm.time, "sleep", ventet.append)
@@ -208,7 +220,7 @@ def test_leverandoren_forteller_hvor_mye_kvote_som_er_igjen(monkeypatch):
 def test_brukeren_faar_vite_at_vi_venter(monkeypatch):
     """Uten dette står skannet bare stille og ser hengt ut."""
     monkeypatch.setenv("GROQ_API_KEY", "x")
-    svar = [_429("2"), _ok()]
+    svar = [*_begge_fulle("2"), _ok()]
     linjer = []
     monkeypatch.setattr("httpx.post", lambda *a, **k: svar.pop(0))
     monkeypatch.setattr(llm.time, "sleep", lambda s: None)
@@ -406,3 +418,47 @@ def test_modellsvar_kan_ikke_overstyre_sin_egen_merking(monkeypatch):
     )
     dom = agents.editor_judge(_sak(0))
     assert dom["mode"] == "llm"
+
+
+# ── Reservemodellen ─────────────────────────────────────────────────────────
+def test_reservemodellen_redder_kallet_uten_aa_vente(monkeypatch):
+    """Selve poenget: 429 paa den store modellen skal IKKE bli maler.
+
+    Eieren 27.07.2026: «KI fungerer fortsatt ikke, prioriter det.» Kortet sa
+    «kvotetak (429)» og ga maler. Men Groqs grenser gjelder per modell — den
+    lille modellen hadde hele boetta si i behold."""
+    monkeypatch.setenv("GROQ_API_KEY", "x")
+    brukte: list[str] = []
+    svar = [_429("30"), _ok()]
+
+    def falsk_post(url, json=None, headers=None, timeout=None):
+        brukte.append(json["model"])
+        return svar.pop(0)
+
+    ventet = []
+    monkeypatch.setattr("httpx.post", falsk_post)
+    monkeypatch.setattr(llm.time, "sleep", ventet.append)
+
+    assert llm.complete_json("s", "u", model="m") == {"svar": "ja"}
+    assert brukte == [llm.GROQ_MODEL, llm.GROQ_MODEL_RESERVE]
+    assert ventet == [], "reservemodellen svarte — da skal ingen vente"
+
+
+def test_doegntak_skilles_fra_minuttak(monkeypatch):
+    """En 429 som aapner om 8 sekunder og en som aapner om 6 timer er to helt
+    ulike beskjeder. Foer sa appen «kvotetak» til begge, og raadet var det
+    samme: vent litt. Det er et daarlig raad naar doegnkvota er brukt opp."""
+    monkeypatch.setenv("GROQ_API_KEY", "x")
+    monkeypatch.setattr(llm.time, "sleep", lambda s: None)
+
+    monkeypatch.setattr("httpx.post", lambda *a, **k: _429("21600"))
+    llm.complete_json("s", "u", model="m")
+    assert llm.er_dogntak() is True
+    assert llm.kvote_vent() >= llm.DOGNTAK_GRENSE
+
+    for navn in llm.LEVERANDORER:
+        llm._KVOTER[navn] = llm._Kvote(llm.LEVERANDORER[navn].tpm)
+    svar = [*_begge_fulle("4"), _ok()]
+    monkeypatch.setattr("httpx.post", lambda *a, **k: svar.pop(0))
+    llm.complete_json("s", "u", model="m")
+    assert llm.er_dogntak() is False, "fire sekunder er et minuttak, ikke et doegn"
