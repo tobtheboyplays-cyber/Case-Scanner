@@ -34,8 +34,14 @@ export const FYSISK = {
 };
 
 export class Ragdoll {
-  constructor(RAPIER, bredde) {
+  /* `lett` skrur paa mobiltuningen: faerre solveriterasjoner og faerre steg tatt
+   * igjen etter en treg frame. Fysikkfrekvensen er den samme - se `FYS.mobil`
+   * for hvorfor akkurat DEN ikke kan roeres. */
+  constructor(RAPIER, bredde, lett = false) {
     this.R = RAPIER;
+    this.lett = lett;
+    this.solver = lett ? FYS.mobil.solver : FYS.solver;
+    this.maksSteg = lett ? FYS.mobil.maksSteg : FYS.maksSteg;
     this.bredde = bredde;                 // verdensbredde i meter
     this.verden = new RAPIER.World({ x: 0, y: FYS.tyngde, z: 0 });
     this.verden.timestep = FYS.steg;
@@ -46,12 +52,12 @@ export class Ragdoll {
      * Maalt 26.07.2026: torso paa 0,178 m der den skulle staatt i 0,42. */
     const ip = this.verden.integrationParameters;
     if (ip) {
-      if ("numSolverIterations" in ip) ip.numSolverIterations = FYS.solver.iter;
+      if ("numSolverIterations" in ip) ip.numSolverIterations = this.solver.iter;
       if ("numInternalPgsIterations" in ip) {
-        ip.numInternalPgsIterations = FYS.solver.pgs;
+        ip.numInternalPgsIterations = this.solver.pgs;
       }
       if ("numAdditionalFrictionIterations" in ip) {
-        ip.numAdditionalFrictionIterations = FYS.solver.friksjon;
+        ip.numAdditionalFrictionIterations = this.solver.friksjon;
       }
     }
 
@@ -365,12 +371,12 @@ export class Ragdoll {
   steg(dt) {
     this.rest += Math.min(dt, 0.1);
     let n = 0;
-    while (this.rest >= FYS.steg && n < FYS.maksSteg) {
+    while (this.rest >= FYS.steg && n < this.maksSteg) {
       this._ettSteg(FYS.steg);
       this.rest -= FYS.steg;
       n++;
     }
-    if (n === FYS.maksSteg) this.rest = 0;   // gi opp aa ta igjen
+    if (n === this.maksSteg) this.rest = 0;   // gi opp aa ta igjen
     this.tilstand = this._lesTilstand();
     return n;
   }

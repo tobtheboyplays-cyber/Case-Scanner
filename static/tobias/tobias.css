@@ -164,3 +164,26 @@
   pointer-events: none;
   background: transparent;
 }
+
+/* Navnet over hodet i fysikkvarianten. Den lette varianten har merket sitt
+ * inne i sin egen boks; her ligger det loest paa sida og flyttes av JS hver
+ * frame, fordi det skal folge et hode som beveger seg. */
+.tobias-merke-fri {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 41;             /* saa vidt over lerretet */
+  will-change: transform;  /* han flytter seg hver eneste frame */
+}
+
+/* Mens man HOLDER ham. Uten dette tolker telefonen dragingen som scrolling:
+ * sida glir oppover og Tobias blir staaende igjen. Klassen settes bare i det
+ * oyeblikket et grep faktisk er tatt, og fjernes naar man slipper - en side som
+ * permanent ikke lar seg scrolle ville vaert en langt verre feil enn en robot
+ * som ikke lar seg dra. */
+body.tobias-holdes {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: contain;
+}

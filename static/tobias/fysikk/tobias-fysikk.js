@@ -15,9 +15,8 @@
  *
  * Rapier er 2,0 MB og Three 0,67 MB. Det er mye for en paaskeegg-robot, og
  * derfor lastes ingenting av det for spawn-timeren har loept ut - er fanen
- * lukket eller brukeren gaatt videre, ble det aldri hentet. Paa mobil og ved
- * `prefers-reduced-motion` starter den ikke i det hele tatt; da er det den
- * lette animasjonsversjonen som gjelder. Se `boerFysikk()`.
+ * lukket eller brukeren gaatt videre, ble det aldri hentet. Se `boerFysikk()`
+ * for de to tilfellene der den ikke starter i det hele tatt.
  */
 
 import {
@@ -27,11 +26,33 @@ import { FYS } from "./konfig.js";
 
 let instans = null;
 
-/* Fysikkvarianten er for tung og for stor for en telefon: 2,7 MB nedlasting og
- * fjorten rigid bodies paa 120 Hz. Den er en desktop-godbit, og det er et
- * bevisst valg - ikke en glemt sak. */
+/* ## Mobil ogsaa - eierens beslutning 27.07.2026
+ *
+ * Foerste utgave var desktop-only. Jeg sa fra om vekten (2,7 MB) og om fjorten
+ * rigid bodies paa 120 Hz; eieren svarte «Jo paa mobil versjon ogsaa». Da
+ * gjelder det, og jobben er aa faa det til aa VIRKE paa en telefon - ikke aa
+ * skru av sperren og haape.
+ *
+ * Det som faktisk ble gjort, i stedet for bare aa slippe den loes:
+ *   · faerre solveriterasjoner og lavere pikselforhold paa mobil (`MOBILTUNING`)
+ *   · antialias av - den koster mest nettopp paa mobil-GPU-er
+ *   · beroering laaser sida mens man holder ham, ellers scroller nettleseren
+ *     i stedet for at man faar dratt
+ *
+ * TO ting stopper ham fortsatt, og de er ikke smakssaker:
+ *   · `prefers-reduced-motion` - en tilgjengelighetsinnstilling, ikke en mening.
+ *   · `saveData` - har brukeren SAGT at hen sparer data, skal vi ikke hente
+ *     2,7 MB pynt. Det er ikke aa overstyre eieren; det er aa respektere en
+ *     leser som har bedt om det motsatte. */
 export function boerFysikk() {
-  return TOBIAS_ENABLED && !erMobil() && !roligBevegelse();
+  if (!TOBIAS_ENABLED || roligBevegelse()) return false;
+  try {
+    const n = navigator.connection;
+    if (n && (n.saveData || /^(slow-)?2g$/.test(n.effectiveType || ""))) {
+      return false;
+    }
+  } catch { /* ingen Network Information API: da gaar vi videre */ }
+  return true;
 }
 
 class FysikkTobias {
@@ -58,15 +79,20 @@ class FysikkTobias {
     const { Ansikt } = await import("../ansikt.js");
     const { Liv } = await import("./liv.js");
 
+    this.mobil = erMobil();
     this.bredde = innerWidth / FYS.pikslerPerMeter;
-    this.rag = new Ragdoll(RAPIER, this.bredde);
+    this.rag = new Ragdoll(RAPIER, this.bredde, this.mobil);
     this.vis = new Visning(THREE, RAPIER, this.rag, Ansikt, K.farge);
     this.liv = new Liv(this.rag, this.bredde);
+    this._byggMerke();
 
     this.renderer = new THREE.WebGLRenderer({
-      alpha: true, antialias: true, powerPreference: "low-power",
+      alpha: true,
+      antialias: this.mobil ? FYS.mobil.antialias : true,
+      powerPreference: "low-power",
     });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(Math.min(
+      devicePixelRatio || 1, this.mobil ? FYS.mobil.maksPiksler : 2));
     this.renderer.setSize(innerWidth, innerHeight, false);
     this.renderer.setClearColor(0x000000, 0);
     lerret.replaceWith(this.renderer.domElement);
@@ -89,6 +115,49 @@ class FysikkTobias {
     return this;
   }
 
+  /* ── Navnet over hodet ───────────────────────────────────────────────────
+   *
+   * Eieren 27.07.2026: «Pass paa at det staar Tobias over han.» Den lette
+   * varianten har hatt merket hele tida; fysikkvarianten mistet det da den fikk
+   * sitt eget fullskjermslerret.
+   *
+   * Det er et DOM-element og ikke tekst i 3D-scenen, og det er med vilje: da er
+   * det ekte tekst som skalerer med systemfonten, leses av skjermlesere hvis
+   * noen vil, og koster ingenting aa tegne. Prisen er at det maa flyttes for
+   * haand hver frame - se `_flyttMerke`.
+   */
+  _byggMerke() {
+    const m = document.createElement("span");
+    m.className = "tobias-merke tobias-merke-fri";
+    m.textContent = "Tobias";
+    m.setAttribute("aria-hidden", "true");   // ren pynt; ingen skal hoere den
+    document.body.appendChild(m);
+    this.merke = m;
+    this.opprydd.push(() => m.remove());
+  }
+
+  /* Merket sitter over HODET, ikke over massesenteret. Ligger han nede eller
+   * blir holdt opp ned, foelger det hodet dit - det ser riktigere ut enn et
+   * navneskilt som blir svevende igjen der kroppen pleide aa staa.
+   *
+   * Skjules naar hodet er utenfor vinduet, ellers klistrer det seg til kanten
+   * og ser ut som et lite grafisk feilelement. */
+  _flyttMerke() {
+    const h = this.vis.deler.hode;
+    const s = FYS.pikslerPerMeter;
+    /* Hodets overkant pluss en liten luft. Foerste utgave regnet riktig punkt,
+     * men satte merkets OEVRE kant der - saa det la seg nedover og dekket
+     * toppen av hodet hans. `translateY(-100%)` henger det opp fra undersida i
+     * stedet, som er slik et navneskilt skal sitte. */
+    const x = h.position.x * s;
+    const y = innerHeight - (h.position.y + FYS.deler.hode.r + 0.05) * s;
+    const inne = x > -40 && x < innerWidth + 40 && y > 0 && y < innerHeight + 30;
+    this.merke.style.visibility = inne ? "visible" : "hidden";
+    if (!inne) return;
+    this.merke.style.transform =
+      `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
+  }
+
   /* ── Sloyfa ────────────────────────────────────────────────────────────── */
 
   _sloyfe(naa) {
@@ -108,6 +177,7 @@ class FysikkTobias {
       this.vis.merkForrige();
       this.rag.steg(dt);
       this.vis.synk();
+      this._flyttMerke();
       this.renderer.render(this.vis.scene, this.vis.kamera);
       this.feil = 0;
 
@@ -143,30 +213,42 @@ class FysikkTobias {
   /* ── Pekeren ───────────────────────────────────────────────────────────── */
 
   _koblePeker() {
-    /* Staar han foran en knapp, vinner KNAPPEN. Uten denne sjekken kan et
-     * museklikk paa «Godkjenn sak» ende med at journalisten griper en robot i
-     * stedet for aa godkjenne saken sin - og en paaskeegg-robot som stjeler
-     * arbeidsklikk er ikke morsom, den er i veien. */
-    const KLIKKBART = "a, button, input, select, textarea, summary, label,"
-      + " details, [role='button'], [tabindex]";
-    const overKnapp = (x, y) => {
-      const el = document.elementFromPoint(x, y);
-      return !!(el && el.closest(KLIKKBART));
-    };
-
+    /* ## Han VINNER over knappen - eierens beslutning 27.07.2026
+     *
+     * Foerste utgave slapp klikket gjennom til knappen hvis han stod foran en.
+     * Jeg begrunnet det med at en robot som stjeler arbeidsklikk er i veien.
+     * Eieren svarte: «Der er meninga Cohan kommer litt i veien. Skal ikke vaere
+     * mulig aa trykke igjennom han.»
+     *
+     * Det er hele poenget med en figur som fysisk eksisterer paa sida: staar
+     * han foran noe, staar han faktisk foran det. Slipper man klikket gjennom,
+     * er han ikke en gjenstand lenger - han er en tegning.
+     *
+     * At det gaar an aa leve med, skyldes at han kan FLYTTES: griper man ham,
+     * kan man dra ham til side eller kaste ham vekk, og da er knappen fri. En
+     * hindring man kan ta i er noe annet enn en hindring man ikke kommer forbi.
+     */
     const ned = (e) => {
       if (!this.kjorer || this.pekerNede) return;
-      if (overKnapp(e.clientX, e.clientY)) return;
       const del = this.vis.delUnder(e.clientX, e.clientY);
       if (!del) return;                       // ingen treff: sida faar klikket
       this.pekerNede = true;
       this.pekerId = e.pointerId;
       this.lerret.style.pointerEvents = "auto";
+      /* Beroering: naa - og bare naa - eier vi bevegelsen. Uten dette tolker
+       * telefonen dragingen som scrolling, sida glir oppover og Tobias blir
+       * staaende. `pointerdown` alene hjelper ikke; nettleseren bestemmer seg
+       * for scrolling paa foerste `touchmove`, saa den maa avvises ogsaa. */
+      document.body.classList.add("tobias-holdes");
       this.lerret.setPointerCapture?.(e.pointerId);
       this.rag.stoppGange();
       this.rag.grip(del, this.vis.tilVerden(e.clientX, e.clientY));
       e.preventDefault();
     };
+
+    /* Maa vaere `passive: false`, ellers har `preventDefault` ingen virkning i
+     * iOS Safari - der er touch-lyttere passive som standard. */
+    const beroer = (e) => { if (this.pekerNede) e.preventDefault(); };
 
     const beveg = (e) => {
       if (!this.pekerNede || e.pointerId !== this.pekerId) return;
@@ -179,6 +261,7 @@ class FysikkTobias {
         this.pekerNede = false;
         this.lerret.releasePointerCapture?.(e.pointerId);
         this.lerret.style.pointerEvents = "none";
+        document.body.classList.remove("tobias-holdes");
         this.rag.slipp();
       }
     };
@@ -195,13 +278,16 @@ class FysikkTobias {
     document.addEventListener("pointerdown", ned, { passive: false });
     document.addEventListener("pointermove", beveg, { passive: false });
     document.addEventListener("pointermove", folg, { passive: true });
+    document.addEventListener("touchmove", beroer, { passive: false });
     document.addEventListener("pointerup", opp);
     document.addEventListener("pointercancel", opp);
     document.addEventListener("pointerleave", () => this.liv.seMot(null));
     this.opprydd.push(() => {
+      document.body.classList.remove("tobias-holdes");
       document.removeEventListener("pointerdown", ned);
       document.removeEventListener("pointermove", beveg);
       document.removeEventListener("pointermove", folg);
+      document.removeEventListener("touchmove", beroer);
       document.removeEventListener("pointerup", opp);
       document.removeEventListener("pointercancel", opp);
     });

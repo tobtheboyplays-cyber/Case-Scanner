@@ -34,6 +34,26 @@ export const FYS = {
   maksSteg: 8,              // hvor mange steg vi tar igjen etter en lang frame
   pikslerPerMeter: 130,     // skala mellom fysikk og skjerm
 
+  /* ## Mobil: mindre arbeid per bilde, samme fysikk
+   *
+   * Eieren ba om fysikkvarianten paa mobil ogsaa (27.07.2026). Da maa den
+   * koste mindre, og det viktige er HVA man kutter.
+   *
+   * `steg` roeres IKKE. Stabilitetskravet paa PD-regulatoren er kd*dt<1, og
+   * beina har kd=105 - halverer man frekvensen for aa spare kraft, begynner
+   * dempeleddet aa pumpe energi inn i stedet for aa ta den ut, og han faller
+   * sammen. Det ble maalt 27.07.2026 da testbenken ved et uhell gikk paa 60 Hz.
+   *
+   * Det som derimot kan kuttes uten at oppfoerselen endrer seg, er hvor NOEYE
+   * solveren jobber og hvor mange piksler vi tegner. Faerre iterasjoner gir litt
+   * mykere ledd, ikke en annen robot. */
+  mobil: {
+    solver: { iter: 8, pgs: 2, friksjon: 2 },
+    maksSteg: 5,            // en treg telefon skal ikke bruke frames paa aa ta igjen
+    maksPiksler: 1.5,       // devicePixelRatio-tak
+    antialias: false,       // kantutjevning koster mest nettopp paa mobil-GPU
+  },
+
   /* ── Kroppsdeler: masse, stoerrelse, plassering ──────────────────────────
    *
    * `y` er senterhoyden naar han staar. `r`/`h` er kapselradius og halv
