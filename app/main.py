@@ -742,7 +742,106 @@ def run_scan(jobb: jobs.Jobb | None = None) -> dict:
         "varsel": _varsel(cases, temaer, antall_nye),
     }
     save_scan(payload)
+
+    # ## Kvotetak skal ikke bli staaende som «KI-en er AV»
+    #
+    # Eieren 27.07.2026, med skjermbilde av sitt eget kort: «Staar KI er av,
+    # fiks det ogsaa.» Kortet hadde rett — skannet 11:03 traff Groqs minuttak,
+    # og alle vinklene ble maler. Men taket gjelder per MINUTT, og to timer
+    # senere sto varselet der fortsatt, fordi INGENTING proever igjen av seg
+    # selv. Journalisten maa vite at det finnes en «Lag vinkler»-knapp, og at
+    # det er kvota og ikke noekkelen som er problemet, for aa komme videre.
+    #
+    # Derfor: naar skannet feilet PAA KVOTE — ikke paa noekkel, ikke paa nett —
+    # fyller vi etter i bakgrunnen naar vinduet har rullet. Samme taalmodige vei
+    # som «Lag vinkler», bare uten at noen maa trykke.
+    _kanskje_etterfyll(ai_mode, ai_regnskap.get("feil", ""), payload)
     return payload
+
+
+# Hvor mange saker etterfyllinga tar. Tre er ikke tilfeldig: det er omtrent hva
+# ett minuttvindu hos Groq rekker, og det er de tre oeverste journalisten ser
+# foerst. Flere ville sprengt taket paa nytt og gjort vondt verre.
+ETTERFYLL_SAKER = 3
+ETTERFYLL_PAUSE = 70          # sekunder foer foerste forsoek: ett helt minuttvindu
+
+
+def _kanskje_etterfyll(ai_mode: str, feil: str, payload: dict) -> None:
+    """Start etterfylling i bakgrunnen — men bare naar det faktisk hjelper.
+
+    Vilkaarene er strenge med vilje. En bakgrunnstraad som proever igjen paa noe
+    som ikke gaar over, brenner kvote uten aa gi noe, og da er kuren verre enn
+    sykdommen:
+
+      · `llm-feilet`  — noen kall lyktes ikke i det hele tatt. Var det delvis,
+                        har journalisten allerede ekte vinkler paa toppsakene.
+      · 429/kvotetak  — feil noekkel eller nede nett gaar ikke over av seg selv.
+      · ENABLE_AI     — er KI-en skrudd av, er «av» riktig svar, ikke en feil.
+    """
+    if not ENABLE_AI or ai_mode != "llm-feilet":
+        return
+    if "429" not in feil and "kvotetak" not in feil:
+        return
+    noekler = [c.get("key") for c in payload.get("cases", [])[:ETTERFYLL_SAKER]]
+    noekler = [k for k in noekler if k]
+    if not noekler:
+        return
+    threading.Thread(
+        target=_etterfyll_vinkler, args=(noekler,), daemon=True,
+        name="etterfyll-vinkler",
+    ).start()
+
+
+def _etterfyll_vinkler(noekler: list[str]) -> None:
+    """Hent ekte vinkler for de oeverste sakene naar kvotevinduet har rullet.
+
+    Kjoerer utenfor jobbsystemet fordi ingen sitter og ser paa den: den skal
+    bare vaere ferdig neste gang journalisten laster sida. Alt den skriver gaar
+    gjennom `_SKANN_LAAS`, og den gir seg ved foerste feil som ikke er kvote —
+    da er det noe annet i veien, og da skal varselet staa."""
+    time.sleep(ETTERFYLL_PAUSE)
+    for key in noekler:
+        try:
+            with _SKANN_LAAS:
+                data = load_latest() or {}
+                sak = next(
+                    (c for c in data.get("cases", []) if c.get("key") == key), None
+                )
+                if sak is None or sak.get("ai_mode") == "llm":
+                    continue
+                case = _case_from_dict(sak)
+                editor = sak.get("editor") or {}
+
+            angles = journalist_angles(case, editor, taalmodig=True)
+            if not angles:
+                feil = llm.last_error() or ""
+                if "429" in feil or "kvotetak" in feil:
+                    time.sleep(ETTERFYLL_PAUSE)
+                    continue
+                return          # ekte feil — slutt aa mase paa leverandoeren
+
+            with _SKANN_LAAS:
+                data = load_latest() or {}
+                fersk = next(
+                    (c for c in data.get("cases", []) if c.get("key") == key), None
+                )
+                if fersk is not None:
+                    fersk["angles"] = angles
+                    fersk["ai_mode"] = "llm"
+                    # Varselet paa toppen skal foelge virkeligheten: har noen
+                    # saker ekte vinkler naa, er det ikke lenger «KI-en er AV».
+                    data["ai_mode"] = "llm-delvis"
+                    data["ai_feil"] = (
+                        "Skannet traff kvotetaket, men vinklene ble hentet "
+                        "etterpaa da kvota var ledig igjen."
+                    )
+                    save_scan(data)
+                storage.ki_lagre(key, angles=angles)
+        except Exception as exc:  # noqa: BLE001
+            # En bakgrunnstraad som kaster tar med seg ingenting synlig. Logg og
+            # gi deg — skannet staar uansett, med maler.
+            print(f"[etterfyll] ga opp paa {key}: {type(exc).__name__}: {exc}")
+            return
 
 
 def _case_topic_trends(cases: list) -> list[dict]:
