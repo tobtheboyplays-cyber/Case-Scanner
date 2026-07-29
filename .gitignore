@@ -1,5 +1,21 @@
-node_modules/
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# App-data og hemmeligheter
+data/
 .env
-server/users.json
-*.log
+credentials.json
+token.json
+
+# OS/editor
 .DS_Store
+.idea/
+.vscode/
+
+# Byggmerket skrives av deploy.sh paa serveren, per maskin. Det skal aldri
+# committes - da ville alle sett den commit-en JEG bygget, ikke den de kjorer.
+BUILD.txt

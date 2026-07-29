@@ -1,147 +1,149 @@
-# Redaktør-assistent
+# 📡 Case-radar
 
-En **Chrome-utvidelse** + **server-proxy** som gir en journalist en full redaksjonell
-kvalitetskontroll av en artikkel før publisering — etter Stavanger Aftenblads
-standard. Drevet av Claude.
+Trend- og case-scanner for journalister. Skanner **Stavanger/Rogaland og Norge**
+for hva som rører seg – med vekt på **18–34 år** – og foreslår konkrete saker med
+vinkling og kildelenker. Bygget for en rask hverdag i felt.
 
-Journalisten trykker på én knapp i nettleseren og får:
+> Prototype (v1). Bruk treffene som **tips/leads**, ikke som fasit. Alle kilder er
+> offentlige. Ingen betalte API-er kreves.
 
-- **Et sidepanel** med hele rapporten: LIX, dramaturgi, sjanger, Vær Varsom-plakaten,
-  presseetikk, språk, fakta-sjekk, ingress, mellomtitler, 5 tittelforslag,
-  omskrivinger, kritiske feil og delkarakterer med **Publiseringsklar: JA/NEI**.
-- **Fargemarkeringer rett i teksten** for konkrete språk-, fakta- og VVP-funn,
-  med et notat når man holder musepekeren over. Klikk på et funn i panelet for å
-  hoppe til markeringen i teksten.
+## Hva den gjør (v2 – originalitets-pivot)
 
-Innlogging (brukernavn/passord) gjør at kun godkjente brukere kan bruke serveren.
+Poenget er **originale saker ingen har skrevet ennå** – ikke gjenbruk av andre
+avisers oppslag.
 
-```
-[Chrome-utvidelse]  --1) /login (brukernavn+passord)-->  [Din server (proxy)]
-   (sidepanel)      <-- token ------------------------
-                    --2) /review (tekst + token) ------>  --Claude API (nøkkel i env)--> [Anthropic]
-                    <-------- strukturert vurdering (JSON) --------------------------------
-```
+- **Datadrevne leads:** henter ferske tall fra **SSB** (åpne data) og finner notable
+  endringer for Stavanger/Rogaland vs. resten av landet – et «funn» journalisten selv
+  vinkler.
+- **Originalitetssjekk:** for hvert lead søker den i Google News (gratis) og merker det
+  🟢 **uskrevet**, 🟡 delvis dekket eller 🔴 allerede dekket. Uskrevne saker rangeres øverst.
+- **Grasrot (valgfritt):** Reddit + Google Trends gir tidlige signaler før mediene.
+- **Planlegger:** «gjør dette i uka»-liste + valgfri Google Calendar.
 
-Claude-nøkkelen ligger **kun** på serveren og forlater den aldri.
+## Kilder (gratis)
 
----
+| Kilde | Rolle | Status |
+|---|---|---|
+| **SSB åpne API** (tabell 07459 m.fl.) | Primær: datadrevne funn | ✅ |
+| **Google News RSS** | Originalitetssjekk («allerede skrevet?») | ✅ |
+| Reddit (r/stavanger, r/norge) | Grasrot-signaler | ✅ (kan blokkeres av proxy) |
+| Google Trends (Norge) | Stigende søk | ✅ (kan rate-limites) |
+| Google Calendar | Planlegger | ⚙️ valgfritt (krever egen nøkkel) |
+| Flere SSB-tabeller, politilogg, arrangement | — | 🔜 lett å utvide i `config.py` |
 
-## Del 1 – Sett opp serveren
+## Dokumentasjon
 
-Serveren er en liten Node.js-proxy. Nøkkelen din ligger allerede på serveren.
+| Fil | Hva |
+|---|---|
+| `docs/KILDER.md`, `docs/KILDEREGELEN.md` | Hvilke kilder, og regelen for hva som slipper inn |
+| `docs/SOKESYSTEMET.md` | Hvordan skannet fungerer |
+| `docs/LENKA.md` | To repoer: hvorfor speilingen finnes |
+| `docs/TESTREGELEN.md` | Hva som må være grønt |
+| **`docs/TOBIAS_FYSIKK.md`** | **Aktiv ragdoll — oppskriften. Les den før du rører `static/tobias/fysikk/`** |
 
-### 1. Installer
-
-```bash
-cd server
-npm install
-```
-
-### 2. Lag en `.env`
-
-Kopier `.env.example` til `.env` og fyll inn:
-
-```bash
-cp .env.example .env
-```
-
-- `ANTHROPIC_API_KEY` – Claude-nøkkelen (ligger allerede på serveren din).
-- `JWT_SECRET` – en lang, tilfeldig streng. Lag én slik:
-  ```bash
-  node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-  ```
-
-### 3. Lag en bruker
-
-Lag en passord-hash og legg brukeren i `server/users.json`
-(eller i `USERS`-miljøvariabelen):
+## Kom i gang
 
 ```bash
-npm run hash-passord -- "det-hemmelige-passordet"
-# -> $2a$10$....  (kopier hele linjen)
+# 1. Installer (uv anbefalt)
+uv sync
+
+# 2a. Kjør et skann i terminalen (rask sjekk)
+uv run python -m app.cli
+
+# 2b. Eller start web-dashboardet
+uv run uvicorn app.main:app --reload
+# åpne http://localhost:8000  → trykk «Skann nå»
 ```
 
-`server/users.json`:
-
-```json
-[{ "brukernavn": "mathias", "passordHash": "$2a$10$...." }]
-```
-
-(`.env` og `users.json` blir aldri committet – de står i `.gitignore`.)
-
-### 4. Start
+Uten `uv`:
 
 ```bash
-npm start
-# Redaktør-assistent kjører på port 8787 (modell: claude-opus-4-8)
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[trends]"
+uvicorn app.main:app --reload
 ```
 
-Test at den lever: åpne `http://localhost:8787/` – du skal få litt JSON.
+## 📱 Kjør som app (hosting) — så «Skann nå» + KI virker live
 
-> **Modell:** Standard er `claude-opus-4-8` (best kvalitet). Vil du ha en
-> rimeligere modell, sett `MODEL=claude-sonnet-5` i `.env`.
+For at journalisten skal kunne åpne én URL på mobilen og bruke det som et dashboard
+(med ekte skanning og KI-skrevne artikler), må appen kjøre på en server. Enklest:
 
-> **Sett den offentlig:** Utvidelsen må nå serveren over HTTPS. Kjør proxyen bak
-> HTTPS (din egen server / reverse proxy). Adressen du gir utvidelsen er
-> roten, f.eks. `https://din-server.no` – den legger selv til `/login` og `/review`.
+### Render (anbefalt – nettleser, ingen kommandolinje)
+1. Opprett gratis konto på **render.com** og koble til GitHub.
+2. **New → Web Service** → velg dette repoet.
+3. **Root Directory:** `case-radar`  ·  **Runtime:** Docker (oppdages fra `Dockerfile`).
+4. Under **Environment** legg til en secret:  `ANTHROPIC_API_KEY = sk-ant-...`
+   (nøkkel fra console.anthropic.com – uten den kjører appen i demo-modus/maler).
+5. **Create Web Service.** Etter et par minutter får du en URL – åpne den på mobilen,
+   og legg den til på Hjem-skjermen for app-følelse.
 
----
+### Fly.io (kommandolinje)
+```bash
+cd case-radar
+fly launch --dockerfile Dockerfile        # følg promptene, ikke deploy ennå
+fly secrets set ANTHROPIC_API_KEY=sk-ant-...
+fly deploy
+```
 
-## Del 2 – Installer utvidelsen i Chrome
+### Lokalt med Docker
+```bash
+cd case-radar
+docker build -t case-radar .
+docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... case-radar
+# åpne http://localhost:8000
+```
 
-1. Gå til `chrome://extensions`.
-2. Skru på **Utviklermodus** (øverst til høyre).
-3. Klikk **Last inn upakket** og velg mappen `extension/`.
-4. Klikk på verktøylinje-ikonet for å åpne **sidepanelet**.
-5. Første gang: klikk **Åpne innstillinger** og skriv inn server-adressen
-   (f.eks. `https://din-server.no`). Lagre.
+> Merk: på gratis-hosting er disken flyktig – godkjente saker nullstilles ved ny
+> deploy. For varig lagring, koble på en liten database/disk (neste steg).
+> Nøkkelen legges **kun** som secret/miljøvariabel hos hosten – aldri i koden.
 
----
+## Google Trends (valgfritt)
 
-## Del 3 – Slik bruker Mathias den
+```bash
+uv sync --extra trends      # eller: pip install ".[trends]"
+```
+Slå av med `CASE_RADAR_ENABLE_TRENDS=false` i `.env` hvis Google rate-limiter deg.
 
-1. Åpne artikkelen i systemet der han skriver.
-2. Klikk på **Redaktør-assistent**-ikonet → sidepanelet åpnes.
-3. Logg inn (første gang) med brukernavn og passord.
-4. Klikk **Sjekk artikkel**.
-   - Utvidelsen henter teksten fra skrivefeltet automatisk. Vil han sjekke bare
-     en del, kan han **markere** den delen først.
-   - Finner den ikke teksten automatisk, dukker det opp et felt der han kan
-     **lime inn** teksten.
-5. Rapporten vises i panelet, og funn markeres i teksten. Klikk et funn i panelet
-   for å hoppe til det i teksten.
+## Google Calendar (valgfritt)
 
----
+Prototypen kjører fint **uten** kalender. For å koble til:
 
-## Tilpasse markering i den ekte editoren
+1. Opprett en OAuth-klient (type **Desktop app**) i Google Cloud Console og last ned
+   `credentials.json` til prosjektmappen.
+2. `uv sync --extra calendar`
+3. Første kjøring åpner en innloggingsflyt; `token.json` lagres lokalt (read-only).
 
-Utvidelsen finner teksten robust (markering → største skrivefelt → `<article>`).
-For at fargemarkeringene skal treffe **helt nøyaktig** inne i Aftenbladets editor,
-kan det hende vi må justere hvordan teksten hentes. Send et skjermbilde eller
-«Inspiser»-HTML av skrivefeltet, så finjusterer vi `hentTekst()` i
-`extension/content.js`. Sidepanel-rapporten og «hopp til sitat» fungerer uansett.
+`credentials.json`, `token.json` og `.env` er i `.gitignore` – de committes aldri.
 
----
+## Tilpasning
 
-## Personvern
+Alt av kilder og nøkkelord ligger i [`app/config.py`](app/config.py):
+- `NEWS_FEEDS` / `SUBREDDITS` – legg til/fjern kilder
+- `STAVANGER_TERMS` – hva som teller som lokalt
+- `DEMOGRAPHIC_TOPICS` – tema og nøkkelord for 18–34
 
-Upubliserte artikler sendes til **din** server og videre til Anthropic (Claude)
-med **din** nøkkel. Ingenting lagres av utvidelsen utover innloggings-token og
-server-adressen, som ligger lokalt i nettleseren.
+## Tester
 
----
+```bash
+uv run pytest        # kjører uten nettverk (syntetiske data)
+```
 
-## Filoversikt
+## Prosjektstruktur
 
 ```
-server/                 Node.js-proxy
-  index.js              /login + /review
-  prompt.js             redaktør-prompten + JSON-skjemaet
-  hash-passord.js       lag passord-hash
-extension/              Chrome MV3-utvidelse
-  manifest.json
-  background.js         åpner sidepanelet
-  content.js            henter tekst + legger på markeringer
-  panel/                sidepanelet (innlogging + rapport)
-  options.html/js       innstillinger (server-adresse)
+app/
+  main.py            FastAPI: dashboard + /scan
+  config.py          kilder, geo- og temaord
+  collectors/        news_rss, reddit, google_trends (fail-soft)
+  scoring.py         klynging + rangering + vinkling
+  planner.py         ukeplan-forslag
+  calendar_google.py valgfri Google Calendar (read-only)
+  storage.py         SQLite (siste skann)
+templates/ static/   dashboard-UI
+tests/               scoring- og parsing-tester
 ```
+
+## Veien videre
+
+Politilogg + arrangement-kilder, SSB-tall som bakgrunn, smartere (LLM-baserte)
+vinklinger, e-post-morgenrapport, deploy, og X/TikTok når budsjett finnes.
