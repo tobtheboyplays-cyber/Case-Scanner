@@ -1,0 +1,11 @@
+.venv/
+data/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+credentials.json
+token.json
+build_mobile.py
+tests/
+.git/

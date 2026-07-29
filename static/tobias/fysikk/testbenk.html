@@ -1,0 +1,84 @@
+<!doctype html><meta charset="utf-8"><body><pre id="ut">starter…</pre>
+<script type="module">
+const ut = document.getElementById('ut');
+const linjer = [];
+const si = (s) => { linjer.push(s); ut.textContent = linjer.join('\n'); };
+try {
+  const RAPIER = await import('/static/tobias/vendor/rapier.js');
+  await RAPIER.init();
+  const { Ragdoll, FYSISK } = await import('/static/tobias/fysikk/ragdoll.js');
+  const { FYS } = await import('/static/tobias/fysikk/konfig.js');
+  /* Benken MAA steppe med samme dt som appen. Foerste utgave hardkodet 1/60
+     mens konfigurasjonen stod paa 1/120, og maalte da en ustabil variant av
+     Tobias som ingen bruker faktisk ser: stabilitetskravet kd*dt<1 brytes ved
+     60 Hz (beina har kd=105), saa dempeleddet skjot forbi null hvert steg.
+     Benken meldte «balancing» og 0.8 m/s vingling der nettleseren viste ham
+     staa i ro. En testbenk som simulerer noe annet enn appen, maaler ikke
+     appen. */
+  const DT = FYS.steg;
+  const HZ = Math.round(1 / DT);
+
+  const kjor = (r, sek) => { for (let i = 0; i < sek * HZ; i++) r._ettSteg(DT); r.tilstand = r._lesTilstand(); };
+
+  // 1. STAAR HAN?
+  let r = new Ragdoll(RAPIER, 6);
+  kjor(r, 3);
+  const com = r.massesenter();
+  si(`1 STAA      hoyde=${com.y.toFixed(3)} m  opprett=${r.opprett().toFixed(2)}  tilstand=${r.tilstand}`);
+  si(`            balansefeil=${(r.balansefeil() ?? NaN).toFixed(3)} m  fart=${r.fart().toFixed(3)}`);
+  const rad = [];
+  for (const [n, rb] of Object.entries(r.kropper)) {
+    const t = rb.translation();
+    rad.push(`${n}=${t.y.toFixed(3)}`);
+  }
+  si('   DELER:  ' + rad.join('  '));
+  si(`   stoette=${JSON.stringify(r.stoette())}`);
+
+  // 2. LITE DYTT -> vingler, men staar
+  r.dytt(1.2); kjor(r, 2.5);
+  si(`2 LITE DYTT opprett=${r.opprett().toFixed(2)}  tilstand=${r.tilstand}  hoyde=${r.massesenter().y.toFixed(3)}`);
+
+  // 3. HARDT DYTT -> faller
+  r.dytt(9.0); kjor(r, 2.0);
+  si(`3 HARDT     opprett=${r.opprett().toFixed(2)}  tilstand=${r.tilstand}  hoyde=${r.massesenter().y.toFixed(3)}`);
+
+  // 4. REISER HAN SEG?
+  kjor(r, 6);
+  si(`4 REISER    opprett=${r.opprett().toFixed(2)}  tilstand=${r.tilstand}  hoyde=${r.massesenter().y.toFixed(3)}`);
+
+  // 5. GRIP HAANDA OG LOEFT
+  r = new Ragdoll(RAPIER, 6); kjor(r, 2);
+  const h0 = r.kropper.haandH.translation();
+  r.grip('haandH', {x: h0.x, y: h0.y, z: 0});
+  for (let i = 0; i < 2*HZ; i++) { r.flyttGrep({x: h0.x, y: h0.y + i*0.006, z: 0}, i*8); r._ettSteg(DT); }
+  r.tilstand = r._lesTilstand();
+  const hh = r.kropper.haandH.translation(), tt = r.kropper.torso.translation();
+  const ff = r.kropper.fotV.translation();
+  si(`5 LOEFT     haand y=${hh.y.toFixed(2)}  torso y=${tt.y.toFixed(2)}  fot y=${ff.y.toFixed(2)}`);
+  si(`            henger under haanden: ${(hh.y > tt.y && tt.y > ff.y) ? 'JA' : 'NEI'}  tilstand=${r.tilstand}`);
+
+  // 6. KAST
+  const foer = r.massesenter().x;
+  for (let i = 0; i < 8; i++) r.flyttGrep({x: h0.x + i*0.16, y: hh.y + i*0.05, z: 0}, 2000 + i*12);
+  const v = r.slipp();
+  si(`6 KAST      slippfart=${Math.hypot(v.x, v.y).toFixed(1)} m/s`);
+  kjor(r, 1.6);
+  si(`            floey ${(r.massesenter().x - foer).toFixed(2)} m  tilstand=${r.tilstand}`);
+
+  // 7. HELT UT AV SKJERMEN
+  r = new Ragdoll(RAPIER, 6); kjor(r, 1);
+  for (const b of Object.values(r.kropper)) b.applyImpulse({x: 9*b.mass(), y: 3*b.mass(), z: 0}, true);
+  let ute = false;
+  for (let i = 0; i < 7*HZ; i++) { r._ettSteg(DT); if (r.heltUtenfor(1.2)) { ute = true; break; } }
+  si(`7 UT        forsvant helt: ${ute ? 'JA' : 'NEI'}  x=${r.massesenter().x.toFixed(1)} av 6`);
+
+  // 8. GANGE
+  r = new Ragdoll(RAPIER, 6); kjor(r, 2);
+  const x0 = r.massesenter().x;
+  r.gaaMot(x0 + 1.2);
+  kjor(r, 6);
+  si(`8 GANGE     ${x0.toFixed(2)} -> ${r.massesenter().x.toFixed(2)} m  opprett=${r.opprett().toFixed(2)}  tilstand=${r.tilstand}`);
+
+  si('FERDIG');
+} catch (e) { si('FEIL: ' + e + '\n' + (e.stack||'').slice(0,600)); }
+</script></body>

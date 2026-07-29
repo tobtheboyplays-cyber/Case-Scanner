@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Case-radar</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%A1%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/static/style.css?v={{ css_v }}" />
+</head>
+<body{{ ' class="ferskt"'|safe if ferskt }}>
+{% set s = data.summary if data else None %}
+{% set green_pct = ((s.green / s.total * 100) | round | int) if (s and s.total) else 0 %}
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">📡</span>
+    <div>
+      <h1>Case-radar</h1>
+      <p class="tagline">Saksforslag for Stavanger &amp; Norge · 20–39 år</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <div class="nav-rad">
+    {# Ikon + tekst paa brede skjermer, ikon + tall paa smale. Eieren 26.07.2026,
+       med skjermbilde: «fiks saann at dette er paa linje.»
+
+       Med full tekst er raden ~536 px bred, og en telefon er 414. Da brot den,
+       og «Skann naa» - hovedhandlingen - havnet paa egen linje under. Navnene
+       ligger i `aria-label` og `title`, saa de er ikke tapt: skjermlesere leser
+       dem, og et langt trykk viser dem. #}
+    <a class="btn-ghost" href="/kalender" title="Kalender" aria-label="Kalender">
+      <span aria-hidden="true">🗓</span><span class="nav-navn">Kalender</span></a>
+    <a class="btn-ghost" href="/publisert" title="Publisert" aria-label="Publisert{% if publisert_antall %}, {{ publisert_antall }} saker{% endif %}">
+      <span aria-hidden="true">📰</span><span class="nav-navn">Publisert</span>{% if publisert_antall %}<span class="nav-tall">{{ publisert_antall }}</span>{% endif %}</a>
+    <a class="btn-approved-link" href="/godkjente" title="Lagret" aria-label="Lagret{% if approved_count %}, {{ approved_count }} saker{% endif %}">
+      <span aria-hidden="true">📁</span><span class="nav-navn">Lagret</span>{% if approved_count %}<span class="nav-tall">{{ approved_count }}</span>{% endif %}</a>
+    {# Ett valg, én knapp. Foer laa temaene i én meny og «Skann naa» i en annen
+       knapp ved siden av, saa man kunne skanne uten aa ha sett paa temaene i det
+       hele tatt - og da var menyen bare pynt. Naa er de samme handling: aapne,
+       velg hva du leter etter, start. #}
+    <details class="tema-meny skann-meny">
+      <summary class="btn-scan tema-knapp">
+        🛰 Skann nå
+        <span class="tema-tall">{{ valgte_temaer|length if valgte_temaer else 'alle' }}</span>
+      </summary>
+      <form class="tema-boks" method="post" action="/scan" data-skann>
+        <input type="hidden" name="meny" value="1" />
+        <p class="tema-h">Hva skal skannet lete etter?</p>
+        {# Gruppert, ikke én lang liste: 24 avkryssingsbokser i strekk er en vegg
+           man ikke leser. Gruppene foelger SSBs egen inndeling, oversatt til ord
+           en journalist bruker. #}
+        {# Gruppeboksen krysser av hele gruppa. Med 25 temaer er «alt om folk»
+           ett trykk i stedet for fem. Den viser ogsaa tilstanden: helt av, helt
+           paa, eller delvis (indeterminate) - saa man ser hva som er valgt uten
+           aa telle boksene under. #}
+        {% for gruppe, navn_liste in temagrupper.items() %}
+        <label class="tema-gruppe">
+          <input type="checkbox" class="tema-gruppeboks" data-gruppe="{{ gruppe }}" />
+          <span>{{ gruppe }}</span>
+        </label>
+        <div class="tema-liste" data-gruppe="{{ gruppe }}">
+          {% for navn in navn_liste %}
+          <label class="tema-valg">
+            <input type="checkbox" name="tema" value="{{ navn }}"
+                   {{ 'checked' if (not valgte_temaer) or navn in valgte_temaer }} />
+            <span class="tema-ikon" aria-hidden="true">{{ TEMAER[navn].ikon }}</span>
+            <span class="tema-navn">{{ navn }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        {% endfor %}
+        <p class="tema-note">Temaene styrer hvilke SSB-tabeller søket leter i —
+          både med søkeord og med SSBs egne emnekoder. Befolknings- og
+          flyttetallene hentes uansett.</p>
+        <div class="tema-knapper">
+          <button type="button" class="btn-small tema-alle">Velg alle</button>
+          <button type="button" class="btn-small tema-ingen">Nullstill</button>
+        </div>
+        <button type="submit" class="btn-scan skann-start">🔍 Søk</button>
+      </form>
+    </details>
+    </div>
+    <p class="last-scan">{% if scanned_at %}Sist skannet: {{ scanned_at }}
+      {% if data and data.ai_mode %}· KI:
+        {%- if data.ai_mode == 'llm' %} på
+        {%- elif data.ai_mode == 'llm-delvis' %} delvis
+        {%- else %} AV{% endif %}{% endif %}
+      {% else %}Ikke skannet ennå{% endif %}</p>
+  </div>
+</header>
+
+{# Radaren: popper opp OEVERST i feltet naar man trykker soek, slik matchmaking
+   gjor i spill. Sida blir staaende - man mister ikke konteksten sin, og man ser
+   at det jobbes. Skjult til noe faktisk skjer. #}
+<div id="skann-radar" class="skann-radar" hidden role="status" aria-live="polite">
+  <div class="radar-flate" aria-hidden="true">
+    <span class="radar-ring"></span><span class="radar-ring r2"></span>
+    <span class="radar-arm"></span>
+    <span class="radar-blip b1"></span><span class="radar-blip b2"></span>
+    <span class="radar-blip b3"></span>
+  </div>
+  <div class="radar-tekst">
+    <p class="skann-fase">Starter skann …</p>
+    <div class="skann-spor"><div class="skann-fyll" style="width:0%"></div></div>
+    <p class="skann-siste"></p>
+  </div>
+  <p class="skann-pct"><span>0</span>&nbsp;%</p>
+  <button type="button" class="skann-lukk" hidden>Lukk</button>
+</div>
+
+{# KI-koen. Dette er IKKE en feil, og skal ikke se ut som en: skannet stopper
+   med vilje foer Groqs minuttkvote (12 000 tokens) er brukt opp, slik at det
+   aldri blir avvist midt i. Resten hentes ved neste trykk. #}
+{% if data and (data.ai_regnskap or {}).i_ko %}
+<section class="ki-ko">
+  <p class="ki-ko-h">⏳ {{ data.ai_regnskap.i_ko }} saker står i kø til neste skann</p>
+  <p class="ki-ko-b">
+    Skannet stoppet KI-en før den traff kvotetaket, så den aldri blir avvist.
+    Sakene merket <span class="ai-tag ai-ko">i kø</span> har foreløpig maler.
+    Trykk «Skann nå» igjen — de sakene som allerede har ekte vinkler koster
+    ingen kvote, så neste skann bruker hele budsjettet på køen.
+  </p>
+  <form method="post" action="/scan" data-skann>
+    <button type="submit" class="btn-small">🛰 Skann igjen for de neste</button>
+  </form>
+</section>
+{% endif %}
+
+{# Uten KI lager verktoyet vinklene fra faste maler. De er like hver gang og
+   sier ingenting om nettopp dette tallet - «Hva betyr tallet i praksis for
+   Stavanger?» er en mal, ikke en journalists vinkel. Det skal staa tydelig,
+   ikke gjemmes bak en liten «demo»-brikke. #}
+{# «llm-delvis» har ikke lenger sitt eget alarmpanel. Eieren ba om at advarselen
+   skulle bort, og etter at vinklene ble samlet i ETT kall er den langt mindre
+   aktuell - det var seks separate kall mot minuttkvoten som skapte den.
+   Saker uten ekte vinkler er fortsatt merket «i kø» eller «demo» paa selve
+   kortet, saa ingenting utgir seg for aa vaere journalistens arbeid. Vi bytter
+   et gult panel mot en merkelapp der den hoerer hjemme. #}
+{% if data and data.ai_mode and data.ai_mode not in ('llm', 'llm-delvis') %}
+<section class="ki-av">
+    <p class="ki-av-h">⚠️ KI-en er AV — vinklene under er maler, ikke journalistens</p>
+    <p class="ki-av-b">
+      {% if data.ai_mode == 'llm-feilet' %}
+        Nøkkelen finnes, men alle kall feilet:
+        <span class="ki-av-feil">{{ data.ai_feil or 'ukjent grunn — se «Kildestatus» nederst' }}</span>
+      {% elif data.ai_mode == 'av' %}
+        KI-arbeidsflyten er slått av (<code>CASE_RADAR_ENABLE_AI=false</code>).
+      {% else %}
+        Ingen KI-nøkkel er satt på serveren.
+      {% endif %}
+    </p>
+    {# ## Rådet må passe til problemet
+       27.07.2026 sto det «Nøkkelen finnes» og rett under «Sett nøkkelen på
+       serveren». Det er en blindvei: den eneste tingen han ble bedt om å gjøre
+       var allerede gjort. Nå får hvert av de tre problemene sitt eget råd. #}
+    <p class="ki-av-b">
+      Derfor ligner de tre forslagene på hverandre — malene kan bare peke på hva
+      som må undersøkes.
+      {% if data.ai_mode == 'llm-feilet' and data.ai_dogntak %}
+        <strong>Døgnkvoten hos leverandøren er brukt opp</strong> — den åpner
+        igjen om ca. {{ (data.ai_vent / 3600) | round | int }} timer. Vil du ha
+        ekte vinkler før det, trengs en nøkkel med større kvote. OpenRouter er
+        gratis og virker som reserve:
+        <code>cd ~/case-radar &amp;&amp; bash deploy.sh --ask</code>
+      {% elif data.ai_mode == 'llm-feilet' %}
+        Dette var <strong>minuttkvoten</strong>, ikke nøkkelen. Appen henter
+        vinklene selv når vinduet er ledig igjen — eller trykk «Lag vinkler» på
+        et kort med én gang. Du trenger ikke gjøre noe på serveren.
+      {% else %}
+        Ekte, ulike vinkler kommer først når journalist-agenten kjører. Sett
+        nøkkelen på serveren:
+        <code>cd ~/case-radar &amp;&amp; bash deploy.sh --ask</code>
+      {% endif %}
+    </p>
+</section>
+{% endif %}
+
+{% if not data %}
+  <section class="empty">
+    <h2>Ingen skann ennå</h2>
+    <p>Trykk «Skann nå» for å hente originale, datadrevne saksforslag fra SSB m.fl.</p>
+  </section>
+{% else %}
+
+<!-- KPI-rad -->
+
+{# «Ta denne først» sto her: en topp-6-liste med rangering og en fargestolpe
+   per sak. Eieren ba den bort 26.07.2026, og han har rett - den var en KOPI av
+   de seks øverste kortene rett under. På mobil betydde det at han måtte scrolle
+   forbi hele lista én gang for å komme til den samme lista igjen. Sorteringen
+   den beskrev er ikke borte; den ER rekkefølgen på kortene. #}
+
+
+
+
+<div class="layout">
+  <main class="maincol">
+
+    <!-- Lead-kort -->
+    <div class="filters">
+      <button class="chip active" data-filter="alle">Alle</button>
+      <button class="chip" data-filter="green">🟢 Uskrevet</button>
+      <button class="chip" data-filter="lokal">Stavanger/Rogaland</button>
+    </div>
+
+    {% for case in data.cases %}
+    {# Sveip venstre for aa rydde bort. Med 15-20 saker per skann er det raskere
+       enn aa lete etter en knapp, og det er den samme bevegelsen han allerede
+       bruker under «Lagret». Knappen nederst gjor det samme - sveip er en
+       snarvei, ikke den eneste veien. #}
+    <article class="lead swipe-kort" id="sak-{{ case.key }}"
+             data-key="{{ case.key }}"
+             data-cov="{{ case.coverage_status }}" data-geo="{{ case.geo }}">
+      <div class="swipe-merke swipe-venstre" aria-hidden="true">🗑 Fjern</div>
+      <div class="lead-num">{{ loop.index }}</div>
+      <div class="lead-body">
+        <div class="lead-head">
+          {% if case.er_ny %}<span class="ny-merke">NY</span>{% endif %}
+          {% if case.uendret %}<span class="uendret-merke"
+            title="Samme tall som forrige skann. Vises fordi ingenting hadde endret seg — ikke fordi det er nytt.">UENDRET</span>{% endif %}
+          {% if case.coverage_status == 'green' %}
+            <span class="cov cov-green"><span class="cov-ic" aria-hidden="true">◆</span>INGEN HAR SKREVET DETTE</span>
+          {% elif case.coverage_status == 'yellow' %}
+            <span class="cov cov-yellow"><span class="cov-ic" aria-hidden="true">◑</span>DELVIS DEKKET</span>
+          {% elif case.coverage_status == 'red' %}
+            <span class="cov cov-red"><span class="cov-ic" aria-hidden="true">●</span>GODT DEKKET</span>
+          {% else %}
+            <span class="cov cov-unk"><span class="cov-ic" aria-hidden="true">○</span>DEKNING UKJENT</span>
+          {% endif %}
+          {% if case.data_source %}
+            {% if case.data_url %}
+              <a class="src-ref" href="{{ case.data_url }}" target="_blank" rel="noopener">{{ case.data_source|kortkilde }} ↗</a>
+            {% else %}
+              <span class="src-ref">{{ case.data_source|kortkilde }}</span>
+            {% endif %}
+          {% endif %}
+        </div>
+
+        {# Tallet er valgfritt. Stortinget har ingen maalbar stoerrelse - bare
+           en henvisning («Dokument 12:9 (2023-2024)») - og den la seg i
+           tall-feltet paa 30 px og brakk mobilvisningen. Naa staar den i den
+           lille graa linja, og kortet tegnes uten det store tallet i stedet
+           for at hele blokka forsvinner. #}
+        {% if case.metric_value or case.metric_period %}
+        <div class="metric">
+          {% if case.metric_value %}
+          <span class="metric-v cov-text-{{ case.coverage_status }}">{{ case.metric_value }}</span>
+          {% endif %}
+          <span class="metric-cmp">{{ case.metric_period }}</span>
+          {# Sparkline: et FORM-signal ved siden av tallet som allerede staar der
+             med full presisjon. Ingen akser og ingen tall paa linja — tegner vi
+             et diagram, later vi som om tre punkter er en analyse. #}
+          {% if case.trend and case.trend.punkter|length > 2 %}
+          <span class="gnist trend-{{ case.trend.retning }}"
+                title="{% for p in case.trend.punkter %}{{ p[0] }}: {{ p[1] }}{% if not loop.last %} · {% endif %}{% endfor %}">
+            <svg viewBox="0 0 96 24" width="96" height="24" aria-hidden="true"
+                 preserveAspectRatio="none">
+              <polyline points="{{ case.trend.punkter|sti }}" fill="none"
+                        stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          {% endif %}
+        </div>
+        {% if case.trend and case.trend.tekst %}
+        <p class="trend-tekst trend-{{ case.trend.retning }}">
+          <span aria-hidden="true">{{ '↗' if case.trend.retning == 'opp' else '↘' }}</span>
+          {{ case.trend.tekst }}
+          <span class="trend-kilde">{{ case.trend.punkter[0][0] }}–{{ case.trend.punkter[-1][0] }}</span>
+        </p>
+        {% endif %}
+        {% endif %}
+
+        {# Oppfoelger: Aftenbladet eier premisset, bildene og kildene fra sist.
+           «Hva har skjedd siden?» er en ferdig bestilling, ikke et minus. #}
+        {% if case.oppfolger %}
+        <a class="oppfolger" href="{{ case.oppfolger.url }}" target="_blank" rel="noopener">
+          <span class="oppfolger-merke">🔁 OPPFØLGER</span>
+          <span class="oppfolger-tekst">Aftenbladet skrev
+            «{{ case.oppfolger.title }}» {{ case.oppfolger.date }} —
+            tallet er nytt, saken er kjent ↗</span>
+        </a>
+        {% endif %}
+
+        <h3 class="lead-title">{{ case.title }}</h3>
+        <p class="lead-desc">{{ case.finding or case.why }}</p>
+
+        <div class="lead-tags">
+          {% if case.geo == 'lokal' %}<span class="tag tag-loc">📍 Stavanger/Rogaland</span>{% endif %}
+          {% for tp in case.topics[:2] %}<span class="tag">{{ tp }}</span>{% endfor %}
+        </div>
+
+        {# Vinklene laa foer inne i «har redaktoeren vurdert saken?». Bare de 8
+           hoyest rangerte gaar til redaktoeren, saa resten viste ingen vinkler i
+           det hele tatt - det saa ut som en feil. Naa vises vinklene naar de
+           finnes, og staar det ingen, sier vi hvorfor. #}
+        <div class="ai-block">
+          {# Grunnlagssjekken stopper ikke lenger vinklene - den advarer. Foer sto
+             det «⛔ For tynt grunnlag til å skrive», og da fikk saken verken
+             titler eller utkastknapp. Nå får du titlene, men vet hva som mangler
+             før du ringer noen. #}
+          {% if case.editor and case.editor.gate_mangler %}
+          <p class="gate-block">⚠ Tynt grunnlag — sjekk dette selv først:
+            {{ case.editor.gate_mangler|join(' · ') }}</p>
+          {% endif %}
+          {# Her sto det bare «Ingen vinkler laget for denne ennå». Sant, men
+             ubrukelig: Groqs minuttak rekker TRE saker per skann, og et skann
+             finner atten. Femten kort sto uten en eneste tittel og uten vei
+             videre. Taket gjelder per MINUTT - ingenting er i veien for ett
+             kall til når han faktisk peker på en sak. #}
+          {% if not case.angles %}
+          <form method="post" action="/leads/{{ case.key }}/vinkler"
+                class="be-om-vinkler" data-vinkler data-key="{{ case.key }}">
+            <button class="btn-vinkler" type="submit">💡 Lag vinkler for denne</button>
+            <span class="vinkler-hjelp">Journalisten rekker tre saker per skann —
+              trykk her, så tar han denne nå.</span>
+          </form>
+          {% endif %}
+          {% if case.angles %}
+          <div class="angles">
+            <p class="angles-h">{{ case.angles|length }} forslag til tittel — hver bygger på
+              sitt eget faktum. Velg én og be om utkast, så ser du hvordan saken
+              kunne sett ut.</p>
+            {% for a in case.angles %}
+            {# Etter «Be om utkast» kommer vi tilbake hit med ?apen=<key>|<nr>.
+               Uten den var utkastet skrevet, men slaatt sammen og usynlig. #}
+            <details class="angle" id="vinkel-{{ case.key }}-{{ loop.index0 }}"
+                     {% if apen == case.key ~ '|' ~ loop.index0 %}open{% endif %}>
+              {# Forslagstittelen er det journalisten skal LESE og velge ut fra.
+                 Vinkeltypen («Konsekvens») er bare en merkelapp paa hvordan den
+                 er vinklet - den skal ikke staa over overskriften og se ut som
+                 om det er den man velger. #}
+              <summary>
+                <span class="angle-nr" aria-hidden="true">{{ loop.index }}</span>
+                <span class="angle-txt">
+                  <span class="angle-title">{{ a.title }}</span>
+                  {% if a.headline_fact %}
+                  <span class="angle-fact">📌 {{ a.headline_fact }}</span>
+                  {% endif %}
+                </span>
+                <span class="angle-meta">
+                  <span class="angle-kind">{{ INNGANG_IKON.get(a.vinkel or a.inngang, '📄') }}
+                    {{ VINKEL_NAVN.get(a.vinkel or a.inngang, 'Vinkel') }}</span>
+                  {% if a.styrke %}<span class="angle-strength">{{ a.styrke }}</span>{% endif %}
+                  {% if a.mode == 'mal' %}<span class="ai-tag">demo</span>
+                  {% elif a.mode == 'ko' %}<span class="ai-tag ai-ko">i kø</span>{% endif %}
+                </span>
+              </summary>
+
+              {% if a.kort %}<p class="draft-ingress">{{ a.kort }}</p>{% endif %}
+              {# Salgspitchen er journalistens argument for hvorfor akkurat denne
+                 er verdt en dag. Uten den er valget mellom tre titler bare en
+                 smakssak. #}
+              {% if a.pitch %}<p class="angle-pitch">🎤 {{ a.pitch }}</p>{% endif %}
+              {% if a.mangler %}<p class="angle-risk">🔍 Mangler data: {{ a.mangler }}</p>{% endif %}
+
+              {% if a.body %}
+                {% if a.ingress %}<p class="draft-ingress">{{ a.ingress }}</p>{% endif %}
+                <div class="draft-body">{{ a.body }}</div>
+
+                {% if a.usporbare_tall %}
+                <p class="untraced">⚠️ Disse tallene finnes ikke i kildegrunnlaget og må
+                  sjekkes manuelt: <strong>{{ a.usporbare_tall|join(', ') }}</strong></p>
+                {% endif %}
+              {% else %}
+                <form method="post" action="/leads/{{ case.key }}/utkast" class="ask-draft"
+                      data-utkast data-key="{{ case.key }}" data-vinkel="{{ loop.index0 }}">
+                  <input type="hidden" name="vinkel" value="{{ loop.index0 }}" />
+                  <button class="btn-ask" type="submit">✍️ Lag utkast</button>
+                  <span class="ask-note">Artikkelen skrives først når du ber om den — sparer kvote.
+                    Tar 10–30 sekunder.</span>
+                </form>
+              {% endif %}
+
+              {% if a.risiko %}<p class="angle-risk">⚠ {{ a.risiko }}</p>{% endif %}
+
+              {% if a.checks %}
+              <p class="draft-checks-h">Må sjekkes før publisering</p>
+              <ul class="draft-checks">{% for chk in a.checks %}<li>{{ chk }}</li>{% endfor %}</ul>
+              {% endif %}
+
+              {% if a.kilder %}
+              <p class="draft-checks-h">Kilder</p>
+              <ul class="src-list">
+                {% for k in a.kilder %}
+                <li>
+                  {% if k.url %}<a class="kilde" href="{{ k.url }}" target="_blank" rel="noopener">{{ k.navn }}</a>
+                  {% else %}<span>{{ k.navn }}</span>{% endif %}
+                  {% if k.hva %}<span class="muted"> — {{ k.hva }}</span>{% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+
+              {% if a.image_ideas %}
+              <p class="draft-checks-h">Bildeforslag</p>
+              <ul class="src-list">
+                {% for img in a.image_ideas %}
+                <li><strong>{{ img.motiv }}</strong>{% if img.bildetekst %}<span class="muted"> — {{ img.bildetekst }}</span>{% endif %}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+
+              {% if a.body %}
+              <details class="approve-pop">
+                <summary class="btn-approve as-summary">Godkjenn denne vinkelen →</summary>
+                <form class="angle-approve" method="post" action="/leads/{{ case.key }}/approve">
+                  <input type="hidden" name="vinkel" value="{{ loop.index0 }}" />
+                  <p class="approve-h">Når skal du jobbe med den?</p>
+                  <div class="date-row">
+                    <label class="fld">
+                      <span>Startdag</span>
+                      <input type="date" name="start_date" required />
+                    </label>
+                    <span class="date-arrow" aria-hidden="true">→</span>
+                    <label class="fld">
+                      <span>Deadline</span>
+                      <input type="date" name="deadline" required />
+                    </label>
+                  </div>
+                  <button class="btn-approve" type="submit">Lagre saken</button>
+                  <p class="approve-note">Saken havner i Godkjente saker og vises i kalenderen fra start til deadline.</p>
+                </form>
+              </details>
+              {% endif %}
+            </details>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {# Rekkefolgen eieren ba om 26.07.2026: «Husk naa foerst faktaen eller
+             tallene du har funnet. Saa 2 forslags titler, saa velger han en, spor
+             om utkast fra den tittelen slik han ser hvordan det kunne sett ut.»
+             Redaktoerdommen og sjekklista er BAKGRUNN - de sto foer mellom tallet
+             og titlene og dyttet det viktigste nedover i kortet. #}
+          <details class="ai-bakgrunn">
+            <summary>Bakgrunn: redaktørens vurdering og hva du bør sjekke</summary>
+            {% if case.editor %}
+            <p class="ai-dom">🧭 KI-redaktør:
+              {{ '✅ Anbefaler' if case.editor.is_story else '🤨 Skeptisk' }}
+              {% if case.editor.confidence %}({{ case.editor.confidence }}%){% endif %}
+              {% if case.ai_mode == 'mal' %}<span class="ai-tag">demo</span>
+              {% elif case.ai_mode == 'ko' %}<span class="ai-tag ai-ko">i kø</span>{% endif %}</p>
+            <p><strong>{{ case.editor.headline }}</strong></p>
+            <p class="ai-angle">{{ case.editor.angle }}</p>
+            <p class="ai-verdict">💬 {{ case.editor.verdict }}</p>
+            {% if case.editor.leserverdi %}
+            <p class="ai-leserverdi">🎯 {{ case.editor.leserverdi }}</p>
+            {% endif %}
+            {% if case.editor.forbehold %}<p class="angle-risk">⚠ {{ case.editor.forbehold }}</p>{% endif %}
+            {% endif %}
+            <p class="vinkel-h">Hva du bør sjekke</p>
+            <p class="vinkel-t">{{ case.angle }}</p>
+            {% if not case.data_url and case.sources %}
+              <a class="kilde" href="{{ case.sources[0].url }}" target="_blank" rel="noopener">Kilde: {{ case.sources[0].source }} ↗</a>
+            {% endif %}
+            {% if case.coverage_examples %}
+              <p class="alt-dekning">Skrevet av {{ case.coverage_examples[0].source }}
+                ({{ case.coverage_examples[0].date }})</p>
+            {% endif %}
+          </details>
+
+          <div class="ai-actions">
+            {% set dec = decisions.get(case.key) %}
+            {% if dec == 'approved' %}
+              <span class="pill pill-green">✓ Godkjent</span>
+            {% elif dec == 'rejected' %}
+              <span class="pill pill-grey">Forkastet</span>
+            {% endif %}
+            {% if not case.angles %}
+            <form method="post" action="/leads/{{ case.key }}/approve">
+              <button class="btn-approve" type="submit">Godkjenn sak</button>
+            </form>
+            {% endif %}
+            <form method="post" action="/leads/{{ case.key }}/reject">
+              <button class="btn-reject" type="submit">Forkast</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+
+    <p class="see-all">Viser {{ data.cases|length }} leads fra siste skann</p>
+  </main>
+
+  {# Planlegger-panelet sto her: «Kalender: ikke konfigurert», en oppfordring
+     om å legge credentials.json i mappa, og «Forslag til uka» der hvert forslag
+     var den samme malsetningen med ulik tittel foran. Eieren 26.07.2026, med
+     skjermbilde: «dropp hele greia her.»
+
+     Han har rett. Google Calendar er ikke koblet til og kommer ikke til å bli
+     det, så halve panelet var en instruksjon til en utvikler. Den andre halvdelen
+     var maler som ga seg ut for å være råd. Planleggingen som FAKTISK virker -
+     godkjenn sak, sett dato, se den i kalenderen - er urørt. #}
+  <aside class="sidebar">
+    <section class="panel status">
+      <details>
+        <summary>Kildestatus (siste skann)</summary>
+        <ul>
+          {% for line in data.status %}
+          <li class="{{ 'err' if '[FEIL]' in line else '' }}">{{ line }}</li>
+          {% endfor %}
+        </ul>
+      </details>
+    </section>
+  </aside>
+</div>
+<!-- Tallene sist: de forteller hvordan skannet gikk, men de er ikke noe
+     journalisten HANDLER paa. Handlingen staar oeverst. -->
+<section class="kpis">
+  <div class="kpi">
+    <div class="kpi-top"><span class="kpi-ic">📄</span><span class="kpi-label">Leads totalt</span></div>
+    <div class="kpi-num">{{ s.total }}</div>
+    <div class="kpi-sub">{% if data.antall_nye %}{{ data.antall_nye }} nye siden sist{% else %}{{ s.data }} datadrevne · {{ s.grassroots }} grasrot{% endif %}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-top"><span class="dot dot-green"></span><span class="kpi-label">Uskrevet</span></div>
+    <div class="kpi-num green">{{ s.green }}</div>
+    <div class="kpi-sub">{{ green_pct }} % av totalen</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-top"><span class="kpi-ic">📊</span><span class="kpi-label">SSB-datafunn</span></div>
+    <div class="kpi-num">{{ s.data }}</div>
+    <div class="kpi-sub">Åpne offentlige data</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-top"><span class="kpi-ic">🕐</span><span class="kpi-label">Sist skannet</span></div>
+    <div class="kpi-num small">{{ scanned_at or "—" }}</div>
+    <div class="kpi-sub">Kun offentlige kilder</div>
+  </div>
+</section>
+
+{% if not data.cases %}
+{# Skannet kjorte, men ingenting kom gjennom. Foer sto det BOKSTAVELIG TALT
+   ingenting her - malen hoppet over hele hoveddelen, og journalisten satt igjen
+   med en tom side han ikke kunne skille fra en oedelagt app.
+
+   Et tomt skann er et lovlig svar (smalt tema + ingen ferske tall), men det maa
+   SI det, og det maa si hva han gjor naa. Statuslinjene fra skannet staar rett
+   under, saa han ser hvilke kilder som faktisk svarte. #}
+<section class="page">
+  <section class="panel empty-skann">
+    <div class="panel-head"><h2>Skannet fant ingen nye saker</h2></div>
+    <p class="empty-b">
+      Kildene svarte, men ingenting var nytt siden forrige skann — og ingen
+      gamle funn var igjen å vise. Det betyr som regel én av to ting:
+    </p>
+    <ul class="empty-liste">
+      <li><strong>Temavalget er for smalt.</strong> Færre temaer avhuket = færre
+        SSB-tabeller å lete i. Huk av flere, eller fjern alle for å lete bredt.</li>
+      <li><strong>SSB har ikke publisert nye tall.</strong> De kommer på faste
+        datoer — se «Kommer snart» for hva som slippes de nærmeste dagene.</li>
+    </ul>
+    <p class="empty-b">
+      {# Knappen aapner den samme temamenyen som staar oeverst - det finnes ingen
+         egen /temaer-side, valget og skanneknappen er samme handling. #}
+      <button class="btn-scan" type="button" data-apne-temaer>Velg flere temaer</button>
+      <a class="btn-ghost" href="/kalender">Se hva som kommer</a>
+    </p>
+    {# Uten denne er «ingen saker» uetterrettelig: han kan ikke se om SSB svarte
+       og ikke hadde noe nytt, eller om kilden var nede. #}
+    <div class="status">
+      <details>
+        <summary>Kildestatus (siste skann)</summary>
+        <ul>
+          {% for line in data.status %}
+          <li class="{{ 'err' if '[FEIL]' in line else '' }}">{{ line }}</li>
+          {% endfor %}
+        </ul>
+      </details>
+    </div>
+  </section>
+</section>
+{% endif %}{# slutt: tom-skjerm #}
+
+{% endif %}
+
+{# «Kommer snart» flyttet hit fra toppen. Eieren 26.07.2026: «sett Kommer snart
+   nederst paa siden paa startsiden.»
+
+   Riktig prioritering: panelet svarer paa «hva kommer», og det er nyttig - men
+   det som skal avgjore hva han gjor NAA er saksforslagene. Sto det oeverst,
+   maatte han scrolle forbi femti konkurser og SSB-datoer for aa komme til
+   lista han faktisk aapnet appen for. #}
+<section class="page" style="padding-bottom:0">
+{% if faner %}
+  {# Panelet blandet to helt ulike ting under én overskrift: konkurser som HAR
+     skjedd, og SSB-tall som IKKE er sluppet. 52 rader der man måtte lese hver
+     enkelt for å vite hva slags sak det var.
+
+     Nå er det én fane per tema, hver med sin egen farge og sitt ikon — og en
+     prikk over fanen når det har kommet noe ferskt der. Fargen står aldri
+     alene: ikon og navn sier det samme.
+
+     Fanebyttet er ren CSS (skjulte radioknapper), så det virker uten JS og
+     overlever en refresh uten å måtte lagre noe. #}
+  {# Er ideene den ENESTE fanen — typisk foer dagens skann har kjort — ville
+     overskriften «Kommer snart / hva som har skjedd i naeringslivet» loeyet om
+     hva som faktisk staar under den. Da sier den hva den viser. #}
+  {% set bare_ideer = faner|map(attribute='slug')|list == ['ideer'] %}
+  <details class="panel forsprang" open>
+    <summary>
+      <h2>{{ '💡 Ideer til Tobias' if bare_ideer else '⏳ Kommer snart' }}</h2>
+      <span class="panel-sub">{% if bare_ideer %}Ideene Mathias har sendt inn.{% else %}Hva som har skjedd i næringslivet, og hvilke tall som slippes.{% endif %}</span>
+    </summary>
+
+    <div class="temafaner">
+      {# Radioknappen staar rett FORAN innholdet sitt, ikke inne i faneraden.
+         Det er hele trikset: da er de sosken, og `:checked + .fane-innhold`
+         treffer. Ligger radioen inni raden, er innholdet en onkel - og ingen
+         CSS-kombinator naar dit. Det var nettopp den feilen nettlesertesten
+         fanget: fanene fantes, men ingen av dem viste noe. #}
+      {# Pilene: uten dem er det ingenting som roeper at det ligger flere faner
+         utenfor skjermkanten. Eieren 26.07.2026, med skjermbilde: «lag en pil
+         til hoyre eller venstre slik det er tydelig at det er fler faner.»
+
+         De er KNAPPER, ikke pynt - et trykk ruller raden et stykke. `hidden`
+         styres av JS ut fra hvor langt det faktisk er scrollet, saa en pil aldri
+         peker mot ingenting. Uten JS staar raden som foer og kan dras med
+         fingeren; pilene er en snarvei, ikke den eneste veien. #}
+      <div class="fane-boks">
+      <button class="fane-pil fane-pil-v" type="button" hidden
+              aria-label="Vis faner til venstre">‹</button>
+      <button class="fane-pil fane-pil-h" type="button" hidden
+              aria-label="Vis flere faner">›</button>
+      <div class="fane-rad" role="tablist">
+        {% for f in faner %}
+        <label class="fane fane-{{ f.farge }}" for="fane-{{ f.slug }}">
+          <span class="fane-ikon" aria-hidden="true">{{ f.ikon }}</span>
+          <span class="fane-navn">{{ f.navn }}</span>
+          <span class="fane-tall">{{ f.antall }}</span>
+          {% if f.nytt %}<span class="fane-prikk" title="{{ f.nytt }} ferske">{{ f.nytt }}</span>{% endif %}
+        </label>
+        {% endfor %}
+      </div>
+      </div>
+
+      {% for f in faner %}
+      <input type="radio" name="fane" id="fane-{{ f.slug }}" class="fane-radio"
+             {{ 'checked' if loop.first }} />
+      <div class="fane-innhold fane-{{ f.farge }}" id="innhold-{{ f.slug }}">
+        {% for e in f.elementer %}
+          {% if e.slag == 'hendelse' %}
+          <div class="hend{{ ' hend-fersk' if e.fersk }}">
+            <span class="hend-ikon" aria-hidden="true">{{ f.ikon }}</span>
+            <div class="hend-mid">
+              <a class="hend-navn" href="{{ e.lenke }}" target="_blank" rel="noopener">{{ e.navn }}</a>
+              <div class="hend-meta">
+                <span class="hend-type hend-{{ e.type }}">{{ {'konkurs':'Konkurs','avvikling':'Under avvikling','nytt':'Nytt foretak'}[e.type] }}</span>
+                <span>{{ e.kommune }}</span>
+                {% if e.publikum %}<span class="tag">{{ e.publikum }}</span>{% endif %}
+                {% if e.ansatte %}<span>{{ e.ansatte }} ansatte</span>{% endif %}
+                <span>{{ e.dato }}</span>
+              </div>
+              {% if e.bransje %}<p class="hend-bransje">{{ e.bransje }}</p>{% endif %}
+              {# Regnskapstallet er det som gjor en konkurs til en sak i stedet
+                 for et navn. «Gikk konkurs» er en notis; «omsatte for 4,1 mill
+                 og gikk med underskudd aaret for» er noe man kan ringe paa. #}
+              {% if e.regnskap %}
+              <p class="hend-tall">
+                {% if e.regnskap.omsetning is not none %}
+                  Omsetning {{ '{:,.0f}'.format(e.regnskap.omsetning)|replace(',', ' ') }} kr
+                {% endif %}
+                {% if e.regnskap.resultat is not none %}
+                  · <span class="{{ 'tall-minus' if e.regnskap.resultat < 0 else 'tall-pluss' }}">resultat
+                  {{ '{:,.0f}'.format(e.regnskap.resultat)|replace(',', ' ') }} kr</span>
+                {% endif %}
+                <span class="hend-aar">({{ e.regnskap.aar }})</span>
+              </p>
+              {% endif %}
+            </div>
+          </div>
+          {% elif e.slag == 'ide' %}
+          {# Ideene fra Mathias. Ingen lenke, ingen metadata - bare det han skrev
+             og naar. Sletteknappen er Tobias' «lest og notert»: naar ideen er
+             tatt, forsvinner den, og prikken paa fanen med den. #}
+          <div class="ide{{ ' ide-fersk' if e.fersk }}">
+            <span class="ide-ikon" aria-hidden="true">💡</span>
+            <div class="ide-mid">
+              <p class="ide-tekst">{{ e.tekst }}</p>
+              <div class="ide-meta"><span>{{ e.lagt_inn[:16]|replace('T', ' kl. ') }}</span></div>
+            </div>
+            <form method="post" action="/ideer/{{ e.ide_id }}/slett" class="ide-slett">
+              <input type="hidden" name="tilbake" value="/" />
+              <button type="submit" class="ide-slett-knapp" title="Fjern ideen"
+                      aria-label="Fjern ideen">×</button>
+            </form>
+          </div>
+          {% else %}
+          <div class="komm{{ ' komm-fersk' if e.fersk }}">
+            <div class="komm-when">{{ e.dager_til }}<span>dager</span></div>
+            <div class="komm-mid">
+              <a class="komm-title" href="{{ e.lenke }}" target="_blank" rel="noopener">{{ e.tittel }}</a>
+              <div class="komm-meta">
+                {% for c in e.kontakter[:1] %}
+                  <span class="komm-contact">📞 {{ c.navn }}
+                    {% if c.telefon %}<a href="tel:{{ c.telefon }}">{{ c.telefon }}</a>{% endif %}
+                  </span>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
+        {% if f.antall > f.elementer|length %}
+        <p class="komm-note">Viser {{ f.elementer|length }} av {{ f.antall }} — de ferskeste først.</p>
+        {% endif %}
+        {% if f.slug in ('konkurser', 'nyapninger') %}
+        <p class="komm-note">Kilde: Brønnøysundregistrene. Et registrert foretak er
+          ikke det samme som en åpen dør — ring og sjekk før du skriver.</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+{% endif %}
+</section>
+
+{# Ideer til Tobias. Eieren 26.07.2026: «Legg det helt nederst. Er kommentar felt
+   saa staar det ideer for Tobias over. Saa kan han skrive det, trykker send. Og
+   den blir lagret paa en av fanene der det staar ideer til Tobias.»
+
+   Den staar UTENFOR skann-blokka: en idé kommer like gjerne naar skannet var
+   tomt - da er det ofte nettopp DA han har en. Og den staar sist, som bedt om;
+   feltet skal ikke konkurrere med sakene om oppmerksomheten.
+
+   Ingen JS: en vanlig POST med redirect. Da virker den ogsaa hvis noe annet paa
+   sida har kraesjet, og teksten gaar aldri tapt i en feilet fetch. #}
+<section class="page">
+  <form class="panel ide-boks" method="post" action="/ideer" id="ny-ide">
+    <div class="panel-head">
+      <h2>💡 Ideer for Tobias</h2>
+      <span class="panel-sub">Noe som mangler, noe som irriterer, en sak radaren
+        burde funnet? Skriv det her — det havner rett i fanen hans.</span>
+    </div>
+    <input type="hidden" name="tilbake" value="/" />
+    <textarea name="tekst" class="ide-felt" rows="3" maxlength="2000"
+              placeholder="F.eks.: kan den sjekke byggesaker i Stavanger kommune?"
+              aria-label="Din idé til Tobias"></textarea>
+    <div class="ide-send-rad">
+      {% if request.query_params.get('sendt') %}
+      <span class="ide-kvittering" role="status">✓ Sendt — den ligger i fanen «Ideer til Tobias».</span>
+      {% elif request.query_params.get('tomt') %}
+      <span class="ide-tomt" role="status">Skriv noe først.</span>
+      {% else %}
+      <span class="ide-hint">Tobias ser den neste gang han er innom.</span>
+      {% endif %}
+      <button type="submit" class="btn-send">Send</button>
+    </div>
+  </form>
+</section>
+
+{# Bekreftelse for sletting. Eieren ba om «sikker?»-popup MED en «ikke vis
+   dette igjen»-boks - han vet at han blir lei den etter tjuende sak. Valget
+   lagres lokalt i nettleseren, ikke paa serveren: det er en preferanse for
+   HANS telefon, ikke en innstilling verktoyet skal huske for alle. #}
+{# Pop-in ved siden av skjermen. Vises ÉN gang per skann - nøkkelen er
+   skanntidspunktet, så en refresh ikke gjentar beskjeden han allerede har lest.
+   `role="status"` gjør at skjermlesere leser den uten å avbryte. #}
+{% if data and data.varsel and data.varsel.tittel %}
+{# `viktig` = beskjeden svipper IKKE ut av seg selv, og faar en OK-knapp.
+   Eieren 26.07.2026: «legg til tydelig naar en scan kommer tom ... og at du maa
+   bytte tema. Du kan legge til en 'trykk ok' paa den popuppen.»
+
+   Et tomt skann er det ene utfallet der beskjeden er en HANDLING, ikke en
+   opplysning. Fem sekunder er nok til aa gaa glipp av den, og da staar han
+   igjen med en tom side uten aa vite hvorfor. `role="alertdialog"` gjor at
+   skjermlesere leser den med én gang i stedet for aa vente paa en pause. #}
+<div class="varsel{{ ' varsel-viktig' if data.varsel.viktig }}" id="varsel"
+     role="{{ 'alertdialog' if data.varsel.viktig else 'status' }}"
+     aria-live="{{ 'assertive' if data.varsel.viktig else 'polite' }}"
+     data-skann="{{ data.created_at }}"
+     {% if data.varsel.viktig %}data-viktig="1"{% endif %} hidden>
+  <span class="varsel-ikon" aria-hidden="true">{{ '🔍' if not data.varsel.viktig else '🫙' }}</span>
+  <div class="varsel-mid">
+    <p class="varsel-tittel">{{ data.varsel.tittel }}</p>
+    <p class="varsel-tekst">{{ data.varsel.tekst }}</p>
+    {% if data.varsel.viktig %}
+    <div class="varsel-knapper">
+      {% if data.varsel.handling == 'temaer' %}
+      <button class="btn-small varsel-tema" type="button" data-apne-temaer>Bytt tema</button>
+      {% endif %}
+      <button class="btn-small varsel-ok" type="button">OK</button>
+    </div>
+    {% endif %}
+  </div>
+  <button class="varsel-lukk" type="button" aria-label="Lukk">×</button>
+  <span class="varsel-tid" aria-hidden="true"></span>
+</div>
+{% endif %}
+
+<p id="loft-hint" class="loft-hint" hidden role="status">
+  Flytt opp eller ned for å endre rekkefølgen · dra til venstre for å fjerne
+</p>
+<div id="fjern-dialog" class="fjern-dialog" hidden role="dialog" aria-modal="true"
+     aria-labelledby="fjern-h">
+  <div class="fjern-boks">
+    <p id="fjern-h" class="fjern-h">Fjerne denne saken?</p>
+    <p class="fjern-tittel"></p>
+    <p class="fjern-b">Den forsvinner fra radaren og kommer ikke tilbake ved
+      neste skann.</p>
+    <label class="fjern-huk">
+      <input type="checkbox" id="fjern-ikke-spor" />
+      <span>Ikke spør meg igjen</span>
+    </label>
+    <div class="fjern-knapper">
+      <button type="button" class="btn-small fjern-avbryt">Avbryt</button>
+      <button type="button" class="btn-small fjern-ja">Fjern</button>
+    </div>
+  </div>
+</div>
+
+<footer class="foot">
+  <span>ⓘ Case-radar henter og analyserer åpne data fra SSB og andre offentlige kilder.</span>
+  {# Byggmerket er ikke pynt: det er det eneste stedet man kan SE hvilken kode
+   som kjorer. «Føler ikke updates kommer igjennom» var umulig å svare på
+   uten det. #}
+  <span class="foot-right">Case-radar v{{ version }} <span class="bygg-id" title="Hvilken kode som kjører nå">{{ bygg }}</span> · bruk treff som tips, ikke fasit</span>
+</footer>
+
+<!-- Skanneskjerm. Et skann tar 40-60 sekunder; foer dette sto journalisten og
+     saa paa den samme siden uten et eneste tegn paa at noe skjedde. -->
+{# Radaren staar IKKE lenger som en helskjerm-overlay over sida. Den popper opp
+   oeverst i feltet - som matchmaking i et spill - saa journalisten beholder
+   konteksten sin og ser at det jobbes, i stedet for at alt forsvinner bak en
+   svart skjerm. Selve elementet er flyttet inn i `.page` av malen under. #}
+
+<!-- Framdrift for utkast. Ligger nede til venstre og er skjult til noe faktisk skjer. -->
+<div id="framdrift" class="framdrift" hidden role="status" aria-live="polite">
+  <div class="fd-topp">
+    <span class="fd-tekst">Starter …</span>
+    <span class="fd-pct">0&nbsp;%</span>
+  </div>
+  <div class="fd-spor"><div class="fd-fyll" style="width:0%"></div></div>
+  <p class="fd-hint">Prosenten er et anslag — teksten over sier hva som skjer nå.</p>
+</div>
+
+<script>
+  /* «Lag utkast» tar 10-30 sekunder fordi en modell skriver artikkelen.
+     Foer dette blokkerte POST-en hele tiden uten et eneste tegn paa skjermen,
+     og det saa ut som knappen var oedelagt. Naa starter vi jobben, viser
+     framdrift, og aapner vinkelen naar teksten er der. */
+  (function () {
+    var boks = document.getElementById('framdrift');
+    var tekst = boks.querySelector('.fd-tekst');
+    var pctEl = boks.querySelector('.fd-pct');
+    var fyll = boks.querySelector('.fd-fyll');
+
+    function vis(t, pct, feil) {
+      boks.hidden = false;
+      boks.classList.toggle('fd-feil', !!feil);
+      tekst.textContent = t;
+      pctEl.textContent = Math.round(pct) + ' %';
+      fyll.style.width = Math.max(2, Math.min(100, pct)) + '%';
+    }
+
+    document.querySelectorAll('form[data-utkast]').forEach(function (form) {
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var knapp = form.querySelector('button');
+        knapp.disabled = true;
+        knapp.textContent = '✍️ Skriver …';
+        vis('Starter …', 2, false);
+
+        var data = new FormData(form);
+        data.append('js', '1');
+
+        fetch(form.action, { method: 'POST', body: data })
+          .then(function (r) { return r.json(); })
+          .then(function (svar) {
+            if (!svar.jobb) { throw new Error('Fikk ingen jobb tilbake'); }
+            poll(svar.jobb, form, knapp);
+          })
+          .catch(function (e) {
+            vis('Klarte ikke å starte: ' + e.message, 100, true);
+            knapp.disabled = false;
+            knapp.textContent = '✍️ Prøv igjen';
+          });
+      });
+    });
+
+    /* «Lag vinkler» bruker SAMME framdriftspanel som utkast. Eieren 26.07.2026:
+       «legg til en progress bar slik folk vet at det funker.»
+
+       Den er viktigere her enn for utkast: kallet kan bli staaende og VENTE paa
+       Groqs minuttvindu i opptil ett minutt (se llm.TAALMODIG_VENT). Uten en
+       linje som beveger seg ser det ut som ingenting skjer - og forrige gang det
+       skjedde, fikk han «RuntimeError ... kvotetak (429)» i stedet. */
+    document.querySelectorAll('form[data-vinkler]').forEach(function (form) {
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var knapp = form.querySelector('button');
+        knapp.disabled = true;
+        knapp.textContent = '💡 Journalisten tenker …';
+        vis('Starter …', 2, false);
+
+        var data = new FormData();
+        data.append('js', '1');
+
+        fetch(form.action, { method: 'POST', body: data })
+          .then(function (r) { return r.json(); })
+          .then(function (svar) {
+            if (!svar.jobb) { throw new Error('Fikk ingen jobb tilbake'); }
+            pollVinkler(svar.jobb, knapp);
+          })
+          .catch(function (e) {
+            vis('Klarte ikke å starte: ' + e.message, 100, true);
+            knapp.disabled = false;
+            knapp.textContent = '💡 Prøv igjen';
+          });
+      });
+    });
+
+    function pollVinkler(id, knapp) {
+      fetch('/jobb/' + id)
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          if (s.status === 'kjorer') {
+            /* `siste` er det som faktisk skjer akkurat nå - «Venter i kø — 1
+               sak foran deg», «Groq (gratis): kvotetak — venter 40 s». `tekst`
+               er bare navnet på fasen. Viser vi fasen, står det «Journalisten
+               finner vinkler …» i to minutter mens sannheten er at han står i
+               kø, og da er linja like taus som en feilmelding. */
+            vis(s.siste || s.tekst, s.pct, false);
+            setTimeout(function () { pollVinkler(id, knapp); }, 700);
+            return;
+          }
+          if (s.status === 'ferdig') {
+            vis('Vinklene er klare', 100, false);
+            setTimeout(function () { location.reload(); }, 500);
+            return;
+          }
+          vis(s.feil || 'Klarte ikke å lage vinkler.', 100, true);
+          knapp.disabled = false;
+          knapp.textContent = '💡 Prøv igjen';
+        })
+        .catch(function () {
+          vis('Mistet kontakten med serveren.', 100, true);
+          knapp.disabled = false;
+          knapp.textContent = '💡 Prøv igjen';
+        });
+    }
+
+    function poll(id, form, knapp) {
+      fetch('/jobb/' + id)
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          if (s.status === 'kjorer') {
+            vis(s.tekst, s.pct, false);
+            setTimeout(function () { poll(id, form, knapp); }, 700);
+            return;
+          }
+          if (s.status === 'ferdig') {
+            var demo = s.resultat && s.resultat.mode === 'mal';
+            vis(demo ? 'Utkast klart (demo-mal — ingen KI-nøkkel)' : 'Utkast klart', 100, false);
+            var url = '/?apen=' + encodeURIComponent(form.dataset.key + '|' + form.dataset.vinkel)
+                    + '#vinkel-' + form.dataset.key + '-' + form.dataset.vinkel;
+            setTimeout(function () { window.location.href = url; }, 600);
+            return;
+          }
+          /* feilet eller ukjent - si HVA som gikk galt, ikke bare «noe skjedde». */
+          vis(s.feil || 'Skrivingen stoppet.', 100, true);
+          knapp.disabled = false;
+          knapp.textContent = '✍️ Prøv igjen';
+        })
+        .catch(function () {
+          vis('Mistet kontakten med serveren.', 100, true);
+          knapp.disabled = false;
+          knapp.textContent = '✍️ Prøv igjen';
+        });
+    }
+  })();
+
+  /* Skanneskjermen. Samme jobbmotor som utkastet, men et skann tar 40-60
+     sekunder - da holder det ikke med en liten boks i hjornet. */
+  (function () {
+    var skjerm = document.getElementById('skann-radar');
+    if (!skjerm) { return; }
+    var fase = skjerm.querySelector('.skann-fase');
+    var fyll = skjerm.querySelector('.skann-fyll');
+    var pct = skjerm.querySelector('.skann-pct span');
+    var siste = skjerm.querySelector('.skann-siste');
+    var lukk = skjerm.querySelector('.skann-lukk');
+
+    lukk.addEventListener('click', function () { skjerm.hidden = true; });
+
+    function tegn(s) {
+      fase.textContent = s.tekst;
+      pct.textContent = Math.round(s.pct);
+      fyll.style.width = Math.max(2, Math.min(100, s.pct)) + '%';
+      siste.textContent = s.siste || '';
+    }
+
+    document.querySelectorAll('form[data-skann]').forEach(function (form) {
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        // Lukk temamenyen, ellers staar den aapen over radaren.
+        var meny = form.closest('details');
+        if (meny) { meny.open = false; }
+        skjerm.hidden = false;
+        skjerm.classList.remove('skann-feil');
+        // Rull radaren i syne. Den staar oeverst, saa dette er som regel en
+        // kort bevegelse - men trykker han fra kø-knappen langt nede, ville
+        // han ellers ikke sett at noe skjedde.
+        skjerm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        lukk.hidden = true;
+        tegn({ tekst: 'Starter skann …', pct: 2, siste: '' });
+
+        var d = new FormData(form);
+        d.append('js', '1');
+        fetch(form.action, { method: 'POST', body: d })
+          .then(function (r) { return r.json(); })
+          .then(function (svar) {
+            if (!svar.jobb) { throw new Error('Fikk ingen jobb tilbake'); }
+            folg(svar.jobb);
+          })
+          .catch(function (e) { stopp('Klarte ikke å starte: ' + e.message); });
+      });
+    });
+
+    function stopp(melding) {
+      skjerm.classList.add('skann-feil');
+      fase.textContent = melding;
+      fyll.style.width = '100%';
+      lukk.hidden = false;
+    }
+
+    function folg(id) {
+      fetch('/jobb/' + id)
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          if (s.status === 'kjorer') {
+            tegn(s);
+            setTimeout(function () { folg(id); }, 900);
+            return;
+          }
+          if (s.status === 'ferdig') {
+            tegn({ tekst: 'Ferdig — henter resultatet', pct: 100, siste: '' });
+            // `ferskt=1` forteller neste sidelast at sakene skal fly opp paa
+            // plass. Vi laster om i stedet for aa bytte ut DOM-en: da er det
+            // serveren som bestemmer hva som vises, og animasjonen er ren CSS
+            // som ikke kan komme ut av takt med innholdet.
+            window.location.href = '/?ferskt=1';
+            return;
+          }
+          stopp(s.feil || 'Skannet stoppet.');
+        })
+        .catch(function () { stopp('Mistet kontakten med serveren.'); });
+    }
+  })();
+
+  /* «Velg alle» / «Nullstill» — én knapp i stedet for 24 trykk. To separate
+     knapper, ikke én som veksler: med 24 bokser er det ikke lenger opplagt hva
+     en veksleknapp kommer til å gjøre. Skjemaet virker uten JavaScript også;
+     dette er bare en snarvei. */
+  function settAlle(knapp, verdi) {
+    knapp.closest('form').querySelectorAll('input[name="tema"]').forEach(
+      function (b) { b.checked = verdi; }
+    );
+  }
+  document.querySelectorAll('.tema-alle').forEach(function (knapp) {
+    knapp.addEventListener('click', function () { settAlle(knapp, true); oppdaterGrupper(); });
+  });
+  document.querySelectorAll('.tema-ingen').forEach(function (knapp) {
+    knapp.addEventListener('click', function () { settAlle(knapp, false); oppdaterGrupper(); });
+  });
+
+  /* Gruppeboksene: ett trykk krysser av hele «Folk», «Penger» osv. Med 25
+     temaer er fem trykk per gruppe unødvendig arbeid. Boksen viser også
+     tilstanden — delvis avkrysset gir indeterminate, så man ser hva som er
+     valgt uten å telle. */
+  function temaerIGruppe(gruppe) {
+    var boks = document.querySelector('.tema-liste[data-gruppe="' + gruppe + '"]');
+    return boks ? Array.prototype.slice.call(boks.querySelectorAll('input[name="tema"]')) : [];
+  }
+  function oppdaterGrupper() {
+    document.querySelectorAll('.tema-gruppeboks').forEach(function (g) {
+      var barn = temaerIGruppe(g.dataset.gruppe);
+      var paa = barn.filter(function (b) { return b.checked; }).length;
+      g.checked = barn.length > 0 && paa === barn.length;
+      g.indeterminate = paa > 0 && paa < barn.length;
+    });
+  }
+  document.querySelectorAll('.tema-gruppeboks').forEach(function (g) {
+    g.addEventListener('change', function () {
+      temaerIGruppe(g.dataset.gruppe).forEach(function (b) { b.checked = g.checked; });
+      g.indeterminate = false;
+    });
+  });
+  document.querySelectorAll('input[name="tema"]').forEach(function (b) {
+    b.addEventListener('change', oppdaterGrupper);
+  });
+  oppdaterGrupper();
+
+
+  /* ── Sveip venstre for å rydde bort en sak ─────────────────────────────── */
+  /* Eieren: «Blir veldig rotete med scannen nå. Legg til en Tinder swipe på
+     alle sakene, så han kan rydde bort det han ikke vil ha.»
+
+     Samme bevegelse som under «Lagret», så den er allerede kjent. Kortet
+     forsvinner med en gang (det er det som gjør rydding rask), og POST-en går
+     i bakgrunnen — venter vi på serveren, føles hver sveip treg. Feiler den,
+     kommer kortet tilbake, for et kort som forsvant uten å bli lagret er en
+     løgn om hva som skjedde. */
+  (function () {
+    var dialog = document.getElementById('fjern-dialog');
+    if (!dialog) { return; }
+    var NOKKEL = 'caseradar-fjern-uten-sporsmal';
+    var venter = null;
+
+    function sporIkke() {
+      try { return localStorage.getItem(NOKKEL) === '1'; } catch (e) { return false; }
+    }
+
+    var rolig = window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    /* Nummerering er ikke pynt: fjerner du sak 2, skal de neste hete 2, 3, 4 -
+       ikke 1, 3, 4. Et hull i rekka leser seg som at noe gikk galt. */
+    function nummerer() {
+      var n = 1;
+      document.querySelectorAll('.lead.swipe-kort').forEach(function (k) {
+        var el = k.querySelector('.lead-num');
+        if (el) { el.textContent = n; }
+        n += 1;
+      });
+    }
+
+    /* Et langt trykk er usynlig til man vet om det. Første gang et kort løftes
+       sier vi hva man nå kan gjøre - én gang, så huskes valget. */
+    var HINT_NOKKEL = 'caseradar-loft-hint-sett';
+    function visLofteHint() {
+      try { if (localStorage.getItem(HINT_NOKKEL) === '1') { return; } } catch (e) { return; }
+      var hint = document.getElementById('loft-hint');
+      if (!hint) { return; }
+      hint.hidden = false;
+      setTimeout(function () { hint.hidden = true; }, 3200);
+      try { localStorage.setItem(HINT_NOKKEL, '1'); } catch (e) { /* privat modus */ }
+    }
+
+    /* Rekkefolgen han dro sakene i skal overleve en refresh. Gjor den ikke det,
+       er det den samme stille logna som sveipede saker som kom tilbake: han tror
+       han har ryddet, og finner rotet igjen. */
+    var lagre_timer = null;
+    function lagreRekkefolge() {
+      nummerer();
+      // Samle opp: drar man tre kort etter hverandre, skal det bli ETT kall.
+      clearTimeout(lagre_timer);
+      lagre_timer = setTimeout(function () {
+        var keys = [];
+        document.querySelectorAll('.lead.swipe-kort').forEach(function (k) {
+          if (k.dataset.key) { keys.push(k.dataset.key); }
+        });
+        fetch('/rekkefolge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keys: keys })
+        }).catch(function () { /* neste refresh viser sannheten */ });
+      }, 400);
+    }
+
+    /* Fase 2: plassen lukker seg. Uten dette rykker kortene under rett opp i det
+       kortet fjernes fra DOM-en, og hele lista hopper. Det var det som gjorde at
+       slettingen føltes hakkete selv om selve kastet var glatt. */
+    function krympBort(kort, naar_ferdig) {
+      var h = kort.offsetHeight;
+      kort.style.height = h + 'px';
+      kort.style.overflow = 'hidden';
+      void kort.offsetHeight;                 /* tvinger reflow, ellers hopper den */
+      kort.classList.add('krymper');
+      kort.style.height = '0px';
+      kort.style.marginBottom = '0px';
+      kort.style.paddingTop = '0px';
+      kort.style.paddingBottom = '0px';
+      kort.style.borderWidth = '0px';
+      kort.style.opacity = '0';
+      setTimeout(function () {
+        kort.remove();
+        nummerer();
+        if (naar_ferdig) { naar_ferdig(); }
+      }, rolig ? 20 : 300);
+    }
+
+    /* Fase 1: kastet. Eieren: «Slett-animasjonen være smooth slik man kaster ut
+       saken. Den krymper, så kaster du den ut av skjermen.»
+
+       Avstanden regnes ut fra kortets egen posisjon i stedet for en fast
+       prosent - da klarer det alltid å komme HELT ut av skjermkanten, uansett
+       hvor bredt kortet er eller hvor langt det alt er dratt. Farten fra
+       fingeren bestemmer varigheten, så et hardt kast går fort og et forsiktig
+       drag glir. Det er den detaljen som gjør at det føles som et kast og ikke
+       som en animasjon som spilles av. */
+    function kastUt(kort, fart, naar_ferdig) {
+      if (rolig) { krympBort(kort, naar_ferdig); return; }
+      // Avstanden maa regnes fra kortets LAYOUT-posisjon, ikke fra
+      // getBoundingClientRect(): den inkluderer transformen kortet alt har fra
+      // draget, og da ble avstanden regnet to ganger for kort. Maalt i Chromium
+      // 26.07.2026 stoppet kortet paa x=-236 med hoyre kant fortsatt inne paa
+      // skjermen. Skjermbredde + kortbredde klarer kanten uansett hvor langt
+      // det alt er dratt.
+      var ut = -(window.innerWidth + kort.offsetWidth);
+      var ms = Math.max(240, Math.min(520, Math.abs(ut) / Math.max(1.4, fart * 1.6 || 1.6)));
+      kort.classList.remove('drar');
+      kort.style.transition =
+        'transform ' + ms + 'ms cubic-bezier(.22,.61,.3,1), opacity '
+        + Math.round(ms * 0.8) + 'ms ease-out';
+      kort.style.transform = 'translateX(' + ut + 'px) rotate(-15deg) scale(.74)';
+      kort.style.opacity = '0';
+      // Plassen begynner å lukke seg FØR kortet er helt ute. Venter vi til det
+      // er ferdig, blir det et tydelig opphold der ingenting skjer.
+      setTimeout(function () { krympBort(kort, naar_ferdig); }, Math.round(ms * 0.55));
+    }
+
+    function fjern(kort, fart) {
+      var key = kort.dataset.key;
+      // Hvor kortet skal tilbake HVIS serveren ikke tok imot. Må leses nå, mens
+      // naboene fortsatt står der.
+      var mor = kort.parentNode, etter = kort.nextSibling;
+      var kom_fram = true;
+
+      var d = new FormData();
+      d.append('tilbake', '/');
+      fetch('/leads/' + encodeURIComponent(key) + '/reject', { method: 'POST', body: d })
+        .then(function (r) { kom_fram = r.ok; })
+        .catch(function () { kom_fram = false; });
+
+      kastUt(kort, fart, function () {
+        lagreRekkefolge();
+        // Kom den ikke fram, skal saken tilbake. Et kort som forsvant uten å bli
+        // lagret er en løgn om hva som skjedde - han ville sett den igjen ved
+        // neste skann og trodd verktøyet mistet det han gjorde.
+        if (kom_fram) { return; }
+        kort.removeAttribute('style');
+        kort.classList.remove('krymper', 'sveipet-bort', 'mot-venstre');
+        if (mor) { mor.insertBefore(kort, etter); nummerer(); }
+      });
+    }
+
+    function spor(kort, fart) {
+      if (sporIkke()) { fjern(kort, fart); return; }
+      venter = kort;
+      var t = kort.querySelector('.lead-title');
+      dialog.querySelector('.fjern-tittel').textContent = t ? t.textContent.trim() : '';
+      dialog.querySelector('#fjern-ikke-spor').checked = false;
+      dialog.hidden = false;
+      dialog.querySelector('.fjern-ja').focus();
+    }
+
+    function lukk() { dialog.hidden = true; venter = null; }
+
+    dialog.querySelector('.fjern-avbryt').addEventListener('click', function () {
+      if (venter) { venter.style.transform = ''; venter.style.opacity = ''; }
+      lukk();
+    });
+    dialog.querySelector('.fjern-ja').addEventListener('click', function () {
+      if (dialog.querySelector('#fjern-ikke-spor').checked) {
+        try { localStorage.setItem(NOKKEL, '1'); } catch (e) { /* privat modus */ }
+      }
+      if (venter) { fjern(venter, 1.1); }
+      lukk();
+    });
+    dialog.addEventListener('click', function (e) {
+      if (e.target === dialog) { if (venter) { venter.style.transform = ''; venter.style.opacity = ''; } lukk(); }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !dialog.hidden) {
+        if (venter) { venter.style.transform = ''; venter.style.opacity = ''; }
+        lukk();
+      }
+    });
+
+    document.querySelectorAll('.lead.swipe-kort').forEach(function (kort) {
+      var x0 = null, y0 = null, dx = 0, drar = false, laast = false;
+      var TERSKEL = 90;
+      // Fart i piksler per millisekund. Et raskt kast skal fly ut fort selv om
+      // det ikke rakk å passere terskelen - det er slik en sveip føles i appene
+      // han er vant til.
+      var sist_x = 0, sist_t = 0, fart = 0, dy = 0, flyttet_i_lista = false;
+      var FLIKK = 0.55;
+      // Langt trykk = plukk opp kortet. Uten dette var flyttingen umulig å
+      // utføre: låsen under krever sidelengs bevegelse FØRST, så drar man rett
+      // ned — den naturlige måten å flytte på — døde gesten. På telefon var den
+      // blokkert en gang til av `touch-action: pan-y`, som gir loddrett
+      // bevegelse til nettleseren, så vertikale pointermove aldri ble levert.
+      var LOFT_MS = 250, loft_timer = null, loftet = false;
+
+      function avbrytLoft() {
+        if (loft_timer) { clearTimeout(loft_timer); loft_timer = null; }
+      }
+
+      function loftOpp() {
+        loft_timer = null;
+        if (!drar || laast) { return; }
+        loftet = true;
+        laast = true;
+        // `touch-action: none` MÅ settes nå, mens fingeren står stille og ingen
+        // scroll er startet. Det er derfor løftet bare kan skje fra et langt
+        // trykk: hadde fingeren allerede beveget seg, ville nettleseren eid
+        // bevegelsen og ikke gitt den fra seg.
+        kort.classList.add('drar', 'loftet');
+        visLofteHint();
+      }
+
+      function start(x, y) {
+        x0 = x; y0 = y; dx = 0; dy = 0; drar = true; laast = false;
+        sist_x = x; sist_t = (window.performance ? performance.now() : Date.now());
+        fart = 0; flyttet_i_lista = false; loftet = false;
+        avbrytLoft();
+        loft_timer = setTimeout(loftOpp, LOFT_MS);
+      }
+      function flytt(x, y, ev) {
+        if (!drar) { return; }
+        var ddx = x - x0, ddy = y - y0;
+        // Avgjør én gang om dette er en sidelengs sveip eller vanlig scrolling.
+        // Uten låsen «henger» kortet fast når man bare vil bla nedover.
+        if (!laast) {
+          // Beveger fingeren seg i det hele tatt, er dette ikke et langt trykk.
+          if (Math.abs(ddx) > 10 || Math.abs(ddy) > 10) { avbrytLoft(); }
+          if (Math.abs(ddy) > Math.abs(ddx) && Math.abs(ddy) > 10) { drar = false; return; }
+          if (Math.abs(ddx) > 10) {
+            laast = true;
+            kort.classList.add('drar');
+          } else { return; }
+        }
+        dx = Math.min(0, ddx);            /* bare venstre - hoyre betyr ingenting her */
+        dy = ddy;
+
+        var na = (window.performance ? performance.now() : Date.now());
+        var dt = na - sist_t;
+        if (dt > 0) {
+          // Bare fart MOT VENSTRE teller. Eieren: «når den når topp fart til
+          // venstre og slipper den, så er det at den skal kastes.» En rask
+          // bevegelse tilbake mot høyre er en angring, ikke et kast.
+          var vv = (sist_x - x) / dt;
+          fart = 0.7 * fart + 0.3 * Math.max(0, vv);
+          sist_x = x; sist_t = na;
+        }
+
+        // Kortet KRYMPER og følger hånden. Det er krympingen som gjør at det
+        // leser som noe man har PLUKKET OPP - og et kort man har i hånden kan
+        // man både kaste og flytte. Skalaen faller mot 0,88.
+        var vei = Math.min(1, Math.abs(dx) / 260);
+        var skala = 1 - 0.12 * vei;
+        kort.style.transform =
+          'translateX(' + dx + 'px) translateY(' + dy + 'px) rotate('
+          + (dx / 34) + 'deg) scale(' + skala + ')';
+        kort.style.opacity = String(1 - 0.45 * vei);
+        kort.classList.toggle('mot-venstre', dx < -30);
+
+        // Flytting i lista: kortet i hånden bytter plass med naboen det er dratt
+        // forbi. Vi flytter selve elementet, så resten glir på plass av seg selv
+        // - og nullstiller dy mot den nye posisjonen, ellers hopper kortet.
+        var flyttet = flyttForbiNabo();
+        if (flyttet) { y0 += flyttet; dy = y - y0; }
+
+        if (ev.cancelable) { ev.preventDefault(); }
+      }
+
+      /* Bytt plass med naboen over eller under hvis kortet er dratt mer enn
+         halvveis forbi den. Returnerer hvor mange piksler kortets egen
+         hvileposisjon flyttet seg, så draget kan justeres mot den. */
+      function flyttForbiNabo() {
+        if (Math.abs(dy) < 24) { return 0; }
+        var mor = kort.parentNode;
+        if (!mor) { return 0; }
+        var foer = kort.getBoundingClientRect().top - dy;
+
+        if (dy < 0) {
+          var over = kort.previousElementSibling;
+          while (over && !over.classList.contains('swipe-kort')) {
+            over = over.previousElementSibling;
+          }
+          if (!over) { return 0; }
+          var ho = over.getBoundingClientRect().height;
+          if (-dy < ho / 2) { return 0; }
+          mor.insertBefore(kort, over);
+        } else {
+          var under = kort.nextElementSibling;
+          while (under && !under.classList.contains('swipe-kort')) {
+            under = under.nextElementSibling;
+          }
+          if (!under) { return 0; }
+          var hu = under.getBoundingClientRect().height;
+          if (dy < hu / 2) { return 0; }
+          mor.insertBefore(kort, under.nextElementSibling);
+        }
+        flyttet_i_lista = true;
+        return kort.getBoundingClientRect().top - dy - foer;
+      }
+      function slipp() {
+        avbrytLoft();
+        if (!drar && !laast) { return; }
+        drar = false;
+        loftet = false;
+        kort.classList.remove('drar', 'mot-venstre', 'loftet');
+        // Enten dratt langt nok, ELLER sluppet i full fart mot venstre. Uten
+        // flikken må man dra hele veien hver gang, og da blir rydding tregt.
+        if (dx < -TERSKEL || (dx < -40 && fart > FLIKK)) { spor(kort, fart); return; }
+        // Ikke et kast: kortet legger seg ned der det nå står i lista.
+        kort.style.transform = '';
+        kort.style.opacity = '';
+        if (flyttet_i_lista) { lagreRekkefolge(); flyttet_i_lista = false; }
+      }
+
+      /* Pointer-events, ikke touch-events. Med bare touchstart/touchmove gjorde
+         sveipen ingenting i det hele tatt med mus - verifisert i Chromium
+         26.07.2026. Journalisten er på telefon, men eieren tester på laptop, og
+         en funksjon som er usynlig der ser ut som en feil. Pointer dekker mus,
+         touch og penn i én kodesti; `touch-action: pan-y` i CSS-en sørger for at
+         nettleseren fortsatt eier den loddrette scrollingen.
+
+         Lytterne for BEVEGELSE og SLIPP ligger på `document`, ikke på kortet.
+         setPointerCapture var det opplagte valget, men det virker ikke her: å
+         flytte kortet i lista er en DOM-flytting, og en DOM-flytting slipper
+         pointer-fangsten. Da nådde verken flere pointermove eller pointerup
+         kortet - målt i Chromium 26.07.2026 byttet kortet plass én gang og ble
+         så liggende, og rekkefølgen ble aldri lagret fordi slipp() aldri kjørte. */
+      function pekerFlytt(e) { flytt(e.clientX, e.clientY, e); }
+      function holdFast(e) {
+        if (loftet && e.cancelable) { e.preventDefault(); }
+      }
+      function pekerSlipp() {
+        document.removeEventListener('touchmove', holdFast);
+        document.removeEventListener('pointermove', pekerFlytt);
+        document.removeEventListener('pointerup', pekerSlipp);
+        document.removeEventListener('pointercancel', pekerSlipp);
+        slipp();
+      }
+      kort.addEventListener('pointerdown', function (e) {
+        if (e.button) { return; }                    /* bare venstre musetast */
+        // En sveip skal aldri starte oppå noe man kan trykke på - ellers blir
+        // «Lag utkast» og lenkene til kildene vanskelige å treffe.
+        if (e.target.closest('a, button, input, label, summary, form')) { return; }
+        start(e.clientX, e.clientY);
+        document.addEventListener('pointermove', pekerFlytt, { passive: false });
+        // Ikke-passiv touchmove: `touch-action: none` alene er ikke nok på iOS
+        // Safari når klassen settes midt i en berøring. preventDefault() her er
+        // det som faktisk holder på bevegelsen mens kortet er løftet.
+        document.addEventListener('touchmove', holdFast, { passive: false });
+        document.addEventListener('pointerup', pekerSlipp);
+        document.addEventListener('pointercancel', pekerSlipp);
+      });
+      // Etter en sveip ligger det an til et klikk på det som var under fingeren.
+      // Uten dette åpner/lukker en sveip tilfeldige detaljer på veien.
+      kort.addEventListener('click', function (e) {
+        if (laast) { e.preventDefault(); e.stopPropagation(); laast = false; }
+      }, true);
+    });
+  })();
+
+  document.querySelectorAll('.chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      var f = chip.dataset.filter;
+      document.querySelectorAll('.lead').forEach(function (el) {
+        var show = f === 'alle'
+          || (f === 'green' && el.dataset.cov === 'green')
+          || (f === 'lokal' && el.dataset.geo === 'lokal');
+        el.style.display = show ? '' : 'none';
+      });
+    });
+  });
+
+  /* «Velg flere temaer» fra tomskjermen. Temamenyen ER skanneknappen oeverst -
+     det finnes ingen egen temaside - saa knappen aapner den og ruller dit i
+     stedet for aa lenke til en URL som ikke finnes. */
+  /* Pilene ved fanene. Vises bare naar det FAKTISK er mer aa rulle til den
+     siden - en pil som peker mot ingenting er verre enn ingen pil. */
+  (function () {
+    var rad = document.querySelector('.fane-rad');
+    if (!rad) return;
+    var boks = rad.closest('.fane-boks');
+    var venstre = boks.querySelector('.fane-pil-v');
+    var hoyre = boks.querySelector('.fane-pil-h');
+
+    function oppdater() {
+      /* 2 px slingringsmonn: delbredder gjor at scrollLeft sjelden treffer
+         maksimum helt presist, og da ble hoyrepila staaende for alltid. */
+      var maks = rad.scrollWidth - rad.clientWidth;
+      venstre.hidden = rad.scrollLeft <= 2;
+      hoyre.hidden = rad.scrollLeft >= maks - 2;
+      boks.classList.toggle('har-mer', maks > 2);
+    }
+
+    function rull(retning) {
+      rad.scrollBy({ left: retning * rad.clientWidth * 0.7, behavior: 'smooth' });
+    }
+
+    venstre.addEventListener('click', function () { rull(-1); });
+    hoyre.addEventListener('click', function () { rull(1); });
+    rad.addEventListener('scroll', oppdater, { passive: true });
+    window.addEventListener('resize', oppdater);
+    oppdater();
+  })();
+
+  document.querySelectorAll('[data-apne-temaer]').forEach(function (knapp) {
+    knapp.addEventListener('click', function () {
+      var meny = document.querySelector('.tema-meny');
+      if (!meny) return;
+      meny.open = true;
+      meny.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+  /* ── Pop-in-varselet ───────────────────────────────────────────────────────
+     Svipper inn fra hoyre, staar i fem sekunder, svipper ut igjen. Vises ÉN
+     gang per skann: uten noekkelen hadde hver refresh gjentatt en beskjed han
+     allerede hadde lest, og da blir den like lett aa overse som statuslinja
+     den erstattet. */
+  (function () {
+    var v = document.getElementById('varsel');
+    if (!v) return;
+    var NOKKEL = 'caseradar-varsel-sett';
+    if (localStorage.getItem(NOKKEL) === v.dataset.skann) return;
+
+    var timer = null;
+    function ut() {
+      clearTimeout(timer);
+      v.classList.remove('inne');
+      /* Vent til utsvipet er ferdig for vi skjuler den, ellers forsvinner den
+         momentant i stedet for aa gli ut. */
+      setTimeout(function () { v.hidden = true; }, 420);
+    }
+
+    v.hidden = false;
+    /* To rammer for klassen settes: settes den i samme ramme som `hidden`
+       fjernes, har nettleseren ingen starttilstand aa animere fra, og kortet
+       bare dukker opp. */
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { v.classList.add('inne'); });
+    });
+    localStorage.setItem(NOKKEL, v.dataset.skann || '');
+    /* Et tomt skann blir staaende til han trykker OK. Alt annet svipper ut
+       etter fem sekunder som foer - beskjeden er da en opplysning, ikke en
+       handling han maa ta stilling til. */
+    if (!v.dataset.viktig) { timer = setTimeout(ut, 5000); }
+    v.querySelector('.varsel-lukk').addEventListener('click', ut);
+    var ok = v.querySelector('.varsel-ok');
+    if (ok) { ok.addEventListener('click', ut); }
+    /* «Bytt tema» aapner den samme menyen som oeverst, og lukker beskjeden -
+       ellers ligger den over menyen han nettopp ba om. */
+    var tema = v.querySelector('.varsel-tema');
+    if (tema) { tema.addEventListener('click', ut); }
+  })();
+
+  /* Etter «Send» sender serveren oss til /#ideer. Fanebyttet er ren CSS via
+     skjulte radioknapper, og en ankerlenke treffer ikke en radio - saa uten
+     dette landet han paa toppen av sida og maatte lete etter fanen selv. */
+  (function () {
+    if (location.hash !== '#ideer') return;
+    var r = document.getElementById('fane-ideer');
+    if (!r) return;
+    r.checked = true;
+    var panel = r.closest('details');
+    if (panel) panel.open = true;
+    document.getElementById('innhold-ideer')
+      .scrollIntoView({ block: 'center' });
+  })();
+
+</script>
+{% include "_tobias.html" %}
+</body>
+</html>

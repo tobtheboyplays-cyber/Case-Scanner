@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Kalender · Case-radar</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%A1%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/static/style.css?v={{ css_v }}" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">🗓</span>
+    <div>
+      <h1>Kalender</h1>
+      <p class="tagline">{{ planned_count }} sak{{ '' if planned_count == 1 else 'er' }} planlagt i {{ month_name }}</p>
+    </div>
+  </div>
+  <nav class="top-actions">
+    <a class="btn-ghost" href="/">← Radar</a>
+    <a class="btn-ghost" href="/godkjente">📁 Godkjente</a>
+    <a class="btn-ghost" href="/publisert">📰 Publisert{% if publisert_antall %} ({{ publisert_antall }}){% endif %}</a>
+  </nav>
+</header>
+
+<main class="page">
+
+  {# To fane-lenker, ikke JavaScript. Kalenderen viser NAAR arbeidet ligger;
+     oppgavelista viser HVA som staar for tur. Samme saker, to spoersmaal. #}
+  <nav class="faner" aria-label="Visning">
+    <a class="fane{{ ' er-valgt' if fane != 'oppgaver' }}"
+       href="/kalender?ym={{ '%04d-%02d'|format(year, month) }}"
+       {% if fane != 'oppgaver' %}aria-current="page"{% endif %}>🗓 Kalender</a>
+    <a class="fane{{ ' er-valgt' if fane == 'oppgaver' }}"
+       href="/kalender?ym={{ '%04d-%02d'|format(year, month) }}&amp;fane=oppgaver"
+       {% if fane == 'oppgaver' %}aria-current="page"{% endif %}>✓ Oppgaver{% if oppgaver %} ({{ oppgaver|length }}){% endif %}</a>
+  </nav>
+
+{% if fane == 'oppgaver' %}
+  <!-- ── Oppgaver: samme saker som i kalenderen, nærmeste frist først ── -->
+  {% if not oppgaver %}
+    <section class="panel empty-inline">
+      <p>Ingen oppgaver i kalenderen ennå.</p>
+      <p class="muted">Godkjenn en sak på radaren og gi den en start- og sluttdato,
+        så dukker den opp her.</p>
+    </section>
+  {% endif %}
+
+  {% for o in oppgaver %}
+  <article class="oppg{{ ' oppg-forsinket' if o._dager_igjen is not none and o._dager_igjen < 0 }}">
+    <div class="oppg-topp">
+      <span class="pill pill-stage stage-bg-{{ o._stage or 'ide' }}">{{ stage_labels[o._stage or 'ide'] }}</span>
+      {% if o._deadline %}
+        <span class="oppg-frist{{ ' frist-naer' if o._dager_igjen is not none and 0 <= o._dager_igjen <= 2 }}">
+          ⚑ {{ o._deadline }}
+          {% if o._dager_igjen is not none %}
+            · {% if o._dager_igjen < 0 %}{{ -o._dager_igjen }} dag{{ '' if o._dager_igjen == -1 else 'er' }} på overtid
+              {% elif o._dager_igjen == 0 %}i dag
+              {% elif o._dager_igjen == 1 %}i morgen
+              {% else %}om {{ o._dager_igjen }} dager{% endif %}
+          {% endif %}
+        </span>
+      {% else %}
+        <span class="oppg-frist">▶ starter {{ o._start }}</span>
+      {% endif %}
+      <span class="oppg-timer">{{ o._timer|round(1) }} t/dag</span>
+    </div>
+
+    <h3 class="oppg-tittel">{{ o.draft.title if o.draft and o.draft.title else o.title }}</h3>
+    {% if o.finding %}<p class="oppg-desc">{{ o.finding }}</p>{% endif %}
+
+    <div class="oppg-bunn">
+      {% if o._start %}<span class="oppg-spenn">{{ o._start }} → {{ o._deadline or '—' }}</span>{% endif %}
+      <a class="oppg-lenke" href="/kalender?ym={{ (o._start or o._deadline)[:7] }}#dag-{{ o._start or o._deadline }}">Se i kalenderen</a>
+      <form method="post" action="/oppgaver/{{ o.key }}/ferdig">
+        <input type="hidden" name="tilbake" value="/kalender?ym={{ '%04d-%02d'|format(year, month) }}&amp;fane=oppgaver" />
+        <button type="submit" class="btn-ferdig">✓ Ferdig</button>
+      </form>
+    </div>
+  </article>
+  {% endfor %}
+
+  {% if ferdige %}
+  <details class="panel ferdig-liste">
+    <summary>✓ Ferdig ({{ ferdige|length }})</summary>
+    <p class="muted ferdig-hint">Ute av kalenderen, men ikke slettet. Trykk «Angre»
+      for å sette saken tilbake med datoer og timer i behold.</p>
+    {% for f in ferdige %}
+    <div class="ferdig-rad">
+      <span class="ferdig-t">{{ f.draft.title if f.draft and f.draft.title else f.title }}</span>
+      <form method="post" action="/oppgaver/{{ f.key }}/angre">
+        <input type="hidden" name="tilbake" value="/kalender?ym={{ '%04d-%02d'|format(year, month) }}&amp;fane=oppgaver" />
+        <button type="submit" class="btn-angre">Angre</button>
+      </form>
+    </div>
+    {% endfor %}
+  </details>
+  {% endif %}
+
+{% else %}
+
+  <!-- Månedsnavigasjon -->
+  <section class="cal-nav">
+    <a class="cal-arrow" href="/kalender?ym={{ prev_ym }}" aria-label="Forrige måned">‹</a>
+    <div class="cal-title">
+      <strong>{{ month_name }}</strong> <span class="muted">{{ year }}</span>
+    </div>
+    <a class="cal-arrow" href="/kalender?ym={{ next_ym }}" aria-label="Neste måned">›</a>
+  </section>
+  {% if today_ym != '%04d-%02d'|format(year, month) %}
+  <p class="cal-back"><a href="/kalender?ym={{ today_ym }}">Tilbake til denne måneden</a></p>
+  {% endif %}
+
+  <!-- Månedsrutenett -->
+  <section class="panel cal-panel">
+    {# Hvor mye tid du har per dag er ikke en universell sannhet - den justeres. #}
+    <form class="kap-linje" method="post" action="/kalender/kapasitet">
+      <input type="hidden" name="tilbake" value="/kalender?ym={{ '%04d-%02d'|format(year, month) }}" />
+      <span class="kap-t">Arbeidsdag</span>
+      <input class="kap-felt" type="number" name="timer" min="0.5" max="24" step="0.5"
+             value="{{ kapasitet }}" aria-label="Timer du kan jobbe per dag" />
+      <span class="kap-t">timer</span>
+      <button class="btn-small" type="submit">Lagre</button>
+      <span class="kap-sum">
+        {{ maaned_timer|round(1) }} t planlagt i {{ month_name }}{% if overbookede_dager %} ·
+        <strong class="kap-varsel">{{ overbookede_dager }} dag{{ '' if overbookede_dager == 1 else 'er' }} over</strong>{% endif %}
+      </span>
+    </form>
+    <div class="cal-weekdays" aria-hidden="true">
+      <span>man</span><span>tir</span><span>ons</span><span>tor</span>
+      <span>fre</span><span class="we">lør</span><span class="we">søn</span>
+    </div>
+
+    <div class="cal-grid">
+      {% for week in weeks %}
+        {% for cell in week %}
+          {% if cell is none %}
+            <div class="cal-cell cal-empty" aria-hidden="true"></div>
+          {% else %}
+            {# Timetallet i ruta er hele poenget med aa se en maaned: du ser med
+               én gang hvilke dager som er fulle, uten aa aapne noen av dem. #}
+            <a class="cal-cell{{ ' is-today' if cell.today }}{{ ' has-leads' if cell.leads }}{{ ' er-full' if cell.overbooket }}"
+               href="#dag-{{ cell.iso }}"
+               aria-label="{{ cell.day }}. {{ month_name }}{% if cell.leads %}, {{ cell.leads|length }} sak{{ '' if cell.leads|length == 1 else 'er' }}, {{ cell.timer|round(1) }} timer{% if cell.overbooket %} — mer enn du har{% endif %}{% endif %}">
+              <span class="cal-daynum">{{ cell.day }}</span>
+              {% if cell.leads %}
+                <span class="cal-bands">
+                  {% for lead in cell.leads[:3] %}
+                    <i class="cal-band stage-{{ lead._stage or 'ide' }}{{ ' b-start' if lead._is_start }}{{ ' b-end' if lead._is_deadline }}"></i>
+                  {% endfor %}
+                  {% if cell.leads|length > 3 %}<i class="cal-more">+{{ cell.leads|length - 3 }}</i>{% endif %}
+                </span>
+                {% if cell.timer %}
+                <span class="cal-timer">{{ cell.timer|round(1)|int if cell.timer == cell.timer|round(0) else cell.timer|round(1) }}t</span>
+                {% endif %}
+              {% endif %}
+            </a>
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+    </div>
+
+    {% if kommende %}
+    <div class="deadlines">
+      <p class="dl-h">Kommende deadlines</p>
+      {% for d in kommende %}
+        <a class="dl-row" href="#dag-{{ d.iso }}">
+          <span class="dl-date">{{ d.label }}</span>
+          <span class="dl-title">{{ d.title }}</span>
+        </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="legend">
+      {% for st in stages %}
+        <span><i class="cal-dot stage-{{ st }}"></i> {{ stage_labels[st] }}</span>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ── Saker gruppert per MAANED ─────────────────────────────────────────────
+     Eieren 26.07.2026, med skjermbilde: «Istedenfor at det staar den samme saken
+     igjen og igjen. Saa kan det heller staa: hvis det er en sak den maaneden, saa
+     staar den saken - dette skal du lage denne maaneden.»
+
+         august      gutter med testo
+         september   jenter med kort haar
+                     voksne blir mer barnslige
+
+     Her sto det foer ett panel per DAG, med hele saken utbrettet: merkelapper,
+     ingress, tre datolinjer, artikkelen og et redigeringsskjema. En sak som gikk
+     fra 27. til 31. dukket opp paa fem dager. Fire planlagte saker ble til flere
+     skjermlengder der man scrollet forbi den samme overskriften om og om igjen.
+
+     Naa staar hver sak NOEYAKTIG ÉN gang, under maaneden den skal lages i, og
+     lista gaar paa tvers av maaneder - saa han ser august OG september uten aa
+     bla. Rutenettet over svarer fortsatt paa «naar i maaneden»; dette svarer paa
+     «hva skal jeg lage». #}
+  {% if maanedsliste %}
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Hva du skal lage</h2>
+      <span class="panel-sub">Én linje per sak — trykk for detaljer og plan</span>
+    </div>
+
+    {% for m in maanedsliste %}
+    <div class="mnd{{ ' mnd-naa' if m.er_denne }}">
+      <h3 class="mnd-navn">
+        {{ m.navn }}
+        {% if m.er_denne %}<span class="mnd-naa-merke">denne måneden</span>{% endif %}
+        <span class="mnd-tall">{{ m.saker|length }}</span>
+      </h3>
+      <ul class="mnd-saker">
+        {% for sak in m.saker %}
+        <li class="mnd-sak{{ ' mnd-forfalt' if sak.forfalt }}">
+          <a href="/godkjente#sak-{{ sak.key }}">
+            <span class="dot-stage stage-bg-{{ sak.stage }}" aria-hidden="true"
+                  title="{{ stage_labels[sak.stage] }}"></span>
+            <span class="mnd-tittel">{{ sak.tittel }}</span>
+            <span class="mnd-frist">
+              {% if sak.frist %}{{ sak.dag }}.{% else %}uten frist{% endif %}
+            </span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </section>
+  {% else %}
+    <section class="panel empty-inline">
+      <p>Ingen saker planlagt ennå.</p>
+      <p class="muted">Godkjenn en sak på radaren, så kan du gi den en dato her.</p>
+    </section>
+  {% endif %}
+
+  <!-- Uplanlagte saker: godkjent, men uten dato -->
+  {% if uplanlagt %}
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Uten dato</h2>
+      <span class="panel-sub">{{ uplanlagt|length }} godkjent{{ '' if uplanlagt|length == 1 else 'e' }} sak{{ '' if uplanlagt|length == 1 else 'er' }} venter på plass i kalenderen</span>
+    </div>
+    {% for lead in uplanlagt %}
+      {% set draft = lead.draft or {} %}
+      <article class="day-lead">
+        <h3>{{ draft.title or lead.title }}</h3>
+        {% if draft.ingress %}<p class="day-lead-ingress">{{ draft.ingress }}</p>{% endif %}
+        <form class="day-form" method="post" action="/leads/{{ lead.key }}/plan">
+          <input type="hidden" name="tilbake" value="/kalender?ym={{ '%04d-%02d'|format(year, month) }}" />
+          <label class="fld">
+            <span>Start</span>
+            <input type="date" name="start_date" value="{{ lead._start }}" />
+          </label>
+          <label class="fld">
+            <span>Deadline</span>
+            <input type="date" name="deadline" value="{{ lead._deadline }}" />
+          </label>
+          <label class="fld">
+            <span>Stadium</span>
+            <select name="stage">
+              {% for st in stages %}
+                <option value="{{ st }}"{{ ' selected' if (lead._stage or 'ide') == st }}>{{ stage_labels[st] }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="submit" class="btn-small">Legg i kalender</button>
+        </form>
+      </article>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+{% endif %}{# fane #}
+
+</main>
+
+<footer class="foot">
+  <span>Case-radar v{{ version }}</span>
+  <span>Redaksjonell kalender · ingen ekstern innlogging</span>
+</footer>
+
+{% include "_tobias.html" %}
+</body>
+</html>

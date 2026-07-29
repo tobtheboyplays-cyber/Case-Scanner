@@ -1,0 +1,189 @@
+/* Tobias — overlay-laget.
+ *
+ * Eieren 26.07.2026: «Tobias skal aldri blokkere en modal, dekke toast
+ * notifications, dekke viktige CTA-knapper over lengre tid, blokkere inputs,
+ * paavirke layout eller skape scrollbars.»
+ *
+ * Tre ting sikrer det, og de er alle her:
+ *
+ *   1. `position: fixed` + `transform` - han er utenfor dokumentflyten, saa han
+ *      kan ikke paavirke layout eller lage scrollbars uansett hvor han staar.
+ *   2. `pointer-events: none` som standard paa hele beholderen. Sida under er
+ *      helt uberoert; bare selve lerretet slaar det paa naar han er synlig.
+ *   3. `z-index` under dialogene. `.fjern-dialog` og `.varsel` i style.css
+ *      ligger hoyere, saa han havner ALLTID bak dem.
+ */
+
+.tobias {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 60;              /* over innholdet, under dialog (1000) og varsel */
+  pointer-events: none;
+  will-change: transform;
+  /* Uten dette hopper han ett lerret naar `translate3d` runder av. */
+  transform: translate3d(-9999px, -9999px, 0);
+  opacity: 0;
+  transition: opacity .45s ease;
+  /* Han skal aldri kunne dra fram en scrollbar, uansett hvor han flyr. */
+  contain: layout paint size;
+}
+
+.tobias[hidden] { display: none; }
+
+.tobias-inne { opacity: 1; }
+
+/* Selve WebGL-lerretet. Det er HER pekeren fanges - ikke paa beholderen, som
+ * er stoerre enn roboten og ellers ville stjaalet klikk paa sida under. */
+.tobias-lerret {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;       /* saa `pointermove` faktisk leveres paa mobil */
+}
+
+.tobias-dras .tobias-lerret { cursor: grabbing; }
+
+/* Navnet som flyter over hodet. Ligger i beholderen, saa den foelger ham
+ * automatisk - eieren: «Labelen foelger Tobias naar han beveger seg.» */
+.tobias-merke {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  transform: translateX(-50%);
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #10141bcc;
+  border: 1px solid #ffffff1f;
+  color: #dfe6ee;
+  font: 600 11px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+/* Snakkeboble. Vises svaert sjelden - eieren: «Ikke spam tekst.» */
+.tobias-boble {
+  position: absolute;
+  left: 50%;
+  top: -12px;
+  transform: translateX(-50%);
+  padding: 4px 11px;
+  border-radius: 12px;
+  background: #f2f1ee;
+  color: #14181e;
+  font: 600 12.5px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: tobias-boble-inn .28s ease backwards;
+}
+
+.tobias-boble[hidden] { display: none; }
+
+.tobias-boble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 2px;
+}
+
+@keyframes tobias-boble-inn {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px) scale(.9); }
+}
+
+/* ── Debugpanel ───────────────────────────────────────────────────────────── */
+
+.tobias-debug {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 61;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #0b0e13ee;
+  border: 1px solid #ffffff22;
+  color: #cfe9ff;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  pointer-events: auto;
+}
+
+.tobias-debug pre { margin: 0 0 8px; }
+
+.tobias-debug-knapper { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.tobias-debug-knapper button {
+  background: #1b2129;
+  color: #cfe9ff;
+  border: 1px solid #ffffff26;
+  border-radius: 7px;
+  padding: 4px 9px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tobias-debug-knapper button:hover { background: #26303b; }
+
+/* ── Redusert bevegelse ───────────────────────────────────────────────────── */
+/*
+ * Eieren: «Ved reduced motion: ingen kontinuerlig walking, ingen kast/fysikk,
+ * Tobias kan bare dukke opp statisk og blinke.»
+ *
+ * Selve oppfoerselen styres i JS (`roligBevegelse()`); her fjernes bare
+ * inn-toningen og boblen, som ellers ville vaert bevegelse i seg selv.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .tobias { transition: none; }
+  .tobias-boble { animation: none; }
+}
+
+/* ── Fysikkvarianten ──────────────────────────────────────────────────────── */
+/*
+ * Eieren §17: «Behandle bunnen av viewport som fysisk gulv.» Derfor dekker
+ * dette lerretet HELE vinduet, i motsetning til den lille boksen over: gulvet
+ * er skjermkanten, og han skal kunne kastes tvers over sida.
+ *
+ * `pointer-events: none` er ikke pynt - det er det som gjor at et lerret over
+ * hele sida ikke stjeler et eneste klikk fra journalisten. JS slaar det paa i
+ * det oyeblikket en straale faktisk treffer en kroppsdel, og av igjen naar man
+ * slipper.
+ */
+.tobias-fysikk {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 40;
+  pointer-events: none;
+  background: transparent;
+}
+
+/* Navnet over hodet i fysikkvarianten. Den lette varianten har merket sitt
+ * inne i sin egen boks; her ligger det loest paa sida og flyttes av JS hver
+ * frame, fordi det skal folge et hode som beveger seg. */
+.tobias-merke-fri {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 41;             /* saa vidt over lerretet */
+  will-change: transform;  /* han flytter seg hver eneste frame */
+}
+
+/* Mens man HOLDER ham. Uten dette tolker telefonen dragingen som scrolling:
+ * sida glir oppover og Tobias blir staaende igjen. Klassen settes bare i det
+ * oyeblikket et grep faktisk er tatt, og fjernes naar man slipper - en side som
+ * permanent ikke lar seg scrolle ville vaert en langt verre feil enn en robot
+ * som ikke lar seg dra. */
+body.tobias-holdes {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: contain;
+}

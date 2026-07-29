@@ -1,0 +1,2132 @@
+:root {
+  --bg: #0d1320;
+  --bg2: #0b111c;
+  --panel: #141c2b;
+  --panel2: #1a2333;
+  --border: #232e43;
+  --text: #e7ecf4;
+  --muted: #8a97ab;
+  --faint: #61708a;
+  --accent: #3b82f6;
+  --accent2: #2f6bff;
+  --green: #37c46d;
+  --amber: #e0a63a;
+  --red: #e0574c;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: radial-gradient(1200px 600px at 70% -10%, #16203400, #0d1320), var(--bg);
+  color: var(--text); line-height: 1.5; font-size: 14px;
+}
+h1, h2, h3 { margin: 0; }
+
+/* Topbar */
+.topbar {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 22px 32px 14px;
+}
+.brand { display: flex; align-items: center; gap: 16px; }
+.logo {
+  font-size: 26px; width: 52px; height: 52px; display: grid; place-items: center;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+}
+.brand h1 { font-size: 27px; font-weight: 700; letter-spacing: -.01em; }
+.tagline { margin: 2px 0 0; color: var(--accent); font-size: 14px; }
+.top-actions { text-align: right; }
+.btn-scan {
+  background: linear-gradient(180deg, var(--accent), var(--accent2));
+  color: #fff; border: 0; padding: 12px 22px; border-radius: 11px;
+  font-size: 15px; font-weight: 600; cursor: pointer; box-shadow: 0 6px 18px #2f6bff44;
+}
+.btn-scan:hover { filter: brightness(1.08); }
+.last-scan { margin: 8px 2px 0; color: var(--faint); font-size: 12.5px; }
+
+/* KPI-rad */
+.kpis {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+  padding: 8px 32px 4px;
+}
+.kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
+.kpi-top { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.kpi-ic { font-size: 15px; opacity: .9; }
+.kpi-label { font-size: 13px; }
+.kpi-num { font-size: 30px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.kpi-num.small { font-size: 17px; font-weight: 600; margin-top: 12px; }
+.kpi-num.green { color: var(--green); }
+.kpi-sub { color: var(--faint); font-size: 12.5px; margin-top: 3px; }
+
+/* Dots */
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.dot-green { background: var(--green); }
+.dot-amber { background: var(--amber); }
+.dot-red { background: var(--red); }
+
+/* Layout */
+.layout {
+  display: grid; grid-template-columns: 1fr 340px; gap: 20px;
+  padding: 12px 32px 36px; align-items: start;
+}
+@media (max-width: 980px) { .kpis { grid-template-columns: repeat(2,1fr); } .layout { grid-template-columns: 1fr; } }
+
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; margin-bottom: 18px; }
+.panel-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+.panel-head h2 { font-size: 16px; }
+.panel-sub { color: var(--faint); font-size: 12.5px; }
+
+/* Prioritering */
+.prio-row { display: grid; grid-template-columns: 18px minmax(150px, 250px) 1fr 44px;
+  align-items: center; gap: 12px; margin-bottom: 10px; }
+.prio-rank { color: var(--faint); font-size: 13px; text-align: center; }
+.prio-label { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prio-track { height: 9px; background: var(--panel2); border-radius: 5px; }
+.prio-fill { display: block; height: 100%; border-radius: 5px; min-width: 4px; }
+.prio-score { text-align: right; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cov-green { background: var(--green); } .cov-yellow { background: var(--amber); }
+.cov-red { background: var(--red); } .cov-unknown { background: var(--faint); }
+.cov-text-green { color: var(--green); } .cov-text-yellow { color: var(--amber); }
+.cov-text-red { color: var(--red); } .cov-text-unknown { color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 14px; color: var(--muted); font-size: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Filters */
+/* `flex-wrap` manglet: paa 320 px la de tre chipsene seg paa én linje og stakk
+   ut over kanten. */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 14px; }
+.chip { background: var(--panel); color: var(--muted); border: 1px solid var(--border);
+  padding: 7px 14px; border-radius: 20px; font-size: 12.5px; cursor: pointer; }
+.chip.active { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+
+/* Lead-kort */
+/* `1fr` i et grid nekter aa krympe under innholdets min-bredde uten
+   `minmax(0, 1fr)`. Et langt ord eller et bredt tall i kortet dro derfor hele
+   sida med seg i stedet for aa brekke. */
+.lead { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 4px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  padding: 16px 18px; margin-bottom: 14px; }
+.lead-num { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%;
+  background: var(--panel2); border: 1px solid var(--border); color: var(--muted); font-size: 13px; font-weight: 600; }
+.lead-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.pill { font-size: 11.5px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
+.pill-green { background: rgba(55,196,109,.15); color: var(--green); }
+.pill-amber { background: rgba(224,166,58,.15); color: var(--amber); }
+.pill-red { background: rgba(224,87,76,.15); color: var(--red); }
+.pill-grey { background: var(--panel2); color: var(--muted); }
+.tag { font-size: 11px; color: var(--muted); background: var(--panel2); border: 1px solid var(--border);
+  padding: 3px 9px; border-radius: 6px; }
+.tag-loc { color: var(--amber); border-color: transparent; background: rgba(224,166,58,.1); }
+.lead-title { font-size: 17px; font-weight: 650; margin: 2px 0 5px; }
+.lead-desc { color: var(--muted); font-size: 13.5px; margin: 0 0 12px; }
+.lead-grid { display: grid; grid-template-columns: 150px 1fr; gap: 18px; align-items: start; }
+@media (max-width: 620px) { .lead-grid { grid-template-columns: 1fr; } }
+.funn { background: var(--panel2); border: 1px solid var(--border); border-radius: 11px; padding: 12px 14px; }
+.funn-label { display: block; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.funn-val { display: block; font-size: 24px; font-weight: 700; margin: 4px 0 2px; }
+.funn-period { font-size: 12px; color: var(--faint); }
+.vinkel-h { font-size: 12px; color: var(--faint); margin: 0 0 3px; }
+.vinkel-t { margin: 0 0 8px; font-size: 13.5px; }
+.kilde { color: var(--accent); font-size: 12.5px; text-decoration: none; }
+.kilde:hover { text-decoration: underline; }
+.alt-dekning { margin: 6px 0 0; color: var(--faint); font-size: 12px; }
+.see-all { text-align: center; color: var(--faint); font-size: 13px; padding: 4px 0 8px; }
+
+/* KI-blokk (redaktor + utkast + godkjenning) */
+.ai-block { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.ai-editor, .ai-draft { margin-bottom: 8px; }
+.ai-editor summary, .ai-draft summary { cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--text); }
+.ai-editor p, .ai-draft p { font-size: 13.5px; margin: 6px 0; }
+.ai-angle { color: var(--muted); }
+.ai-verdict { color: var(--faint); font-style: italic; }
+.ai-tag { font-size: 10px; background: var(--panel2); color: var(--faint); padding: 1px 6px; border-radius: 8px; margin-left: 6px; }
+.ai-draft h4 { margin: 8px 0 4px; font-size: 15px; }
+.draft-ingress { font-weight: 600; }
+.draft-body { font-size: 13.5px; white-space: pre-wrap; color: var(--text); margin: 8px 0; }
+.draft-checks-h { font-size: 12px; color: var(--faint); text-transform: uppercase; letter-spacing: .04em; margin: 8px 0 4px; }
+.draft-checks { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+.ai-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.btn-approve { background: var(--green); color: #06210f; border: 0; padding: 8px 16px; border-radius: 9px; font-weight: 600; font-size: 13px; cursor: pointer; }
+.btn-reject { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 8px 14px; border-radius: 9px; font-size: 13px; cursor: pointer; }
+.btn-approve:hover { filter: brightness(1.08); }
+.btn-approved-link { color: var(--text); background: var(--panel); border: 1px solid var(--border); padding: 10px 16px; border-radius: 10px; font-size: 13.5px; text-decoration: none; display: inline-block; margin-bottom: 8px; }
+.btn-approved-link:hover { border-color: var(--accent); }
+
+/* Sidebar */
+.sidebar .panel { margin-bottom: 16px; }
+.side-h { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 16px 0 10px; }
+.cal-block { border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+.cal-status-line { margin: 0 0 8px; font-size: 13px; }
+.cal-status-line .green { color: var(--green); } .cal-status-line .amber { color: var(--amber); }
+.muted { color: var(--muted); } .green { color: var(--green); }
+.cal-note { color: var(--faint); font-size: 12.5px; margin: 0; }
+.cal-row { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; }
+.cal-day { color: var(--muted); }
+.todo { list-style: none; padding: 0; margin: 0; }
+.todo li { display: flex; gap: 10px; padding: 10px; border-radius: 9px; background: var(--panel2); margin-bottom: 8px; }
+.todo-box { width: 16px; height: 16px; border: 1.5px solid var(--faint); border-radius: 4px; margin-top: 2px; flex: none; }
+.todo li strong { font-size: 13.5px; }
+.todo li p { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
+.todo li.prio-høy { border-left: 3px solid var(--amber); }
+.status summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.status ul { font-size: 12px; color: var(--faint); padding-left: 18px; margin: 8px 0 0; }
+.status .err { color: var(--amber); }
+
+/* Footer + empty */
+.foot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  color: var(--faint); font-size: 12px; padding: 18px 32px; border-top: 1px solid var(--border); }
+.empty { margin: 40px 32px; padding: 34px; text-align: center; background: var(--panel);
+  border: 1px dashed var(--border); border-radius: 14px; }
+
+/* Skannet kjorte, men ingenting kom gjennom. Ikke sentrert som `.empty`: dette
+   er ikke en velkomstskjerm, det er et svar med en begrunnelse og to veier ut,
+   og da leses venstrestilt tekst raskere. */
+.empty-skann { max-width: 620px; }
+.empty-b { color: var(--muted); font-size: 14px; line-height: 1.55; margin: 10px 0 0; }
+.empty-b .btn-scan, .empty-b .btn-ghost { margin: 14px 8px 0 0; }
+.empty-liste { margin: 12px 0 0; padding-left: 20px; color: var(--muted);
+  font-size: 13.5px; line-height: 1.6; }
+.empty-liste strong { color: var(--text); }
+.empty-skann .status { margin-top: 18px; background: none; border: 0; padding: 0; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Mobil-først pynt (v4). Lagt til nederst slik at den overstyrer bevisst.
+   Prinsipp: telefonen er hovedflaten - journalisten bruker dette i felt, ikke ved
+   skrivebordet. Alt som kan trykkes er minst 44 px. Ingenting horisontalt scroll.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --pad: 16px;            /* sidemarg paa mobil */
+  --radius: 14px;
+  --tap: 44px;            /* minste trykkflate */
+  --ring: 0 0 0 3px rgba(59,130,246,.35);
+}
+
+/* iPhone: hold innholdet klar av hakket og hjemindikatoren. */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+}
+
+/* Topbar: klistret, saa «Skann na» alltid er innen rekkevidde. */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  padding: calc(env(safe-area-inset-top) + 12px) var(--pad) 12px;
+  background: rgba(13,19,32,.82);
+  backdrop-filter: saturate(150%) blur(12px);
+  -webkit-backdrop-filter: saturate(150%) blur(12px);
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.logo { width: 44px; height: 44px; font-size: 22px; border-radius: 12px; }
+.brand h1 { font-size: 20px; }
+.tagline { font-size: 12.5px; }
+.top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.btn-scan, .btn-ghost, .btn-approved-link {
+  min-height: var(--tap); display: inline-flex; align-items: center; justify-content: center;
+}
+.btn-scan { padding: 0 18px; border-radius: 12px; font-size: 14px; }
+.btn-scan:active { transform: scale(.97); }
+.btn-ghost {
+  color: var(--text); background: var(--panel); border: 1px solid var(--border);
+  padding: 0 14px; border-radius: 12px; font-size: 13.5px; text-decoration: none;
+}
+.btn-ghost:active { transform: scale(.97); }
+.last-scan { width: 100%; text-align: right; margin: 4px 0 0; }
+
+/* Felles sidebredde */
+.page { padding: 14px var(--pad) 40px; max-width: 720px; margin: 0 auto; }
+.kpis, .layout { padding-left: var(--pad); padding-right: var(--pad); }
+.foot { padding: 16px var(--pad) calc(env(safe-area-inset-bottom) + 20px); }
+
+/* KPI: to i bredden paa mobil, luftigere */
+@media (max-width: 620px) {
+  .kpis { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .kpi { padding: 13px 14px; }
+  .kpi-num { font-size: 25px; }
+  .empty { margin: 24px var(--pad); padding: 26px 20px; }
+}
+
+/* Prioriteringsrader klemte seg paa smal skjerm - stables naa */
+@media (max-width: 620px) {
+  .prio-row { grid-template-columns: 16px 1fr 40px; grid-template-areas: "r l s" "r t t"; row-gap: 6px; }
+  .prio-rank { grid-area: r; } .prio-label { grid-area: l; white-space: normal; }
+  .prio-score { grid-area: s; } .prio-track { grid-area: t; }
+}
+
+/* Fokus synlig for tastatur/skjermleser */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible,
+summary:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 10px; }
+
+/* ── Kalender ───────────────────────────────────────────────────────────── */
+.cal-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.cal-title { font-size: 17px; }
+.cal-arrow {
+  width: var(--tap); height: var(--tap); display: grid; place-items: center;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  color: var(--text); text-decoration: none; font-size: 22px; line-height: 1;
+}
+.cal-arrow:active { transform: scale(.94); }
+.cal-back { margin: -4px 0 12px; font-size: 13px; }
+.cal-back a { color: var(--accent); text-decoration: none; }
+.cal-panel { padding: 14px; }
+
+.cal-weekdays, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal-weekdays { margin-bottom: 6px; }
+.cal-weekdays span {
+  text-align: center; font-size: 11px; color: var(--faint);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.cal-weekdays .we { color: var(--amber); opacity: .75; }
+
+.cal-cell {
+  position: relative; aspect-ratio: 1 / 1; min-height: 42px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  background: var(--panel2); border: 1px solid transparent; border-radius: 11px;
+  color: var(--muted); text-decoration: none; font-variant-numeric: tabular-nums;
+  transition: transform .12s ease, border-color .12s ease, background .12s ease;
+}
+.cal-cell.cal-empty { background: transparent; }
+.cal-cell.has-leads { background: var(--panel); border-color: var(--border); color: var(--text); }
+.cal-cell.has-leads:active { transform: scale(.95); }
+.cal-cell.is-today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.cal-daynum { font-size: 14px; font-weight: 600; }
+.cal-count {
+  position: absolute; top: 4px; right: 5px; font-size: 10px; font-weight: 700;
+  color: var(--accent);
+}
+.cal-dots { display: flex; gap: 3px; }
+.cal-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; background: var(--faint); }
+.cal-dot.stage-ide { background: var(--faint); }
+.cal-dot.stage-research { background: var(--accent); }
+.cal-dot.stage-skriving { background: var(--amber); }
+.cal-dot.stage-publisert { background: var(--green); }
+.pill-stage { color: #08131f; }
+.stage-bg-ide { background: #4a5876; color: #e7ecf4; }
+.stage-bg-research { background: var(--accent); color: #fff; }
+.stage-bg-skriving { background: var(--amber); }
+.stage-bg-publisert { background: var(--green); }
+
+/* Dag-utbrett */
+.day-panel:target { border-color: var(--accent); }
+.day-lead { padding: 12px 0; border-top: 1px solid var(--border); }
+.day-lead:first-of-type { border-top: 0; }
+.day-lead-top { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.day-lead h3 { font-size: 15.5px; margin: 0 0 4px; }
+.day-lead-ingress { color: var(--muted); font-size: 13.5px; margin: 0 0 10px; }
+.day-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.fld { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--faint); }
+.fld input, .fld select {
+  min-height: var(--tap); background: var(--panel2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; font-size: 14px;
+}
+.btn-small {
+  min-height: var(--tap); padding: 0 16px; border: 0; border-radius: 10px;
+  background: var(--accent2); color: #fff; font-size: 13.5px; font-weight: 600; cursor: pointer;
+}
+.btn-small:active { transform: scale(.97); }
+.empty-inline { text-align: center; color: var(--muted); }
+.empty-inline p { margin: 4px 0; }
+
+/* Rolig innfade - ingen bevegelse for de som har skrudd det av */
+/* `backwards`, IKKE `both`. Med `both` beholder animasjonen sluttilstanden sin
+   for alltid - og sluttilstanden er `transform: none`. En kjorende eller fylt
+   CSS-animasjon slaar inline style, saa transformen sveipen setter i JS ble
+   overstyrt permanent: kortet flyttet seg ALDRI, uansett hvor langt man dro.
+   Verifisert i Chromium 26.07.2026 - inline transform sa translateX(-468px)
+   mens den brukte verdien sto paa matrix(1,0,0,1,0,0).
+   `backwards` gir samme innfade, men slipper elementet naar den er ferdig. */
+@media (prefers-reduced-motion: no-preference) {
+  .panel, .lead, .kpi { animation: rise .32s ease backwards; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+}
+
+/* Desktop: gi luft tilbake naar det er plass */
+@media (min-width: 900px) {
+  :root { --pad: 32px; }
+  .page { max-width: 960px; }
+  .brand h1 { font-size: 26px; }
+  .cal-cell { min-height: 64px; }
+}
+
+/* ── Tre vinkler ────────────────────────────────────────────────────────── */
+.angles { margin-top: 10px; }
+.angles-h { font-size: 12px; color: var(--faint); text-transform: uppercase;
+  letter-spacing: .04em; margin: 0 0 8px; }
+.angle { background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+.angle[open] { border-color: var(--accent); }
+.angle > summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  cursor: pointer; min-height: var(--tap); list-style: none; }
+.angle > summary::-webkit-details-marker { display: none; }
+.angle-nr { width: 26px; height: 26px; flex: none; display: grid; place-items: center;
+  border-radius: 50%; background: var(--panel); border: 1px solid var(--border);
+  font-size: 12px; font-weight: 700; color: var(--muted); }
+.angle-title { flex: 1 1 60%; font-size: 14.5px; font-weight: 600; }
+.angle-meta { display: flex; align-items: center; gap: 6px; }
+.angle-strength { font-size: 11px; font-weight: 700; color: var(--accent);
+  background: rgba(59,130,246,.14); padding: 2px 7px; border-radius: 20px; }
+.angle-risk { color: var(--amber); font-size: 12.5px; margin: 8px 0 0; }
+.src-list { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--text); }
+.src-list li { margin-bottom: 4px; }
+.angle-approve { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.angle-approve .btn-approve { min-height: var(--tap); padding: 0 18px; }
+
+/* ── Godkjenn: datovelger som spretter opp ─────────────────────────────── */
+.approve-pop { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.approve-pop > summary { list-style: none; }
+.approve-pop > summary::-webkit-details-marker { display: none; }
+.btn-approve.as-summary {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: var(--tap); padding: 0 18px; cursor: pointer; user-select: none;
+}
+.btn-approve.as-summary:active { transform: scale(.97); }
+.approve-pop[open] > summary { opacity: .55; }
+.angle-approve { flex-direction: column; align-items: stretch; border-top: 0; padding-top: 10px; }
+.approve-h { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+.date-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.date-row .fld { flex: 1 1 130px; }
+.date-row .fld input { width: 100%; }
+.date-arrow { color: var(--faint); padding-bottom: 12px; font-size: 16px; }
+.approve-note { margin: 8px 0 0; font-size: 11.5px; color: var(--faint); }
+
+/* Kalender: start- og deadline-markering */
+.cal-dot.is-start { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--accent); }
+.cal-dot.is-deadline { border-radius: 2px; }
+.span-badge { font-size: 11px; color: var(--faint); }
+
+/* ══ Kort-hode: dekningsmerke + kilde, tallet stort ═══════════════════════
+   Dekningsstatus vises som IKON + TEKST + farge - aldri farge alene, saa den
+   er lesbar for fargeblinde og sier hva den betyr. */
+.lead-head { display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.cov { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px;
+  font-weight: 800; letter-spacing: .04em; padding: 6px 11px; border-radius: 8px; }
+.cov-ic { font-size: 11px; line-height: 1; }
+.cov.cov-green { background: rgba(55,196,109,.14); color: #4ede84; }
+.cov.cov-yellow { background: rgba(224,166,58,.14); color: #edb954; }
+.cov.cov-red { background: rgba(224,87,76,.14); color: #f0736a; }
+.cov.cov-unk { background: var(--panel2); color: var(--muted); }
+.src-ref { font-size: 11px; color: var(--faint); text-decoration: none; }
+.src-ref:hover { color: var(--accent); }
+
+/* Tallet ER nyheten - storst element, med perioden rett under */
+.metric { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 8px; }
+.metric-v { font-size: 40px; font-weight: 800; letter-spacing: -.03em; line-height: 1;
+  font-variant-numeric: tabular-nums; }
+.metric-cmp { font-size: 12px; color: var(--faint); }
+
+/* Vinkler som ikonknapper med undertekst */
+.angle-ic { width: 34px; height: 34px; flex: none; display: grid; place-items: center;
+  border-radius: 10px; background: var(--panel); border: 1px solid var(--border);
+  font-size: 16px; }
+.angle-txt { flex: 1 1 55%; display: flex; flex-direction: column; gap: 1px; }
+.angle-kind { font-size: 10px; color: var(--faint); text-transform: uppercase;
+  letter-spacing: .06em; font-weight: 700; }
+.angle-title { font-size: 14px; font-weight: 600; line-height: 1.3; }
+
+/* «Be om utkast» - lat generering */
+.ask-draft { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; margin-top: 4px; }
+.btn-ask { min-height: var(--tap); padding: 0 18px; border: 1px solid var(--accent);
+  background: rgba(59,130,246,.12); color: var(--accent); border-radius: 12px;
+  font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.btn-ask:active { transform: scale(.97); }
+.ask-note { font-size: 11px; color: var(--faint); }
+
+/* Kalenderbånd: viser lengde og overlapp, ikke bare at «noe skjer» */
+.cal-bands { display: flex; flex-direction: column; gap: 2px; width: 78%; margin-top: 2px; }
+.cal-band { height: 4px; border-radius: 1px; background: var(--faint); }
+.cal-band.b-start { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
+.cal-band.b-end { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+.cal-band.stage-ide { background: #4a5876; }
+.cal-band.stage-research { background: var(--accent); }
+.cal-band.stage-skriving { background: var(--amber); }
+.cal-band.stage-publisert { background: var(--green); }
+.cal-more { font-size: 8px; color: var(--faint); font-style: normal; }
+
+.deadlines { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.dl-h { font-size: 11px; color: var(--faint); text-transform: uppercase;
+  letter-spacing: .06em; margin: 0 0 6px; }
+.dl-row { display: flex; gap: 12px; align-items: baseline; padding: 9px 0;
+  border-bottom: 1px solid var(--border); text-decoration: none; color: var(--text); }
+.dl-row:last-child { border-bottom: 0; }
+.dl-date { flex: none; width: 56px; font-size: 12px; color: var(--amber);
+  font-variant-numeric: tabular-nums; }
+.dl-title { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Etterrettelighet: headline fact, usporbare tall, gate og prosessnotat */
+.hfact { font-size: 12.5px; color: var(--text); background: var(--panel);
+  border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+  padding: 8px 10px; margin: 6px 0 8px; }
+.untraced { font-size: 12.5px; color: #f0b34a; background: rgba(224,166,58,.1);
+  border-radius: 8px; padding: 9px 11px; margin: 10px 0 0; }
+.gate-block { font-size: 12.5px; color: var(--muted); background: var(--panel2);
+  border: 1px dashed var(--border); border-radius: 10px; padding: 10px 12px; margin: 10px 0 0; }
+.prosessnotat { font-size: 12px; color: var(--muted); background: var(--panel2);
+  border-radius: 10px; padding: 10px 12px; margin: 8px 0 10px; line-height: 1.5; }
+
+/* ⏳ Forsprang: tall som ikke er publisert enda */
+.forsprang { border-color: rgba(59,130,246,.35); }
+.komm { display: flex; gap: 12px; align-items: center; padding: 10px 0;
+  border-top: 1px solid var(--border); }
+.komm:first-of-type { border-top: 0; }
+.komm-when { flex: none; width: 46px; text-align: center; background: var(--panel2);
+  border-radius: 10px; padding: 7px 0; font-size: 17px; font-weight: 800;
+  color: var(--accent); line-height: 1; font-variant-numeric: tabular-nums; }
+.komm-when span { display: block; font-size: 9px; font-weight: 600; color: var(--faint);
+  text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
+.komm-mid { min-width: 0; }
+.komm-title { font-size: 13.5px; font-weight: 600; color: var(--text);
+  text-decoration: none; display: block; line-height: 1.35; }
+.komm-title:hover { color: var(--accent); }
+.komm-meta { margin-top: 3px; }
+.komm-contact { font-size: 11.5px; color: var(--faint); }
+.komm-contact a { color: var(--accent); text-decoration: none; }
+
+/* «NY» — det som ikke fantes ved forrige skann */
+.ny-merke { font-size: 9.5px; font-weight: 800; letter-spacing: .06em;
+  background: var(--accent); color: #fff; padding: 4px 8px; border-radius: 6px; }
+
+/* «UENDRET» — motsatsen. Vises bare naar ingenting hadde endret seg og vi heller
+   viser gjengangerne enn en tom skjerm. Damp, ikke aksent: den skal opplyse, ikke
+   konkurrere med funnene om oppmerksomheten. */
+.uendret-merke { font-size: 9.5px; font-weight: 700; letter-spacing: .06em;
+  background: var(--line); color: var(--muted); padding: 4px 8px; border-radius: 6px;
+  border: 1px solid var(--line); }
+
+/* ── Trendlinje ──────────────────────────────────────────────────────────────
+   «Tallet falt» er en notis. «Tredje kvartal paa rad at det faller» er en sak.
+   Linja er derfor et FORM-signal ved siden av tallet, ikke et diagram: ingen
+   akser, ingen rutenett, ingen tall paa selve linja — tallet staar allerede der
+   med full presisjon rett ved siden av.
+
+   Fargen baerer retningen, men ALDRI alene: teksten under sier «oppgang» eller
+   «nedgang» med ord, og pila gjentar det. Roedt og groent er nettopp det paret
+   flest fargeblinde ikke skiller. */
+.gnist { display: inline-flex; align-items: center; margin-left: 10px;
+  vertical-align: middle; opacity: .9; }
+.gnist svg { display: block; }
+.trend-opp { color: var(--green); }
+.trend-ned { color: var(--red); }
+.trend-flat { color: var(--muted); }
+.trend-tekst { margin: 6px 0 0; font-size: 13px; font-weight: 600;
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.trend-kilde { color: var(--muted); font-weight: 400; font-size: 11.5px;
+  font-variant-numeric: tabular-nums; }
+
+/* ── Oppfoelger ──────────────────────────────────────────────────────────────
+   Aftenbladet har skrevet om dette foer, og det er lenge siden. Da er dekningen
+   ikke et minus — det er den letteste publiserte saken som finnes: premisset,
+   bildene og kildene fra sist ligger der allerede. Derfor en egen boks og ikke
+   en graa fotnote. Den skal leses. */
+.oppfolger { display: block; margin: 10px 0 0; padding: 10px 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 10px; text-decoration: none; }
+.oppfolger:hover { border-color: var(--accent); }
+.oppfolger-merke { display: inline-block; font-size: 9.5px; font-weight: 800;
+  letter-spacing: .06em; color: var(--accent); margin-right: 8px; }
+.oppfolger-tekst { color: var(--text); font-size: 13px; line-height: 1.45; }
+
+/* ── Framdrift for utkast (nede til venstre) ─────────────────────────────────
+   Ligger fast i hjornet slik at den er synlig uansett hvor langt ned i saken
+   journalisten har scrollet. Uten dette var 10-30 sekunders skriving usynlig. */
+.framdrift {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 60;
+  width: min(280px, calc(100vw - 24px));
+  padding: 10px 12px 8px;
+  border-radius: 12px;
+  background: #10151c;
+  border: 1px solid #2a3542;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .45);
+  font-size: .82rem;
+  color: #dbe4ee;
+}
+.framdrift[hidden] { display: none; }
+.fd-topp { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.fd-tekst { font-weight: 600; }
+.fd-pct { font-variant-numeric: tabular-nums; color: #9fb3c8; }
+.fd-spor {
+  margin-top: 7px;
+  height: 5px;
+  border-radius: 4px;
+  background: #202b36;
+  overflow: hidden;
+}
+.fd-fyll {
+  height: 100%;
+  border-radius: 4px;
+  background: #4ea1ff;
+  transition: width .5s ease;
+}
+.fd-hint { margin: 6px 0 0; font-size: .7rem; color: #7d8fa3; line-height: 1.3; }
+.framdrift.fd-feil { border-color: #7a2f2f; }
+.framdrift.fd-feil .fd-fyll { background: #d4574f; }
+.framdrift.fd-feil .fd-tekst { color: #ffb3ad; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fd-fyll { transition: none; }
+}
+
+/* ── KI av: maler i stedet for journalistens vinkler ─────────────────────────
+   Dette maa vaere umulig aa overse. Ser vinklene like ut hver gang, er det
+   fordi de ER like - faste maler, ikke noe en journalist har tenkt ut. */
+.ki-av {
+  margin: 0 0 14px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  background: #2a2113;
+  border: 1px solid #6b5220;
+}
+.ki-av-h { margin: 0; font-weight: 700; font-size: .9rem; color: #ffd98a; }
+.ki-av-b { margin: 5px 0 0; font-size: .8rem; line-height: 1.45; color: #d9c9a4; }
+.ki-av-b code {
+  background: #191308; padding: 1px 5px; border-radius: 4px;
+  font-size: .95em; color: #ffe4ad;
+}
+
+/* ── Sveipekort på lagrede utkast ────────────────────────────────────────────
+   Venstre = legg bort, høyre = behold. Kortet slettes ALDRI - «legg bort»
+   setter et tidsstempel, og angre-knappen tar det rett tilbake. */
+.swipe-kort {
+  position: relative;
+  overflow: hidden;
+  touch-action: pan-y;
+  transition: transform .25s ease, opacity .25s ease;
+}
+.swipe-kort.drar { transition: none; }
+.swipe-merke {
+  position: absolute;
+  top: 12px;
+  z-index: 3;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s ease;
+}
+.swipe-venstre { left: 12px; background: #4a2020; color: #ffb3ad; border: 1px solid #7a2f2f; }
+.swipe-hoyre   { right: 12px; background: #16341f; color: #96e5b0; border: 1px solid #2f6b45; }
+.swipe-kort.mot-venstre .swipe-venstre { opacity: 1; }
+.swipe-kort.mot-hoyre .swipe-hoyre { opacity: 1; }
+.swipe-kort.kort-ut-venstre { transform: translateX(-120%) rotate(-12deg); opacity: 0; }
+.swipe-kort.beholdt { box-shadow: 0 0 0 2px #2f6b45 inset; }
+
+.kort-valg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 11px;
+  border-top: 1px solid #202b36;
+}
+.btn-bort, .btn-behold {
+  border-radius: 9px;
+  padding: 8px 13px;
+  font-size: .84rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-bort { background: #241a1a; color: #ffb3ad; border: 1px solid #5e2a2a; }
+.btn-behold { background: #16281d; color: #96e5b0; border: 1px solid #2f6b45; }
+.kort-hint { font-size: .74rem; color: #7d8fa3; }
+
+/* Angre-stripe nede - samme hjørne som framdriften, samme logikk: si ifra. */
+.angre {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: #10151c;
+  border: 1px solid #2a3542;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .45);
+  font-size: .84rem;
+  color: #dbe4ee;
+}
+.angre[hidden] { display: none; }
+.angre-knapp {
+  background: none;
+  border: none;
+  color: #4ea1ff;
+  font-weight: 700;
+  font-size: .84rem;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swipe-kort, .swipe-merke { transition: none; }
+}
+
+/* ── Vinkler: forslagstittelen er hovedsaken ─────────────────────────────────
+   Foer laa vinkeltypen («KONSEKVENS») over overskriften i store bokstaver, og
+   da ser det ut som det er TYPEN man velger. Det journalisten skal lese er
+   forslaget til tittel og hvilket faktum nettopp den tittelen bygger paa. */
+.angles-h { text-transform: none; letter-spacing: 0; line-height: 1.4; }
+
+.angle summary { align-items: flex-start; gap: 10px; }
+
+.angle-nr {
+  flex: 0 0 auto;
+  width: 22px; height: 22px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: #1c2733;
+  color: #8fa6bd;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+.angle-txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 4px; }
+.angle-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.32;
+  color: var(--text, #e8eef5);
+}
+.angle-fact {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #93a7bb;
+}
+/* Merkelapp, ikke overskrift. */
+.angle-kind {
+  font-size: 10px;
+  letter-spacing: .04em;
+  text-transform: none;
+  color: #7d8fa3;
+  background: #172029;
+  border-radius: 999px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+.angle-meta { flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 5px; }
+
+@media (max-width: 560px) {
+  .angle-meta { flex-direction: row; align-items: center; }
+  .angle summary { flex-wrap: wrap; }
+  .angle-txt { flex: 1 1 100%; }
+}
+
+/* ── Mobil: mindre topp, raskere til sakene ──────────────────────────────────
+   Foer tok logo + tittel + tagline + fire store KPI-kort hele forste skjerm,
+   saa du maatte scrolle forbi alt for aa se ett eneste saksforslag. Tallene er
+   fortsatt der - de tar bare den plassen de er verdt. */
+@media (max-width: 620px) {
+  .topbar { padding-top: 10px; padding-bottom: 8px; row-gap: 8px; }
+  .brand { gap: 10px; align-items: flex-start; }
+  .brand .logo { font-size: 22px; line-height: 1.1; }
+  .brand h1 { font-size: 19px; line-height: 1.15; white-space: nowrap; }
+  .tagline {
+    font-size: 11.5px;
+    line-height: 1.3;
+    color: #7d8fa3;
+    max-width: 22ch;
+  }
+  .top-actions { gap: 6px; }
+  .last-scan { font-size: 10.5px; line-height: 1.3; }
+
+  /* KPI-ene blir en kompakt stripe i stedet for fire plakater. */
+  .kpis { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .kpi { padding: 9px 11px; border-radius: 11px; }
+  .kpi-top { gap: 5px; }
+  .kpi-ic { font-size: 13px; }
+  .kpi-label { font-size: 10.5px; }
+  .kpi-num { font-size: 21px; margin-top: 2px; }
+  .kpi-num.small { font-size: 13px; margin-top: 4px; }
+  .kpi-sub { font-size: 10px; line-height: 1.3; }
+}
+
+/* «Kommer snart» er nyttig, men ikke det forste du skal maatte scrolle forbi.
+   Som <details> aapner du den naar du vil ha den. */
+.forsprang > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.forsprang > summary::-webkit-details-marker { display: none; }
+.forsprang > summary::after {
+  content: "▾";
+  margin-left: auto;
+  color: #7d8fa3;
+  font-size: 12px;
+}
+.forsprang[open] > summary::after { content: "▴"; }
+
+/* Prioriteringsradene er lenker ned til saken - de skal se klikkbare ut. */
+a.prio-row { text-decoration: none; color: inherit; border-radius: 8px; }
+a.prio-row:hover { background: #141c25; }
+a.prio-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.prio-label .ny-merke { margin-left: 6px; vertical-align: middle; }
+
+/* Sak uten vinkler: si hvorfor i stedet for aa vise tomrom. */
+.ingen-vinkler {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #7d8fa3;
+}
+
+/* Litt luft foran saken naar man hopper ned fra prioriteringslista. */
+.lead { scroll-margin-top: 14px; }
+
+/* ── Topplinja paa mobil: én merkerad, én knapperad ──────────────────────────
+   Foer sto de tre knappene under hverandre til hoyre mens tittelen brakk paa
+   to linjer til venstre - rundt 200 px brukt paa null informasjon. */
+@media (max-width: 620px) {
+  .topbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 9px;
+    padding-top: calc(env(safe-area-inset-top) + 9px);
+    padding-bottom: 9px;
+  }
+  .brand { align-items: center; gap: 10px; }
+  .logo { width: 34px; height: 34px; font-size: 17px; border-radius: 10px; }
+  .brand h1 { font-size: 18px; }
+  .tagline { max-width: none; font-size: 11px; margin-top: 1px; }
+
+  .top-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    align-items: center;
+    gap: 7px;
+    text-align: left;
+  }
+  .top-actions .btn-ghost,
+  .top-actions .btn-approved-link {
+    min-height: 38px;
+    padding: 0 10px;
+    font-size: 12.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .top-actions form { grid-column: 3; }
+  .btn-scan { min-height: 38px; padding: 0 14px; font-size: 13.5px; }
+  .last-scan {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 10.5px;
+    line-height: 1.35;
+    text-align: left;
+  }
+}
+
+/* Paneloverskrifter skal ikke klemmes til én bokstav i bredden. */
+@media (max-width: 620px) {
+  .panel-head { display: block; }
+  .panel-head h2 { font-size: 16px; margin-bottom: 3px; }
+  .panel-sub { display: block; font-size: 11.5px; line-height: 1.4; }
+  .forsprang > summary { align-items: center; }
+  .forsprang > summary h2 { font-size: 15px; }
+  .forsprang > summary .panel-sub { flex: 1 1 100%; }
+}
+
+/* Poengsummen: heltall. «57.0» later som om desimalen betyr noe. */
+.prio-score { font-variant-numeric: tabular-nums; }
+
+/* Prosessnotatet: dokumentasjon bak ett trykk, ikke en grå vegg foran saken. */
+.prosess { margin-top: 12px; border-top: 1px solid #202b36; padding-top: 9px; }
+.prosess > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #7d8fa3;
+  list-style: none;
+}
+.prosess > summary::-webkit-details-marker { display: none; }
+.prosess > summary::after { content: " ▾"; }
+.prosess[open] > summary::after { content: " ▴"; }
+.prosess .prosessnotat { margin: 7px 0 0; font-size: 11.5px; line-height: 1.5; color: #8fa2b6; }
+
+/* Godkjente-sida: samme kompakte topp som forsiden. */
+@media (max-width: 620px) {
+  .maincol { padding-left: var(--pad) !important; padding-right: var(--pad) !important; }
+}
+
+/* Det store tallet skal aldri brekke mellom siffer og prosenttegn. */
+/* Tall-feltet sto med `white-space: nowrap`. Det er riktig for «1039/døgn»,
+   men Stortinget la «Dokument 12:9 (2023-2024)» i det samme feltet - 364 px
+   uknekkelig tekst paa 30 px skrift. Da satte kortet en min-bredde paa 500 px,
+   og HELE sida ble bredere enn telefonen: bilde fra eieren 26.07.2026, der
+   overskrifter, knapper og filterrad alle var kuttet paa hoyre side.
+   `nowrap` er fjernet: korte verdier faar plass paa én linje uansett, og lange
+   brekker i stedet for aa dra sida med seg. `min-width: 0` trengs fordi
+   `.metric` er en flex-boks, og et flex-barn nekter aa krympe under sitt
+   innhold uten den. */
+.metric-v { overflow-wrap: anywhere; min-width: 0; }
+.metric { min-width: 0; }
+.metric { flex-wrap: wrap; row-gap: 2px; }
+
+@media (max-width: 620px) {
+  .metric-v { font-size: 30px; }
+  .metric-cmp { font-size: 11.5px; }
+  /* Kildereferansen skal aldri skyve kortet ut i bredden. */
+  .src-ref { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lead-title { font-size: 16.5px; line-height: 1.3; }
+  .lead-desc { font-size: 13px; line-height: 1.5; }
+}
+
+/* Kalender: dager midt i et løp viser én linje, ikke hele saken på nytt. */
+.dag-midt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 2px;
+  text-decoration: none;
+  color: inherit;
+  border-bottom: 1px solid #1a232d;
+}
+.dag-midt:last-child { border-bottom: none; }
+.dag-midt .dot-stage {
+  flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%;
+}
+.dag-midt-t {
+  flex: 1 1 auto;
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dag-midt-m { flex: 0 0 auto; font-size: 10.5px; color: #7d8fa3; }
+@media (max-width: 620px) {
+  .dag-midt { flex-wrap: wrap; row-gap: 2px; }
+  .dag-midt-m { flex: 1 1 100%; padding-left: 17px; }
+}
+
+/* ── Skanneskjerm ────────────────────────────────────────────────────────────
+   Et skann tar 40-60 sekunder. Før dette sto journalisten og så på den samme
+   siden uten et eneste tegn på at noe skjedde - og trykket gjerne igjen. */
+.skann-skjerm {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(7, 11, 18, .92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.skann-skjerm[hidden] { display: none; }
+.skann-kort {
+  width: min(340px, 100%);
+  padding: 26px 22px 22px;
+  border-radius: 18px;
+  background: #10151c;
+  border: 1px solid #2a3542;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
+  text-align: center;
+}
+
+/* Radaren snurrer så lenge noe faktisk kjører - den er ikke pynt, den er
+   signalet om at prosessen lever. */
+.radar {
+  width: 66px; height: 66px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  border: 1px solid #2a3542;
+  background:
+    radial-gradient(circle, rgba(78,161,255,.14) 0%, transparent 62%),
+    repeating-radial-gradient(circle, transparent 0 10px, rgba(42,53,66,.7) 10px 11px);
+  position: relative;
+  overflow: hidden;
+}
+.radar-arm {
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(from 0deg, rgba(78,161,255,.55), transparent 70deg);
+  animation: sveip 1.7s linear infinite;
+}
+@keyframes sveip { to { transform: rotate(360deg); } }
+
+.skann-fase { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.35; }
+.skann-spor {
+  margin: 14px 0 7px;
+  height: 6px;
+  border-radius: 4px;
+  background: #1c2531;
+  overflow: hidden;
+}
+.skann-fyll {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #3d7fd6, #4ea1ff);
+  transition: width .7s ease;
+}
+.skann-pct { margin: 0; font-size: 12.5px; color: #9fb3c8; font-variant-numeric: tabular-nums; }
+.skann-siste {
+  margin: 11px 0 0;
+  min-height: 2.6em;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #8fa6bd;
+  word-break: break-word;
+}
+.skann-hint { margin: 12px 0 0; font-size: 10.5px; line-height: 1.45; color: #6f8195; }
+.skann-lukk {
+  margin-top: 14px;
+  padding: 9px 18px;
+  border-radius: 10px;
+  background: #1c2531;
+  border: 1px solid #2f3d4c;
+  color: #dbe4ee;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.skann-lukk[hidden] { display: none; }
+
+.skann-skjerm.skann-feil .skann-fase { color: #ffb3ad; }
+.skann-skjerm.skann-feil .skann-fyll { background: #d4574f; }
+.skann-skjerm.skann-feil .radar-arm { animation: none; background: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-arm { animation: none; background: conic-gradient(from 0deg, rgba(78,161,255,.4), transparent 70deg); }
+  .skann-fyll { transition: none; }
+}
+
+/* ── Kalender: timebudsjett ──────────────────────────────────────────────────
+   Tre saker à tre timer på samme dag er ni timer. Det skal synes i månedsruta,
+   ikke først når dagen er i gang. */
+.kap-linje {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid #202b36;
+  font-size: 12.5px;
+}
+.kap-t { color: #8fa2b6; }
+.kap-felt {
+  width: 68px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #141c25;
+  border: 1px solid #2a3542;
+  color: #e8eef5;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.kap-sum { margin-left: auto; color: #7d8fa3; font-size: 11.5px; }
+.kap-varsel { color: #ffb3ad; }
+
+/* Timetallet i månedsruta. Blir dagen for full, farges den. */
+.cal-timer {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #7d8fa3;
+  font-variant-numeric: tabular-nums;
+}
+.cal-cell { position: relative; }
+.cal-cell.er-full { box-shadow: inset 0 0 0 1px #7a2f2f; }
+.cal-cell.er-full .cal-timer { color: #ff9d95; }
+
+/* Dagens fyllingsgrad i dagpanelet. */
+.dag-bar {
+  height: 5px;
+  border-radius: 4px;
+  background: #1c2531;
+  overflow: hidden;
+  margin: 0 0 13px;
+}
+.dag-bar span { display: block; height: 100%; border-radius: 4px; background: #4ea1ff; }
+.dag-bar-over span { background: #d4574f; }
+.dag-ok { color: #96e5b0; }
+.dag-over { color: #ffb3ad; }
+
+.fld-timer input { width: 88px; }
+
+/* Grunnen til at KI-en er av hører hjemme ved siden av varselet. */
+.ki-av-feil {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #191308;
+  color: #ffc98a;
+  font-size: .95em;
+}
+
+/* ── Dagruta: dagtall, striper og timetall får hver sin rad ──────────────────
+   Da aspect-ratio 1/1 møtte tre striper PLUSS et timetall, vokste rutene med
+   saker seg høyere enn de tomme og hele rutenettet mistet takten. Nå er høyden
+   fast og innholdet stablet, så en full dag ser lik ut som en tom - bortsett
+   fra det som faktisk skal skille dem. */
+.cal-cell {
+  aspect-ratio: auto;
+  min-height: 58px;
+  justify-content: flex-start;
+  padding: 6px 3px 5px;
+  gap: 2px;
+}
+.cal-daynum { line-height: 1.1; }
+.cal-bands { margin-top: auto; }
+.cal-timer {
+  position: static;
+  margin-top: 2px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #8fa2b6;
+  font-variant-numeric: tabular-nums;
+}
+.cal-cell.er-full .cal-timer { color: #ff9d95; }
+@media (min-width: 900px) { .cal-cell { min-height: 74px; } }
+
+/* Fast høyde på alle ruter: en dag med saker og en tom dag skal stå på linje. */
+.cal-cell { height: 72px; min-height: 0; overflow: hidden; }
+.cal-cell.cal-empty { height: 72px; }
+@media (min-width: 900px) { .cal-cell { height: 84px; } }
+
+/* ── Faner: Kalender / Oppgaver ──────────────────────────────────────────────
+   Rene lenker, ingen JavaScript. Kalenderen svarer på NÅR arbeidet ligger,
+   oppgavelista på HVA som står for tur. Samme saker, to spørsmål. */
+.faner {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+}
+.fane {
+  flex: 1 1 0;
+  padding: 9px 10px;
+  border-radius: 9px;
+  text-align: center;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.fane.er-valgt { background: var(--accent); color: #fff; }
+.fane:not(.er-valgt):active { background: var(--panel); }
+
+/* ── Oppgavekort ────────────────────────────────────────────────────────── */
+.oppg {
+  margin-bottom: 11px;
+  padding: 14px 15px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.oppg-forsinket { border-color: #7a2f2f; }
+.oppg-topp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 9px;
+}
+.oppg-frist {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.frist-naer { color: var(--amber); }
+.oppg-forsinket .oppg-frist { color: #ffb3ad; }
+.oppg-timer { margin-left: auto; font-size: 11px; color: var(--faint); }
+.oppg-tittel { margin: 0 0 5px; font-size: 16px; font-weight: 700; line-height: 1.3; }
+.oppg-desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.oppg-bunn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid #202b36;
+}
+.oppg-spenn { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.oppg-lenke { font-size: 12px; color: var(--accent); text-decoration: none; }
+.btn-ferdig {
+  margin-left: auto;
+  padding: 9px 17px;
+  border-radius: 10px;
+  background: #16281d;
+  border: 1px solid #2f6b45;
+  color: #96e5b0;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-ferdig:active { transform: scale(.97); }
+
+/* Ferdig-lista: ute av kalenderen, men aldri slettet. */
+.ferdig-liste { margin-top: 16px; }
+.ferdig-liste > summary { cursor: pointer; font-size: 13.5px; font-weight: 600; }
+.ferdig-hint { font-size: 11.5px; line-height: 1.45; margin: 7px 0 10px; }
+.ferdig-rad {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid #1a232d;
+}
+.ferdig-t {
+  flex: 1 1 auto;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: line-through;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.btn-angre {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+/* ── Temameny ved «Skann nå» ─────────────────────────────────────────────────
+   Journalisten velger selv hvilke SSB-tabeller søket skal lete i. Valget lagres
+   for seg (ikke i skann-skjemaet), så det gjelder også når skannet startes fra
+   cron. Tomt valg = alle temaer — en tom meny skal aldri gi et tomt skann. */
+.tema-meny { position: relative; }
+.tema-meny > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.tema-meny > summary::-webkit-details-marker { display: none; }
+.tema-tall {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-align: center;
+}
+.tema-boks {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(360px, calc(100vw - 24px));
+  /* 24 temaer i 6 grupper faar ikke plass paa en telefonskjerm. Boksen ruller
+     inni seg selv i stedet for aa dytte siden nedover og skape en meny man ikke
+     ser bunnen av - «Lagre» skal alltid vaere naaelig. */
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: #10151c;
+  border: 1px solid #2a3542;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .5);
+  text-align: left;
+}
+.tema-h { margin: 0 0 9px; font-size: 12.5px; font-weight: 700; color: var(--text); }
+.tema-liste { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+.tema-valg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 2px;
+  font-size: 12.5px;
+  cursor: pointer;
+  min-height: 34px;
+}
+.tema-valg input { width: 16px; height: 16px; accent-color: var(--accent); flex: 0 0 auto; }
+.tema-ikon { font-size: 13px; }
+/* Temanavn som «familie og husholdning» faar bryte over to linjer. Kuttet med
+   ellipse gjorde «skatt og kommunekasse» til «skatt og kommu…», og da maa man
+   gjette hva man huker av. */
+.tema-navn { line-height: 1.25; }
+/* Gruppeoverskriften er nå en avkryssingsboks: ett trykk tar hele «Folk». */
+.tema-gruppe {
+  display: flex; align-items: center; gap: 8px;
+  margin: 14px 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--faint);
+  cursor: pointer;
+  min-height: 28px;
+}
+.tema-gruppe:hover { color: var(--text); }
+.tema-gruppeboks {
+  width: 15px; height: 15px; accent-color: var(--accent); flex: 0 0 auto; cursor: pointer;
+}
+.tema-gruppe:first-of-type { margin-top: 2px; }
+.tema-note { margin: 10px 0 0; font-size: 10.5px; line-height: 1.4; color: var(--faint); }
+.tema-knapper {
+  display: flex;
+  gap: 8px;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid #202b36;
+}
+.tema-knapper .btn-small { flex: 1 1 0; }
+
+/* KI-koen. Blaatt og rolig: dette er verktoyet som gjor jobben sin, ikke en
+   feil. Advarselsfargene er reservert for ting som faktisk er galt. */
+.ki-ko {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #131c26;
+  border: 1px solid #2a4358;
+}
+.ki-ko-h { margin: 0; font-weight: 700; font-size: .9rem; color: #9ecbf0; }
+.ki-ko-b { margin: 5px 0 10px; font-size: .8rem; line-height: 1.45; color: #b3c6d6; }
+.ki-ko .ai-tag { vertical-align: baseline; }
+.ai-tag.ai-ko { background: #1d3346; color: #9ecbf0; }
+
+/* «Delvis» er ikke det samme som «av» - bruk gult, ikke rødt-aktig alvor. */
+.ki-av.ki-delvis { background: #1e2416; border-color: #4c6b20; }
+.ki-delvis .ki-av-h { color: #cbe58a; }
+.ki-delvis .ki-av-b { color: #c3d0a8; }
+.ki-delvis .ai-tag { vertical-align: baseline; }
+
+/* Salgspitchen fra journalist-agenten, og redaktørens leserverdi. Begge er
+   ARGUMENTER, ikke fakta — de skal se ut som en stemme i rommet, ikke som tall.
+   Derfor egen farge og venstrestrek, tydelig adskilt fra funnet. */
+.angle-pitch, .ai-leserverdi {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: rgba(59, 130, 246, .07);
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #bcd3f0;
+}
+
+/* ── Kalenderens dagliste: lesbar først, redigering bak en knapp ─────────── */
+/* Skjemaet lå åpent på hver eneste sak. Scrollet man ned for å se hva man
+   skulle gjøre, møtte man datovelgere og nedtrekksmenyer i stedet for saker. */
+.dag-fakta {
+  display: flex; flex-wrap: wrap; gap: 6px 14px;
+  margin: 8px 0 10px; font-size: 12.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.plan-rediger { margin-top: 10px; }
+.plan-rediger > summary {
+  display: inline-block; cursor: pointer; list-style: none;
+  font-size: 12.5px; color: var(--muted);
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel2);
+}
+.plan-rediger > summary::-webkit-details-marker { display: none; }
+.plan-rediger > summary:hover { color: var(--text); border-color: var(--accent); }
+.plan-rediger[open] > summary { margin-bottom: 10px; color: var(--text); }
+/* Litt luft mellom sakene, så de leses som en liste og ikke som én blokk. */
+.day-lead + .day-lead { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.day-lead h3 { font-size: 15.5px; line-height: 1.35; margin: 6px 0 0; }
+.day-lead-ingress {
+  margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* «Åpne artikkelen» i kalenderen er én kort linje, men arvet .angle-boksen fra
+   radaren der sammendraget har tre linjer. Resultatet var en høy, tom boks som
+   så ut som et panel uten innhold. Her skal den se ut som det den er: en knapp,
+   søsteren til «Endre plan». */
+.day-lead .angle {
+  background: none; border: 0; border-radius: 0; padding: 0; margin: 10px 0 0;
+  display: inline-block;
+}
+.day-lead .angle > summary {
+  min-height: 0; display: inline-flex; gap: 8px;
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel2); font-size: 12.5px; color: var(--muted);
+}
+.day-lead .angle > summary:hover { color: var(--text); border-color: var(--accent); }
+.day-lead .angle > summary .angle-title { font-size: 12.5px; font-weight: 500; flex: none; }
+.day-lead .angle[open] > summary { margin-bottom: 10px; color: var(--text); }
+/* Knappene skal stå på samme linje, ikke stables. */
+.day-lead .angle, .day-lead .plan-rediger { margin-right: 8px; }
+.day-lead .plan-rediger { display: inline-block; margin-top: 10px; }
+
+/* ── Toppknappene skal stå på én linje, like høye ────────────────────────── */
+/* «Skann nå», «Kalender» og «Lagret» hadde hver sin padding fra tre ulike
+   regelsett, pluss en margin-bottom på Lagret. Resultatet var tre knapper i
+   ulik høyde som ikke sto på linje. Én felles høyde, ett sted. */
+.top-actions {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; justify-content: flex-end;
+}
+.btn-scan, .btn-ghost, .btn-approved-link, .tema-meny > summary {
+  height: 44px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 0;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+/* Detaljelementet i seg selv skal ikke ha høyde - bare knappen inni. */
+.tema-meny { height: 44px; display: inline-block; }
+.skann-meny > summary { font-weight: 600; }
+/* Start-knappen nederst i menyen er full bredde - den er målet med hele boksen. */
+.skann-start { width: 100%; margin-top: 12px; }
+
+/* ── Næringslivshendelser fra Brønnøysund ────────────────────────────────── */
+/* En konkurs eller nyåpning er en sak man kan ringe på I DAG. Derfor står de
+   først i «Kommer snart», foran SSB-varslene man bare forbereder seg på. */
+.komm-h {
+  margin: 14px 0 8px; font-size: 11px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
+}
+.komm-h:first-of-type { margin-top: 4px; }
+.hend { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.hend:first-of-type { border-top: 0; }
+.hend-ikon { font-size: 18px; line-height: 1.3; flex: none; }
+.hend-mid { min-width: 0; flex: 1; }
+.hend-navn { color: var(--text); font-size: 14px; font-weight: 600; text-decoration: none; }
+.hend-navn:hover { color: var(--accent); text-decoration: underline; }
+.hend-meta {
+  display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px;
+  font-size: 11.5px; color: var(--faint); align-items: center;
+}
+.hend-type { font-weight: 700; }
+.hend-konkurs { color: var(--red); }
+.hend-avvikling { color: var(--amber); }
+.hend-nytt { color: var(--green); }
+.hend-bransje { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.komm-note { margin: 10px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--faint); }
+.hend-tall {
+  margin: 4px 0 0; font-size: 12px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.tall-minus { color: var(--red); font-weight: 600; }
+.tall-pluss { color: var(--green); font-weight: 600; }
+.hend-aar { color: var(--faint); }
+
+/* ── Ideer til Tobias ────────────────────────────────────────────────────── */
+/* Eieren 26.07.2026: «Legg det helt nederst. Er kommentar felt saa staar det
+   ideer for Tobias over. Saa kan han skrive det, trykker send.»
+
+   Boksen skal se ut som et notatfelt, ikke som et skjema med felt og etiketter.
+   Terskelen for aa skrive én setning skal vaere naer null. */
+.ide-boks { margin-top: 4px; }
+.ide-felt {
+  width: 100%; margin-top: 12px; padding: 12px 14px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 11px;
+  font: inherit; font-size: 14.5px; line-height: 1.5;
+  resize: vertical; min-height: 80px;
+}
+.ide-felt::placeholder { color: var(--faint); }
+.ide-felt:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px #2f6bff33;
+}
+.ide-send-rad {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 10px; flex-wrap: wrap;
+}
+.ide-hint { font-size: 12px; color: var(--faint); }
+.ide-kvittering { font-size: 12.5px; font-weight: 600; color: var(--green); }
+.ide-tomt { font-size: 12.5px; font-weight: 600; color: var(--amber); }
+.btn-send {
+  background: linear-gradient(180deg, var(--accent), var(--accent2));
+  color: #fff; border: 0; padding: 10px 24px; border-radius: 10px;
+  font-size: 14.5px; font-weight: 600; cursor: pointer;
+  min-height: var(--tap);
+  box-shadow: 0 4px 14px #2f6bff3d;
+}
+.btn-send:hover { filter: brightness(1.08); }
+
+/* Radene inne i fanen. Samme skjelett som `.hend`, saa fanen ser lik ut
+   uansett hva den inneholder. */
+.ide { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.ide:first-of-type { border-top: 0; }
+.ide-ikon { font-size: 18px; line-height: 1.3; flex: none; }
+.ide-mid { min-width: 0; flex: 1; }
+.ide-tekst {
+  margin: 0; font-size: 14px; line-height: 1.5; color: var(--text);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.ide-fersk .ide-tekst { font-weight: 600; }
+.ide-meta { margin-top: 4px; font-size: 11.5px; color: var(--faint); }
+.ide-slett { flex: none; margin: 0; }
+.ide-slett-knapp {
+  background: none; border: 0; color: var(--faint); cursor: pointer;
+  font-size: 20px; line-height: 1; padding: 2px 6px; border-radius: 8px;
+  min-width: var(--tap); min-height: var(--tap);
+}
+.ide-slett-knapp:hover { color: var(--red); background: var(--bg); }
+
+/* ── Radaren: popper opp øverst, som matchmaking i et spill ──────────────── */
+/* Før var dette en helskjerm-overlay som dekket alt. Journalisten mistet
+   konteksten sin i 40–60 sekunder og satt og så på en svart skjerm. Nå blir
+   siden stående, og radaren legger seg øverst i feltet. */
+.skann-radar {
+  display: flex; align-items: center; gap: 16px;
+  margin: 0 auto 16px; padding: 14px 18px;
+  max-width: 1200px; width: calc(100% - 32px);
+  background: linear-gradient(180deg, #16233a, #111a29);
+  border: 1px solid #2a4368; border-radius: 16px;
+  box-shadow: 0 10px 34px rgba(47, 107, 255, .18);
+  animation: radar-inn .38s cubic-bezier(.2, .8, .3, 1) both;
+}
+@keyframes radar-inn {
+  from { opacity: 0; transform: translateY(-14px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+.skann-radar[hidden] { display: none; }
+
+/* Selve radarflaten: roterende arm + ringer + blip. */
+.radar-flate {
+  position: relative; width: 54px; height: 54px; flex: none;
+  border-radius: 50%; overflow: hidden;
+  background: radial-gradient(circle, #16304d 0%, #0d1725 70%);
+  border: 1px solid #2f5686;
+}
+.radar-ring {
+  position: absolute; inset: 30%; border: 1px solid #2f568666; border-radius: 50%;
+}
+.radar-ring.r2 { inset: 12%; }
+.radar-arm {
+  position: absolute; inset: 0;
+  background: conic-gradient(from 0deg, rgba(59,130,246,.55) 0deg,
+              rgba(59,130,246,0) 55deg, rgba(59,130,246,0) 360deg);
+  animation: radar-sveip 1.8s linear infinite;
+}
+@keyframes radar-sveip { to { transform: rotate(360deg); } }
+.radar-blip {
+  position: absolute; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 6px var(--green);
+  opacity: 0; animation: radar-blink 1.8s linear infinite;
+}
+.radar-blip.b1 { top: 30%; left: 62%; animation-delay: .35s; }
+.radar-blip.b2 { top: 62%; left: 38%; animation-delay: 1.0s; }
+.radar-blip.b3 { top: 46%; left: 24%; animation-delay: 1.5s; }
+@keyframes radar-blink {
+  0%, 8% { opacity: 1; transform: scale(1.25); }
+  45%    { opacity: .35; transform: scale(1); }
+  70%    { opacity: 0; }
+  100%   { opacity: 0; }
+}
+
+.radar-tekst { flex: 1; min-width: 0; }
+.skann-radar .skann-fase { margin: 0; font-size: 14.5px; font-weight: 650; color: var(--text); }
+.skann-radar .skann-spor {
+  height: 5px; margin: 8px 0 6px; background: #0d1725; border-radius: 3px; overflow: hidden;
+}
+.skann-radar .skann-fyll {
+  height: 100%; border-radius: 3px; transition: width .5s cubic-bezier(.3,.8,.4,1);
+  background: linear-gradient(90deg, var(--accent), #6aa9ff);
+}
+.skann-radar .skann-siste {
+  margin: 0; font-size: 11.5px; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.skann-radar .skann-pct {
+  margin: 0; flex: none; font-size: 18px; font-weight: 700;
+  font-variant-numeric: tabular-nums; color: var(--accent);
+}
+.skann-radar .skann-lukk {
+  flex: none; background: var(--panel2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 9px; padding: 7px 13px;
+  font-size: 12.5px; cursor: pointer;
+}
+.skann-radar.skann-feil { border-color: #6b2d28; box-shadow: none; }
+.skann-radar.skann-feil .radar-arm { animation: none; }
+.skann-radar.skann-feil .skann-fase { color: var(--red); }
+
+/* ── Sakene flyter opp på plass etter et ferskt skann ────────────────────── */
+/* Trappet forsinkelse, så de lander etter hverandre i stedet for samtidig —
+   det er den bevegelsen som leser som «resultatene kommer inn». */
+.ferskt .prio-row, .ferskt .lead, .ferskt .hend {
+  /* `backwards` av samme grunn som `rise` over: `both` ville laast
+     `transform: none` paa kortene og gjort sveipen usynlig etter et ferskt
+     skann - altsaa nettopp naar han bruker den mest. */
+  animation: flyt-opp .5s cubic-bezier(.2, .8, .3, 1) backwards;
+}
+@keyframes flyt-opp {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: none; }
+}
+.ferskt .prio-row:nth-child(-n+8) { animation-delay: calc(var(--i, 0) * 60ms); }
+.ferskt .prio-row:nth-of-type(1) { animation-delay: 40ms; }
+.ferskt .prio-row:nth-of-type(2) { animation-delay: 100ms; }
+.ferskt .prio-row:nth-of-type(3) { animation-delay: 160ms; }
+.ferskt .prio-row:nth-of-type(4) { animation-delay: 220ms; }
+.ferskt .prio-row:nth-of-type(5) { animation-delay: 280ms; }
+.ferskt .prio-row:nth-of-type(6) { animation-delay: 340ms; }
+.ferskt .lead:nth-of-type(1) { animation-delay: 260ms; }
+.ferskt .lead:nth-of-type(2) { animation-delay: 320ms; }
+.ferskt .lead:nth-of-type(3) { animation-delay: 380ms; }
+.ferskt .lead:nth-of-type(n+4) { animation-delay: 430ms; }
+
+/* Bevegelse er ikke gratis for alle. Har brukeren bedt om mindre av det, skal
+   alt stå stille - innholdet er det samme. */
+@media (prefers-reduced-motion: reduce) {
+  .skann-radar, .ferskt .prio-row, .ferskt .lead, .ferskt .hend { animation: none; }
+  .radar-arm, .radar-blip { animation: none; }
+  .radar-blip { opacity: .8; }
+  .skann-radar .skann-fyll { transition: none; }
+}
+
+/* ── Sveip venstre på radar-sakene ───────────────────────────────────────── */
+/* Med 15–20 saker per skann er sveip raskere enn å lete etter en knapp — og
+   det er samme bevegelse han allerede bruker under «Lagret». */
+.lead.swipe-kort { position: relative; touch-action: pan-y; }
+.lead.swipe-kort.drar { transition: none; user-select: none; }
+.lead.swipe-kort:not(.drar) { transition: transform .22s ease, opacity .22s ease; }
+.lead .swipe-merke {
+  position: absolute; top: 14px; right: 16px; z-index: 2;
+  padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;
+  background: rgba(224, 87, 76, .16); color: var(--red);
+  opacity: 0; transition: opacity .15s ease; pointer-events: none;
+}
+.lead.mot-venstre .swipe-merke { opacity: 1; }
+/* Kastet og krympingen styres fra JS, fordi avstanden må regnes ut fra kortets
+   egen posisjon for å garantert komme HELT ut av skjermkanten. Her ligger bare
+   overgangen plassen lukker seg med. Eieren 26.07.2026: «Slett-animasjonen være
+   smooth slik man kaster ut saken. Den krymper, så kaster du den ut av
+   skjermen.» */
+.lead.swipe-kort.krymper {
+  transition: height 300ms cubic-bezier(.4, 0, .2, 1),
+              margin 300ms cubic-bezier(.4, 0, .2, 1),
+              padding 300ms cubic-bezier(.4, 0, .2, 1),
+              border-width 300ms cubic-bezier(.4, 0, .2, 1),
+              opacity 220ms ease-out;
+  pointer-events: none;
+}
+/* Beholdt for bakoverkompatibilitet med lagrede sider; JS bruker den ikke mer. */
+.lead.sveipet-bort { transform: translateX(-115%) rotate(-9deg); opacity: 0; }
+
+/* Bekreftelsen. Eieren ba om «sikker?» MED en «ikke spør igjen»-boks. */
+.fjern-dialog {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+  background: rgba(6, 10, 18, .72); padding: 20px;
+  animation: dialog-inn .16s ease both;
+}
+.fjern-dialog[hidden] { display: none; }
+@keyframes dialog-inn { from { opacity: 0; } to { opacity: 1; } }
+.fjern-boks {
+  width: min(380px, 100%); padding: 20px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .55);
+}
+.fjern-h { margin: 0; font-size: 16px; font-weight: 700; color: var(--text); }
+.fjern-tittel {
+  margin: 8px 0 0; font-size: 13.5px; color: var(--accent); line-height: 1.4;
+}
+.fjern-b { margin: 8px 0 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.fjern-huk {
+  display: flex; align-items: center; gap: 9px; margin: 14px 0 0;
+  font-size: 13px; color: var(--muted); cursor: pointer; min-height: 40px;
+}
+.fjern-huk input { width: 17px; height: 17px; accent-color: var(--accent); }
+.fjern-knapper { display: flex; gap: 10px; margin-top: 6px; }
+.fjern-knapper .btn-small { flex: 1; min-height: 42px; }
+.fjern-knapper .fjern-ja {
+  background: var(--red); border-color: var(--red); color: #fff; font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fjern-dialog, .lead.swipe-kort { animation: none; }
+  /* Plassen skal fortsatt lukke seg, men raskt og uten kast. */
+  .lead.swipe-kort.krymper { transition: height 1ms linear; }
+}
+
+/* Bakgrunn nederst i kortet: redaktørdommen og sjekklista.
+   Eieren 26.07.2026: «Husk nå først faktaen eller tallene du har funnet. Så
+   forslags titler, så velger han en og spør om utkast fra den tittelen.»
+   Begge sto før MELLOM tallet og titlene og dyttet det viktigste nedover. */
+.ai-bakgrunn { margin-top: 10px; }
+.ai-bakgrunn > summary {
+  cursor: pointer; list-style: none; font-size: 12.5px; color: var(--muted);
+  padding: 8px 0; min-height: 34px; display: flex; align-items: center; gap: 6px;
+}
+.ai-bakgrunn > summary::-webkit-details-marker { display: none; }
+.ai-bakgrunn > summary::before { content: '▸'; transition: transform .15s ease; }
+.ai-bakgrunn[open] > summary::before { transform: rotate(90deg); }
+.ai-bakgrunn > summary:hover { color: var(--text); }
+.ai-bakgrunn > *:not(summary) { font-size: 13px; line-height: 1.5; margin: 6px 0; }
+.ai-bakgrunn .ai-dom { font-weight: 600; color: var(--text); }
+@media (prefers-reduced-motion: reduce) {
+  .ai-bakgrunn > summary::before { transition: none; }
+}
+
+/* ── Publiserte saker ─────────────────────────────────────────────────────── */
+/* Eieren 26.07.2026: «Jeg vil at han skal kunne lagre det han legger ut. Så en
+   helt ny side ... der det er en tom side, står legg til, så kommer opp Legg
+   inn URL.» Derfor: knapp først, feltet etterpå — ikke et skjema som møter deg. */
+.pub-legg { margin: 4px 0 18px; }
+.pub-legg > summary {
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; list-style: none; min-height: 44px; padding: 0 20px;
+}
+.pub-legg > summary::-webkit-details-marker { display: none; }
+.pub-legg[open] > summary { margin-bottom: 12px; }
+.pub-form {
+  display: grid; gap: 6px; max-width: 560px; padding: 16px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+}
+.pub-label { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+.pub-valgfri { opacity: .7; }
+.pub-input {
+  min-height: 44px; padding: 10px 12px; font-size: 15px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+}
+.pub-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pub-form .btn-primary { margin-top: 12px; min-height: 44px; }
+.pub-feil {
+  margin: 0 0 14px; padding: 10px 14px; border-radius: 10px; font-size: 13.5px;
+  background: rgba(224, 87, 76, .14); color: var(--red);
+  border: 1px solid rgba(224, 87, 76, .4);
+}
+.pub-teller { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
+.pub-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.pub-rad {
+  display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+}
+.pub-tekst { flex: 1; min-width: 0; }
+.pub-tittel {
+  color: var(--text); font-weight: 600; font-size: 15px; line-height: 1.35;
+  text-decoration: none; overflow-wrap: anywhere;
+}
+.pub-tittel:hover { color: var(--accent); }
+.pub-meta { display: flex; gap: 10px; margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.pub-domene { color: var(--accent); }
+.pub-notat { margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.pub-slett .btn-small { min-width: 40px; min-height: 40px; }
+
+/* Løftet kort: plukket opp med et langt trykk, klart til å flyttes.
+   `touch-action: none` er det avgjørende — uten den eier nettleseren den
+   loddrette bevegelsen, og vertikale pointermove blir aldri levert til oss.
+   Den kan bare settes mens fingeren står stille, altså fra et langt trykk. */
+.lead.swipe-kort.loftet {
+  touch-action: none;
+  z-index: 5;
+  box-shadow: 0 14px 38px rgba(0, 0, 0, .5);
+  cursor: grabbing;
+}
+.loft-hint {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  z-index: 70; max-width: min(420px, calc(100vw - 32px));
+  margin: 0; padding: 11px 18px; border-radius: 22px;
+  background: var(--panel); border: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  font-size: 13px; color: var(--text); text-align: center; line-height: 1.4;
+  animation: hint-inn .18s ease both;
+}
+.loft-hint[hidden] { display: none; }
+@keyframes hint-inn { from { opacity: 0; transform: translate(-50%, 8px); }
+                      to   { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) { .loft-hint { animation: none; } }
+
+/* Byggmerket i bunnteksten: hvilken commit som faktisk kjører. Det eneste
+   stedet man kan SE at en deploy nådde fram. */
+.bygg-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .85em; opacity: .75; padding: 1px 5px; border-radius: 5px;
+  background: rgba(127, 127, 127, .16);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   v5 — opprydding etter eierens fire skjermbilder 26.07.2026
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── «Lag vinkler for denne» ─────────────────────────────────────────────────
+   Erstatter setningen «Ingen vinkler laget for denne ennå». Den var sann, men
+   ga ingen vei videre: Groqs minuttak rekker tre saker per skann, og et skann
+   finner atten. Nå er de femten andre ett trykk unna. */
+.be-om-vinkler { margin: 12px 0 0; display: flex; align-items: center;
+  gap: 12px; flex-wrap: wrap; }
+.btn-vinkler { background: transparent; color: var(--accent);
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: background .15s ease, border-color .15s ease; }
+.btn-vinkler:hover { background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-style: solid; }
+.btn-vinkler:active { transform: scale(.97); }
+.btn-vinkler[disabled] { opacity: .55; cursor: default; }
+.vinkler-hjelp { color: var(--muted); font-size: 12.5px; flex: 1 1 200px; }
+
+/* ── Faner i «Kommer snart» ──────────────────────────────────────────────────
+   Ett tema per fane, hver med sin farge og sitt ikon. Fargen står ALDRI alene —
+   ikonet og navnet sier det samme, så fanen er lesbar i gråtoner og for den som
+   ikke skiller rødt fra grønt.
+
+   Fanebyttet er skjulte radioknapper og `:checked ~`. Ingen JavaScript: panelet
+   virker uten JS, og valget overlever ikke en refresh — som er riktig her, for
+   førstevalget skal alltid være det han kan ringe på i dag. */
+/* «.faner» var allerede tatt av kalendersidens Kalender/Oppgaver-veksler,
+   som er `display: flex`. Panelet arvet den, og fanerad og innhold la seg ved
+   siden av hverandre som to kolonner - en tabell som saa ut som et uhell.
+   Nettlesertesten sa ALT GRONT, fordi den maalte oppfoersel og ikke utseende;
+   det var skjermbildet som avslorte det. Eget navn, ingen arv. */
+.temafaner { margin-top: 4px; }
+.fane-radio { position: absolute; opacity: 0; pointer-events: none; }
+/* Toppluft: prikken ligger paa top:-5px, og `overflow-x: auto` klipper
+   ogsaa loddrett. Med 4px padding ble varselet kappet av kanten. */
+.fane-rad { display: flex; gap: 8px; overflow-x: auto; padding: 11px 3px 12px;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.fane-rad::-webkit-scrollbar { display: none; }
+
+.fane { position: relative; display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  background: var(--panel); border: 1px solid var(--border);
+  color: var(--muted); font-size: 13.5px; font-weight: 600;
+  transition: background .15s ease, border-color .15s ease, color .15s ease; }
+.fane:hover { color: var(--text); }
+.fane-ikon { font-size: 15px; }
+.fane-tall { font-size: 11.5px; font-weight: 700; opacity: .75;
+  font-variant-numeric: tabular-nums; }
+
+/* Notifikasjonsprikken: bare på faner der noe FERSKT har kommet inn. Står den
+   på alle, slutter man å se den. */
+.fane-prikk { position: absolute; top: -5px; right: -3px; min-width: 18px;
+  height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red);
+  color: #fff; font-size: 10.5px; font-weight: 800; line-height: 18px;
+  text-align: center; box-shadow: 0 0 0 2px var(--bg); }
+
+/* Fargene per tema. `currentColor` gjør at kanten, prikken og radene inni
+   arver den samme fargen uten at hver av dem må navngis på nytt. */
+.fane-rod    { --tema: #e0574c; }
+.fane-gronn  { --tema: #37c46d; }
+.fane-blaa   { --tema: #3b82f6; }
+.fane-gul    { --tema: #e3b341; }
+.fane-lilla  { --tema: #a970ff; }
+.fane-turkis { --tema: #2dd4bf; }
+.fane-rosa   { --tema: #f472b6; }
+.fane-oransje{ --tema: #fb923c; }
+.fane-grå    { --tema: #8a97ab; }
+
+/* Innholdet: radioknappen staar rett foran blokka si, saa naboselektoren holder.
+   Ingen nth-of-type-stige, ingen JavaScript - og fanene virker uten JS. */
+.fane-innhold { display: none; border-left: 3px solid var(--tema);
+  padding-left: 14px; margin-left: 2px; }
+.fane-radio:checked + .fane-innhold { display: block; }
+
+/* Selve fanen som er valgt. Etiketten er ikke soesken med radioen (den ligger i
+   faneraden), saa vi spor containeren i stedet: «finnes det en avhuket radio med
+   denne id-en?». `:has()` finnes i Safari 15.4+ og alle nyere Chromium.
+
+   Faller `:has()` bort i en eldre nettleser, mister fanen bare
+   markeringsfargen - innholdsbyttet over virker fortsatt. */
+.temafaner:has(#fane-konkurser:checked)   [for="fane-konkurser"],
+.temafaner:has(#fane-nyapninger:checked)  [for="fane-nyapninger"],
+.temafaner:has(#fane-bolig-og-bygg:checked) [for="fane-bolig-og-bygg"],
+.temafaner:has(#fane-jobb-og-lonn:checked) [for="fane-jobb-og-lonn"],
+.temafaner:has(#fane-priser:checked)      [for="fane-priser"],
+.temafaner:has(#fane-befolkning:checked)  [for="fane-befolkning"],
+.temafaner:has(#fane-skole:checked)       [for="fane-skole"],
+.temafaner:has(#fane-helse:checked)       [for="fane-helse"],
+.temafaner:has(#fane-kriminalitet:checked) [for="fane-kriminalitet"],
+.temafaner:has(#fane-energi:checked)      [for="fane-energi"],
+.temafaner:has(#fane-transport:checked)   [for="fane-transport"],
+.temafaner:has(#fane-annet:checked)       [for="fane-annet"] {
+  color: #fff; border-color: var(--tema);
+  background: color-mix(in srgb, var(--tema) 22%, var(--panel));
+}
+
+/* Det ferskeste i hver fane får et hint av temafargen — samme signal som
+   prikken over fanen, men på raden det faktisk gjelder. */
+.hend-fersk, .komm-fersk {
+  background: color-mix(in srgb, var(--tema) 7%, transparent);
+  border-radius: 8px; margin-left: -8px; padding-left: 8px; }
+
+/* ── Skann-knappen ───────────────────────────────────────────────────────────
+   Eieren 26.07.2026: «gjør SØK-knappen finere og mer satisfying, kanskje litt
+   større og mer betydning.»
+
+   Den er hovedhandlingen i hele appen og så ut som en vanlig knapp. Nå er den
+   større, har et lysstrøk som går over ved hover, og synker tydelig ned ved
+   trykk. Skyggen bærer aksentfargen, så den løfter seg fra flaten i stedet for
+   å ligge klistret på den. */
+.btn-scan, .tema-meny > summary.btn-scan {
+  position: relative; overflow: hidden;
+  padding: 16px 30px; font-size: 17px; font-weight: 700; letter-spacing: .01em;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent2, #2f6bff) 0%, var(--accent) 55%, #6aa2ff 100%);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 45%, transparent),
+              inset 0 1px 0 #ffffff33;
+  transition: transform .12s cubic-bezier(.34, 1.56, .64, 1),
+              box-shadow .18s ease, filter .18s ease;
+}
+.btn-scan:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 38px color-mix(in srgb, var(--accent) 55%, transparent),
+              inset 0 1px 0 #ffffff44;
+}
+/* Lysstrøket. Rent dekorativt, derfor ::after og ingen markup. */
+.btn-scan::after {
+  content: ""; position: absolute; inset: 0 auto 0 -60%; width: 45%;
+  background: linear-gradient(90deg, transparent, #ffffff38, transparent);
+  transform: skewX(-20deg); transition: left .55s ease; pointer-events: none;
+}
+.btn-scan:hover::after { left: 115%; }
+/* Trykket skal KJENNES. 0.96 er nok til at fingeren merker det uten at knappen
+   hopper. */
+.btn-scan:active { transform: translateY(1px) scale(.96);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* Pulsen mens skannet går: knappen forteller selv at den jobber. */
+.btn-scan[data-jobber] { animation: skann-puls 1.6s ease-in-out infinite; }
+@keyframes skann-puls {
+  0%, 100% { box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 45%, transparent); }
+  50%      { box-shadow: 0 10px 40px color-mix(in srgb, var(--accent) 80%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-scan, .btn-scan::after { transition: none; animation: none; }
+  .btn-scan:hover { transform: none; }
+}
+
+/* ── Varsel som svipper inn fra siden ────────────────────────────────────────
+   Eieren 26.07.2026: «ikke la en beskjed om at søket ikke ble noe komme nederst
+   der ingen ser det — dropp den helt. Legg heller inn en liten pop-in på siden
+   av skjermen. Så svipper den inn igjen etter 5 sek.»
+
+   Han har rett i diagnosen: en statuslinje nederst i en liste på tjue kort er
+   en beskjed til ingen. Den som trenger å vite at søket kom tomt tilbake,
+   trenger å vite det MENS han står og ser på skjermen. */
+.varsel {
+  position: fixed; right: 18px; bottom: 26px; z-index: 60;
+  max-width: min(340px, calc(100vw - 36px));
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 14px 16px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  box-shadow: 0 14px 40px #0009;
+  transform: translateX(calc(100% + 28px));
+  transition: transform .38s cubic-bezier(.22, 1, .36, 1);
+}
+.varsel.inne { transform: translateX(0); }
+.varsel-ikon { font-size: 19px; line-height: 1.2; }
+.varsel-tittel { margin: 0; font-size: 14px; font-weight: 700; color: var(--text); }
+.varsel-tekst { margin: 3px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+.varsel-lukk { margin-left: auto; background: none; border: 0; color: var(--muted);
+  font-size: 17px; line-height: 1; cursor: pointer; padding: 2px 4px; }
+.varsel-lukk:hover { color: var(--text); }
+/* Nedtellingen: en tynn strek som tømmer seg, så det er synlig at den forsvinner
+   av seg selv og ikke fordi noe gikk galt. */
+.varsel-tid { position: absolute; left: 0; bottom: 0; height: 2px;
+  background: var(--accent); border-radius: 0 0 0 14px; width: 100%;
+  transform-origin: left; }
+.varsel.inne .varsel-tid { animation: varsel-teller 5s linear forwards; }
+@keyframes varsel-teller { to { transform: scaleX(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .varsel { transition: none; }
+  .varsel.inne .varsel-tid { animation: none; }
+}
+
+/* ── Kalenderen: én linje per sak ────────────────────────────────────────────
+   Eieren 26.07.2026: «Kalendersiden skal være slik. Men det under ser veldig
+   dårlig ut.» Rutenettet er urørt; lista under er kuttet til én rad per sak,
+   med kortet foldet inn bak den. */
+.day-lead { border: 1px solid var(--border); border-radius: 12px;
+  background: var(--panel); margin-bottom: 8px; overflow: hidden; }
+.day-lead > summary.dag-rad {
+  display: flex; align-items: center; gap: 10px; padding: 13px 14px;
+  cursor: pointer; list-style: none; }
+.day-lead > summary.dag-rad::-webkit-details-marker { display: none; }
+.day-lead > summary.dag-rad:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.day-lead[open] > summary.dag-rad { border-bottom: 1px solid var(--border); }
+.dag-rad-t { flex: 1 1 auto; font-weight: 600; font-size: 14.5px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dag-rad-m { color: var(--muted); font-size: 12px; white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+.dag-rad-fase { font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+/* Fasen er den minst presserende opplysningen; på en smal skjerm er tittelen og
+   fristen det som avgjør hva han gjør i dag. */
+@media (max-width: 460px) { .dag-rad-fase { display: none; } }
+.day-lead[open] .day-lead-ingress,
+.day-lead[open] .dag-fakta { padding: 0 14px; }
+.day-lead > *:not(summary) { margin-left: 0; }
+
+/* ── To rettelser nettlesertesten fant ───────────────────────────────────────
+   Begge er av typen som ser riktig ut i koden og er feil på skjermen. */
+
+/* 1) En eldre mobilregel låste ALLE knapper til 44 px høyde og `padding: 0 18px`
+      for å sikre et minste trykkmål. Den sto ETTER skann-knappen i fila og
+      overstyrte den, så «større og mer betydning» ble 44 px som alt annet.
+      Minstemålet er riktig for de andre knappene; hovedhandlingen skal være
+      større enn dem. */
+.btn-scan, .tema-meny > summary.btn-scan {
+  height: auto; min-height: 56px; padding: 16px 30px;
+}
+/* Og wrapperen: `.tema-meny { height: 44px }` laaste HELE <details>-elementet,
+   ikke bare knappen. Summary ble 56 px og stakk 12 px ut av sin egen boks -
+   derfor la den seg oppaa linja under i stedet for aa skyve den ned. Kommentaren
+   over regelen sa til og med at elementet «ikke skal ha hoeyde». */
+.skann-meny { height: auto; }
+
+/* 2) `hidden` er et UA-satt `display: none` — og `.varsel { display: flex }`
+      slår det. Varselet ble derfor ALDRI borte: verken etter fem sekunder eller
+      ved neste sidelast. Det så helt riktig ut i JS-en; feilen lå i at CSS-en
+      vant over attributtet. */
+.varsel[hidden] { display: none; }
+
+/* Et tomt skann. Beskjeden er en HANDLING, ikke en opplysning: den blir
+   staaende til han trykker OK, og den ser annerledes ut saa han skjonner det
+   uten aa lese. Eieren 26.07.2026: «legg til tydelig naar en scan kommer tom
+   ... du kan legge til en 'trykk ok' paa den popuppen.» */
+.varsel-viktig {
+  border-color: var(--amber);
+  box-shadow: 0 10px 30px #0009, 0 0 0 1px var(--amber) inset;
+}
+.varsel-mid { min-width: 0; }
+.varsel-knapper { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.varsel-ok { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+.varsel-ok:hover { filter: brightness(1.08); }
+/* Nedtellingsstripa lyver naar beskjeden ikke teller ned. */
+.varsel-viktig .varsel-tid { display: none; }
+
+/* ── Toppraden paa én linje ──────────────────────────────────────────────────
+   Eieren 26.07.2026, med skjermbilde: «fiks sånn at dette er på linje.»
+
+   Tre navigasjonsknapper med full tekst pluss skann-knappen er ~536 px. En
+   telefon er 414. Raden brøt, og hovedhandlingen havnet alene på linja under —
+   som var akkurat det som fikk den til å se ut som en ettertanke.
+
+   Under 560 px faller ordene bort og ikonet står igjen. Navnet ligger i
+   `aria-label` og `title`, så ingenting er tapt for skjermlesere. */
+/* De fire knappene i sin egen rad som ALDRI brytes. «Sist skannet …» sto som
+   femte element i samme flex-rad og holdt seg på plass bare fordi `width: 100%`
+   tvang en linjebrytning - med `nowrap` ville den lagt seg ved siden av
+   knappene i stedet for under dem. Egen rad, eget ansvar. */
+.top-actions { display: block; }
+.nav-rad { display: flex; align-items: center; justify-content: flex-end;
+  gap: 8px; flex-wrap: nowrap; }
+.btn-ghost, .btn-approved-link {
+  display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.nav-tall { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--text);
+  font-variant-numeric: tabular-nums; }
+
+@media (max-width: 560px) {
+  .nav-navn { display: none; }
+  .btn-ghost, .btn-approved-link { padding: 0 13px; gap: 5px; font-size: 16px; }
+  /* Hovedhandlingen skal fortsatt være størst i raden, men den trenger ikke
+     30 px luft på hver side når den står ved siden av tre ikoner. */
+  .btn-scan, .tema-meny > summary.btn-scan { padding: 14px 20px; font-size: 16px; }
+  .top-actions { gap: 7px; }
+}
+
+/* Menyen er festet til knappen. Uten dette ville en `nowrap`-rad presset den
+   åpne temaboksen ut i intet i stedet for å legge den under knappen. */
+.skann-meny { position: relative; }
+
+/* ── «Hva du skal lage» — saker gruppert per maaned ──────────────────────────
+   Eieren 26.07.2026: «Istedenfor at det står den samme saken igjen og igjen …
+   så kan det heller stå: hvis det er en sak den måneden, så står den saken.»
+
+   Rutenettet over svarer på NÅR i måneden. Dette svarer på HVA han skal lage —
+   og hver sak står nøyaktig én gang, på tvers av måneder, så august og september
+   er synlige samtidig. */
+.mnd + .mnd { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.mnd-navn { display: flex; align-items: center; gap: 10px;
+  font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 10px; }
+.mnd-naa .mnd-navn { color: var(--accent); }
+.mnd-naa-merke { font-size: 9.5px; font-weight: 700; letter-spacing: .04em;
+  text-transform: none; padding: 3px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.mnd-tall { margin-left: auto; font-size: 11.5px; font-weight: 700;
+  color: var(--faint); font-variant-numeric: tabular-nums; }
+
+.mnd-saker { list-style: none; margin: 0; padding: 0; }
+.mnd-sak a { display: flex; align-items: center; gap: 11px;
+  padding: 11px 12px; border-radius: 10px; text-decoration: none;
+  transition: background .13s ease; }
+.mnd-sak a:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.mnd-tittel { flex: 1 1 auto; min-width: 0; color: var(--text);
+  font-size: 14.5px; font-weight: 600; line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mnd-frist { flex: none; color: var(--muted); font-size: 12.5px;
+  font-variant-numeric: tabular-nums; }
+/* Forfalt frist er den ene tilstanden som krever en handling i dag. */
+.mnd-forfalt .mnd-frist { color: var(--red); font-weight: 700; }
+.mnd-forfalt .mnd-tittel { color: var(--text); }
+
+/* ── Piler ved fanene ────────────────────────────────────────────────────────
+   Eieren 26.07.2026, med skjermbilde: «lag en pil til høyre eller venstre slik
+   det er tydelig at det er fler faner.»
+
+   To faner fikk plass på en 414 px skjerm; de tre andre lå utenfor kanten uten
+   at noe røpet det. En vannrett scroll som ikke ser ut som en scroll, finnes
+   ikke for brukeren.
+
+   Pilen er en knapp med et trykkmål på 34 px, ikke en dekorasjon — og den er
+   skjult når det ikke er mer å rulle den veien. */
+.fane-boks { position: relative; }
+.fane-pil {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
+  width: 34px; height: 34px; padding: 0; border-radius: 50%; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--border); color: var(--text);
+  font-size: 20px; line-height: 1; display: flex; align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 12px #0007;
+}
+.fane-pil:hover { border-color: var(--accent); color: var(--accent); }
+.fane-pil:active { transform: translateY(-50%) scale(.92); }
+.fane-pil-v { left: -4px; }
+.fane-pil-h { right: -4px; }
+.fane-pil[hidden] { display: none; }
+
+/* Uttoning under pila, så fanene «forsvinner inn under» den i stedet for å bli
+   kappet midt i et ord. Rent visuelt, derfor pointer-events: none. */
+.fane-boks.har-mer::before,
+.fane-boks.har-mer::after {
+  content: ""; position: absolute; top: 0; bottom: 12px; width: 46px;
+  pointer-events: none; z-index: 2;
+}
+.fane-boks.har-mer::before {
+  left: 0; background: linear-gradient(90deg, var(--panel) 25%, transparent);
+}
+.fane-boks.har-mer::after {
+  right: 0; background: linear-gradient(270deg, var(--panel) 25%, transparent);
+}

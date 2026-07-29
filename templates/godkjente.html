@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Godkjente saker · Case-radar</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%A1%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/static/style.css?v={{ css_v }}" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">📁</span>
+    <div>
+      <h1>{{ 'Arkiv' if viser_arkiv else 'Lagrede utkast' }}</h1>
+      <p class="tagline">
+        {% if viser_arkiv %}Sveipet bort — trykk «Hent tilbake» for å angre
+        {% else %}Sveip ← for å legge bort · → for å beholde{% endif %}
+      </p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <a class="btn-ghost" href="/">← Radar</a>
+    <a class="btn-ghost" href="/kalender">🗓 Kalender</a>
+    <a class="btn-ghost" href="/publisert">📰 Publisert{% if publisert_antall %} ({{ publisert_antall }}){% endif %}</a>
+    {% if viser_arkiv %}
+      <a class="btn-ghost" href="/godkjente">📁 Lagrede</a>
+    {% elif antall_arkiverte %}
+      <a class="btn-ghost" href="/godkjente?arkiv=1">🗄 Arkiv ({{ antall_arkiverte }})</a>
+    {% endif %}
+  </div>
+</header>
+
+<main class="maincol" style="padding: 12px 32px 40px;">
+  {% if not leads %}
+    <section class="empty">
+      <h2>{{ 'Arkivet er tomt' if viser_arkiv else 'Ingen lagrede utkast ennå' }}</h2>
+      <p>
+        {% if viser_arkiv %}Ingenting er sveipet bort.
+        {% else %}Gå til radaren, velg en vinkel og trykk «Lag utkast» — så «Godkjenn sak».{% endif %}
+      </p>
+    </section>
+  {% endif %}
+
+  {% for lead in leads %}
+  {# Sveipekort. Under fingeren flytter kortet seg og et merke viser hva som
+     skjer naar du slipper. Knappene under gjor det samme - sveip er en snarvei,
+     ikke den eneste veien. #}
+  <article class="lead swipe-kort" style="grid-template-columns: 1fr;"
+           data-key="{{ lead.key }}" data-arkivert="{{ 1 if viser_arkiv else 0 }}">
+    <div class="swipe-merke swipe-venstre" aria-hidden="true">🗄 Legg bort</div>
+    <div class="swipe-merke swipe-hoyre" aria-hidden="true">✓ Behold</div>
+    <div class="lead-body">
+      <div class="lead-tags">
+        {% if lead._fullfort %}
+          <span class="pill pill-green">✓ Ferdig</span>
+        {% else %}
+          <span class="pill pill-green">✓ Godkjent</span>
+        {% endif %}
+        {% if lead.data_source %}<span class="tag">{{ lead.data_source|kortkilde }}</span>{% endif %}
+        {% if lead.ai_mode == 'mal' %}<span class="tag">demo-utkast</span>{% endif %}
+        {% if lead._stage %}<span class="pill pill-stage stage-bg-{{ lead._stage }}">{{ lead._stage|capitalize }}</span>{% endif %}
+        {% if lead._start or lead._deadline %}
+          <span class="span-badge">{% if lead._start %}▶ {{ lead._start }}{% endif %}{% if lead._deadline %} → ⚑ {{ lead._deadline }}{% endif %}</span>
+        {% endif %}
+      </div>
+      <h3 class="lead-title">{{ lead.draft.title if lead.draft and lead.draft.title else lead.title }}</h3>
+      {% if lead.finding %}<p class="lead-desc">{{ lead.finding }}</p>{% endif %}
+
+      {% if lead.draft and lead.draft.body %}
+        <p class="draft-ingress">{{ lead.draft.ingress }}</p>
+        <div class="draft-body">{{ lead.draft.body }}</div>
+        {% if lead.draft.checks %}
+          <p class="draft-checks-h">Sjekk / kilder å ringe:</p>
+          <ul class="draft-checks">{% for chk in lead.draft.checks %}<li>{{ chk }}</li>{% endfor %}</ul>
+        {% endif %}
+      {% else %}
+        <p class="lead-desc">Vinkling: {{ lead.angle }}</p>
+      {% endif %}
+
+      {% if lead.data_url %}
+      <p style="margin-top:10px;"><a class="kilde" href="{{ lead.data_url }}" target="_blank" rel="noopener">Datakilde: {{ lead.data_source|kortkilde }} ↗</a></p>
+      {% endif %}
+
+      {# Prosessnotatet er dokumentasjon, ikke lesestoff. Det laa foer som en
+         graa vegg foran selve saken. Naa ligger det bak ett trykk - fortsatt
+         der naar noen spor «hvordan ble denne til?». #}
+      {% if lead._prosessnotat %}
+      <details class="prosess">
+        <summary>🤖 Slik ble KI brukt</summary>
+        <p class="prosessnotat">{{ lead._prosessnotat }}</p>
+      </details>
+      {% endif %}
+
+      <div class="kort-valg">
+        {% if viser_arkiv %}
+        <form method="post" action="/godkjente/{{ lead.key }}/gjenopprett" data-swipe="tilbake">
+          <button type="submit" class="btn-behold">↩ Hent tilbake</button>
+        </form>
+        {% else %}
+        <form method="post" action="/godkjente/{{ lead.key }}/arkiver" data-swipe="bort">
+          <button type="submit" class="btn-bort">🗄 Legg bort</button>
+        </form>
+        <span class="kort-hint">Eller sveip kortet til venstre</span>
+        {% endif %}
+      </div>
+    </div>
+  </article>
+  {% endfor %}
+</main>
+
+<div id="angre" class="angre" hidden role="status" aria-live="polite">
+  <span class="angre-tekst">Lagt bort</span>
+  <button type="button" class="angre-knapp">Angre</button>
+</div>
+
+<script>
+  /* Sveip som i Tinder: venstre legger bort, hoyre beholder. Kortet blir ALDRI
+     slettet - «Legg bort» setter bare et tidsstempel, og angre-knappen tar det
+     rett tilbake. En feilsveip paa mobil skal koste ett trykk, ikke en time. */
+  (function () {
+    var angre = document.getElementById('angre');
+    var angreTekst = angre.querySelector('.angre-tekst');
+    var angreKnapp = angre.querySelector('.angre-knapp');
+    var sistBortlagt = null;
+    var angreTimer = null;
+
+    function send(url, saa) {
+      var d = new FormData();
+      d.append('js', '1');
+      fetch(url, { method: 'POST', body: d })
+        .then(function (r) { return r.json(); })
+        .then(saa)
+        .catch(function () { window.location.reload(); });
+    }
+
+    function visAngre(key, tekst) {
+      sistBortlagt = key;
+      angreTekst.textContent = tekst;
+      angre.hidden = false;
+      clearTimeout(angreTimer);
+      angreTimer = setTimeout(function () { angre.hidden = true; }, 7000);
+    }
+
+    angreKnapp.addEventListener('click', function () {
+      if (!sistBortlagt) { return; }
+      send('/godkjente/' + sistBortlagt + '/gjenopprett', function () {
+        window.location.reload();
+      });
+    });
+
+    function leggBort(kort) {
+      kort.classList.add('kort-ut-venstre');
+      send('/godkjente/' + kort.dataset.key + '/arkiver', function () {
+        setTimeout(function () { kort.remove(); }, 240);
+        visAngre(kort.dataset.key, 'Lagt bort');
+      });
+    }
+
+    document.querySelectorAll('form[data-swipe]').forEach(function (f) {
+      f.addEventListener('submit', function (ev) {
+        var kort = f.closest('.swipe-kort');
+        if (!kort || f.dataset.swipe !== 'bort') { return; }   /* «hent tilbake» gaar som vanlig */
+        ev.preventDefault();
+        leggBort(kort);
+      });
+    });
+
+    document.querySelectorAll('.swipe-kort').forEach(function (kort) {
+      if (kort.dataset.arkivert === '1') { return; }           /* i arkivet sveiper vi ikke */
+      var x0 = null, dx = 0, drar = false;
+      var TERSKEL = 90;
+
+      function start(x) { x0 = x; dx = 0; drar = true; kort.classList.add('drar'); }
+      function flytt(x) {
+        if (!drar) { return; }
+        dx = x - x0;
+        kort.style.transform = 'translateX(' + dx + 'px) rotate(' + (dx / 28) + 'deg)';
+        kort.classList.toggle('mot-venstre', dx < -30);
+        kort.classList.toggle('mot-hoyre', dx > 30);
+      }
+      function slipp() {
+        if (!drar) { return; }
+        drar = false;
+        kort.classList.remove('drar', 'mot-venstre', 'mot-hoyre');
+        if (dx < -TERSKEL) { leggBort(kort); return; }
+        if (dx > TERSKEL) {
+          kort.classList.add('beholdt');
+          setTimeout(function () { kort.classList.remove('beholdt'); }, 700);
+        }
+        kort.style.transform = '';
+      }
+
+      kort.addEventListener('touchstart', function (e) { start(e.touches[0].clientX); }, { passive: true });
+      kort.addEventListener('touchmove', function (e) {
+        flytt(e.touches[0].clientX);
+        if (Math.abs(dx) > 12) { e.preventDefault(); }         /* ikke scroll sidelengs */
+      }, { passive: false });
+      kort.addEventListener('touchend', slipp);
+      kort.addEventListener('touchcancel', slipp);
+    });
+  })();
+</script>
+
+<footer class="foot">
+  <span>ⓘ Utkast er KI-genererte forslag – sjekk alltid fakta før publisering.</span>
+  <span class="foot-right">Case-radar v{{ version }}</span>
+</footer>
+{% include "_tobias.html" %}
+</body>
+</html>
