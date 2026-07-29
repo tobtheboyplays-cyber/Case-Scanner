@@ -1,0 +1,5 @@
+# Caddy gir automatisk gratis HTTPS. Bytt ut domenet med ditt eget,
+# pek domenet (A-record) til serverens IP først, og kjør: caddy run
+redaktor.dittdomene.no {
+    reverse_proxy localhost:8787
+}

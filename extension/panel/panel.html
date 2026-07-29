@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="nb">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="panel.css" />
+    <title>Redaktør-assistent</title>
+  </head>
+  <body>
+    <header class="topp">
+      <h1>Redaktør-assistent</h1>
+      <button id="loggUt" class="lenkeknapp skjult">Logg ut</button>
+    </header>
+
+    <!-- Mangler proxy-URL -->
+    <section id="viewOppsett" class="visning skjult">
+      <p>Serveradressen er ikke satt opp ennå.</p>
+      <button id="åpneInnstillinger" class="primær">Åpne innstillinger</button>
+    </section>
+
+    <!-- Innlogging -->
+    <section id="viewLogin" class="visning skjult">
+      <h2>Logg inn</h2>
+      <label>Brukernavn<input id="brukernavn" type="text" autocomplete="username" /></label>
+      <label>Passord<input id="passord" type="password" autocomplete="current-password" /></label>
+      <button id="loggInn" class="primær">Logg inn</button>
+      <p id="loginFeil" class="feil"></p>
+    </section>
+
+    <!-- Hovedvisning -->
+    <section id="viewHoved" class="visning skjult">
+      <button id="sjekk" class="primær stor">Sjekk artikkel</button>
+      <p id="status" class="status"></p>
+
+      <!-- Fallback: lim inn tekst manuelt -->
+      <details id="limInn" class="limInn skjult">
+        <summary>Fant ikke teksten automatisk – lim den inn her</summary>
+        <textarea id="manuellTekst" rows="8" placeholder="Lim inn artikkelteksten …"></textarea>
+        <button id="sjekkManuell" class="primær">Sjekk innlimt tekst</button>
+      </details>
+
+      <div id="resultat" class="resultat"></div>
+    </section>
+
+    <script src="panel.js"></script>
+  </body>
+</html>

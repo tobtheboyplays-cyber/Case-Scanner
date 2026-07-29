@@ -1,0 +1,15 @@
+[Unit]
+Description=Redaktor-assistent proxy
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/redaktor-assistent/server
+ExecStart=/usr/bin/node index.js
+EnvironmentFile=/opt/redaktor-assistent/server/.env
+Restart=on-failure
+# Bytt til en egen bruker om ønskelig (opprett med: useradd -r redaktor)
+# User=redaktor
+
+[Install]
+WantedBy=multi-user.target

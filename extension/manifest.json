@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Redaktør-assistent",
+  "version": "1.0.0",
+  "description": "Redaksjonell kvalitetskontroll av artikler etter Stavanger Aftenblads standard – LIX, dramaturgi, Vær Varsom, språk og mer.",
+  "permissions": ["storage", "activeTab", "scripting", "sidePanel"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Åpne Redaktør-assistent"
+  },
+  "side_panel": {
+    "default_path": "panel/panel.html"
+  },
+  "options_page": "options.html"
+}

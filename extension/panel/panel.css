@@ -1,0 +1,450 @@
+:root {
+  --bg: #ffffff;
+  --tekst: #1c1c1c;
+  --dempet: #666;
+  --kant: #e2e2e2;
+  --primær: #1a5fb4;
+  --primær-mørk: #164d92;
+  --gul: #e0a800;
+  --rød: #c0392b;
+  --oransje: #d35400;
+  --lilla: #8e44ad;
+  --grønn: #2e7d32;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: var(--tekst);
+  background: var(--bg);
+}
+
+.topp {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--kant);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 5;
+}
+.topp h1 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.visning {
+  padding: 16px;
+}
+.skjult {
+  display: none !important;
+}
+
+label {
+  display: block;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+input,
+textarea {
+  width: 100%;
+  padding: 8px;
+  margin-top: 4px;
+  border: 1px solid var(--kant);
+  border-radius: 6px;
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  font: inherit;
+}
+.primær {
+  background: var(--primær);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-weight: 600;
+}
+.primær:hover {
+  background: var(--primær-mørk);
+}
+.primær:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.stor {
+  width: 100%;
+  font-size: 15px;
+  padding: 12px;
+}
+.lenkeknapp {
+  background: none;
+  border: none;
+  color: var(--dempet);
+  text-decoration: underline;
+}
+
+.status {
+  color: var(--dempet);
+  min-height: 18px;
+}
+.feil {
+  color: var(--rød);
+}
+
+.limInn {
+  margin-top: 12px;
+}
+.limInn summary {
+  cursor: pointer;
+  color: var(--dempet);
+}
+.limInn textarea {
+  margin: 8px 0;
+}
+
+/* --- Rapport --- */
+.resultat {
+  margin-top: 8px;
+}
+.scorekort {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.score {
+  border: 1px solid var(--kant);
+  border-radius: 6px;
+  padding: 6px 8px;
+  text-align: center;
+}
+.score .tall {
+  font-size: 18px;
+  font-weight: 700;
+}
+.score .navn {
+  font-size: 11px;
+  color: var(--dempet);
+}
+
+.publisering {
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  text-align: center;
+}
+.publisering.ja {
+  background: #e8f5e9;
+  color: var(--grønn);
+}
+.publisering.nei {
+  background: #fdecea;
+  color: var(--rød);
+}
+
+.seksjon {
+  border: 1px solid var(--kant);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.seksjon > summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 700;
+  background: #f7f7f7;
+  list-style: none;
+}
+.seksjon > summary::-webkit-details-marker {
+  display: none;
+}
+.seksjon > summary::before {
+  content: "▸ ";
+  color: var(--dempet);
+}
+.seksjon[open] > summary::before {
+  content: "▾ ";
+}
+.seksjon .innhold {
+  padding: 10px 12px;
+}
+.seksjon .teller {
+  color: var(--dempet);
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.funn {
+  border-left: 3px solid var(--kant);
+  padding: 6px 0 6px 10px;
+  margin: 8px 0;
+  cursor: pointer;
+}
+.funn:hover {
+  background: #f4f8ff;
+}
+.funn.k-sprak {
+  border-color: var(--gul);
+}
+.funn.k-vvp {
+  border-color: var(--rød);
+}
+.funn.k-fakta {
+  border-color: var(--oransje);
+}
+.funn.k-presseetikk {
+  border-color: var(--lilla);
+}
+.funn .orig {
+  font-style: italic;
+  color: #333;
+}
+.funn .pil {
+  color: var(--dempet);
+  margin: 0 4px;
+}
+.funn .forsl {
+  font-weight: 600;
+}
+.funn .forkl {
+  color: var(--dempet);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.merkelapp {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  color: #fff;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.merkelapp.hoy {
+  background: var(--rød);
+}
+.merkelapp.middels {
+  background: var(--oransje);
+}
+.merkelapp.lav {
+  background: var(--dempet);
+}
+
+ul.liste {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+ul.liste li {
+  margin-bottom: 4px;
+}
+.tittelforslag {
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: #f7f7f7;
+  border-radius: 6px;
+}
+.tittelforslag .forkl-tittel {
+  font-weight: 700;
+}
+.tittelforslag .sitat-tittel {
+  display: block;
+  color: #333;
+}
+.boks {
+  background: #f7f7f7;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 6px 0;
+}
+.smånote {
+  color: var(--dempet);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+/* --- Handlingsrad + fargeforklaring --- */
+.handlingsrad {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.småknapp {
+  background: #fff;
+  border: 1px solid var(--primær);
+  color: var(--primær);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.småknapp:hover {
+  background: #f4f8ff;
+}
+.forklaring {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: var(--dempet);
+}
+.leg-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.leg-prikk {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.leg-prikk.k-sprak { background: var(--gul); }
+.leg-prikk.k-fakta { background: var(--oransje); }
+.leg-prikk.k-vvp { background: var(--rød); }
+.leg-prikk.k-presseetikk { background: var(--lilla); }
+
+/* --- Klikkbare score-ruter --- */
+.score.klikkbar {
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.score.klikkbar:hover {
+  border-color: var(--primær);
+  background: #f4f8ff;
+}
+
+/* --- Stikkordsky --- */
+.stikkordsky {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  border: 1px solid var(--kant);
+  border-radius: 14px;
+  padding: 4px 10px;
+  font-size: 12px;
+  background: #f3f3f3;
+  cursor: pointer;
+  border-left-width: 4px;
+}
+.chip:hover {
+  filter: brightness(0.96);
+}
+.chip.passiv {
+  cursor: default;
+}
+.chip.k-sprak { border-left-color: var(--gul); }
+.chip.k-lix { border-left-color: var(--gul); }
+.chip.k-vvp { border-left-color: var(--rød); }
+.chip.k-fakta { border-left-color: var(--oransje); }
+.chip.k-presseetikk { border-left-color: var(--lilla); }
+.chip.k-dramaturgi { border-left-color: var(--primær); }
+.chip.k-stil { border-left-color: #16a085; }
+.chip.k-ingress { border-left-color: #2e7d32; }
+.chip.k-tittel { border-left-color: #d81b60; }
+.chip.k-mellomtitler { border-left-color: #00897b; }
+.chip.k-annet { border-left-color: var(--dempet); }
+
+/* --- Score-popup --- */
+.popup-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+.popup {
+  background: var(--bg);
+  border-radius: 10px;
+  max-width: 340px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 14px 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+.popup-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.popup-lukk {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: var(--dempet);
+}
+.popup-undertittel {
+  font-weight: 700;
+  margin: 4px 0;
+}
+.popup-grunn {
+  border-top: 1px solid var(--kant);
+  padding: 8px 0;
+}
+.minivis {
+  margin-top: 4px;
+  background: #f4f8ff;
+  border: 1px solid var(--primær);
+  color: var(--primær);
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+/* --- Kopi-bokser --- */
+.kopiboks {
+  border: 1px solid var(--kant);
+  border-radius: 8px;
+  margin: 8px 0;
+  overflow: hidden;
+}
+.kopiboks-topp {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f7f7f7;
+  padding: 6px 10px;
+}
+.kopiboks-merke {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dempet);
+  font-weight: 700;
+}
+.kopiboks-knapp {
+  background: var(--primær);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.kopiboks-knapp:hover {
+  background: var(--primær-mørk);
+}
+.kopiboks-tekst {
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  font-size: 13px;
+}

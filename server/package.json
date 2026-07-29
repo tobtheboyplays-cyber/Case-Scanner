@@ -1,0 +1,23 @@
+{
+  "name": "redaktor-assistent-server",
+  "version": "1.0.0",
+  "description": "Proxy-server som kjører redaksjonell kvalitetskontroll via Claude. Holder API-nøkkelen skjult og krever innlogging.",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "hash-passord": "node hash-passord.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
